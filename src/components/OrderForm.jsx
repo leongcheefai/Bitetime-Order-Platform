@@ -149,10 +149,6 @@ export default function OrderForm({ settings, lang, onSuccess }) {
             </div>
             <div className="field-row">
               <div className="field">
-                <label>{t('City', '城市')} *</label>
-                <input type="text" placeholder={t('e.g. Kuala Lumpur', '例如：吉隆坡')} value={city} onChange={e => setCity(e.target.value)} />
-              </div>
-              <div className="field">
                 <label>{t('Postcode', '邮政编码')} *</label>
                 <input type="text" placeholder="e.g. 50480" maxLength={5} value={postcode} onChange={e => {
                   const val = e.target.value.replace(/\D/g, '');
@@ -165,6 +161,10 @@ export default function OrderForm({ settings, lang, onSuccess }) {
                     }
                   }
                 }} />
+              </div>
+              <div className="field">
+                <label>{t('City', '城市')} *</label>
+                <input type="text" placeholder={t('e.g. Kuala Lumpur', '例如：吉隆坡')} value={city} onChange={e => setCity(e.target.value)} />
               </div>
             </div>
             <div className="field">
