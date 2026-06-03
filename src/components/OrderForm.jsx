@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { lookupPostcode } from '../postcodes';
 
 export default function OrderForm({ settings, lang, onSuccess }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
@@ -153,7 +154,17 @@ export default function OrderForm({ settings, lang, onSuccess }) {
               </div>
               <div className="field">
                 <label>{t('Postcode', '邮政编码')} *</label>
-                <input type="text" placeholder="e.g. 50480" maxLength={5} value={postcode} onChange={e => setPostcode(e.target.value.replace(/\D/g, ''))} />
+                <input type="text" placeholder="e.g. 50480" maxLength={5} value={postcode} onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setPostcode(val);
+                  if (val.length === 5) {
+                    const result = lookupPostcode(val);
+                    if (result) {
+                      setCity(result.city);
+                      setState(result.state);
+                    }
+                  }
+                }} />
               </div>
             </div>
             <div className="field">
