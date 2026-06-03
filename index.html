@@ -240,7 +240,7 @@
       <div class="how-to-step"><span class="step-num">1</span><span data-en="Pick the cookies you want and set the quantity for each item." data-zh="选择您想要的饼干，并设置每种产品的数量。">Pick the cookies you want and set the quantity for each item.</span></div>
       <div class="how-to-step"><span class="step-num">2</span><span data-en="Choose <strong>Self-pickup</strong> or <strong>Delivery</strong> — if delivery, select your region and enter your address." data-zh="选择<strong>自取</strong>或<strong>送货</strong> — 若选送货，请选择地区并填写地址。">Choose <strong>Self-pickup</strong> or <strong>Delivery</strong> — if delivery, select your region and enter your address.</span></div>
       <div class="how-to-step"><span class="step-num">3</span><span data-en="Fill in your name, WhatsApp number, and preferred date." data-zh="填写您的姓名、WhatsApp 号码和预计日期。">Fill in your name, WhatsApp number, and preferred date.</span></div>
-      <div class="how-to-step"><span class="step-num">4</span><span data-en="Tap <strong>Send order via WhatsApp</strong> — we'll confirm your order from there!" data-zh="点击<strong>通过 WhatsApp 发送订单</strong> — 我们将在那里确认您的订单！">Tap <strong>Send order via WhatsApp</strong> — we'll confirm your order from there!</span></div>
+      <div class="how-to-step"><span class="step-num">4</span><span data-en="Tap <strong>Submit order</strong> — your order is sent to us instantly and we'll confirm shortly!" data-zh="点击<strong>提交订单</strong> — 您的订单将立即发送给我们，我们会尽快确认！">Tap <strong>Submit order</strong> — your order is sent to us instantly and we'll confirm shortly!</span></div>
     </div>
   </div>
 
@@ -281,11 +281,15 @@
     </div>
 
     <div class="admin-section">
-      <div class="admin-section-label" data-en="WhatsApp number" data-zh="WhatsApp 号码">WhatsApp number</div>
+      <div class="admin-section-label">Telegram Bot Settings</div>
       <div class="admin-fields">
         <div class="admin-field full">
-          <label style="font-size:12px;color:#A07070;margin-bottom:2px;" data-en="Digits only, with country code — e.g. 60123456789" data-zh="仅数字，含国家代码 — 例如 60123456789">Digits only, with country code — e.g. 60123456789</label>
-          <input type="tel" id="wa-number" placeholder="60123456789" />
+          <label style="font-size:12px;color:#A07070;margin-bottom:2px;">Bot Token (from @BotFather)</label>
+          <input type="text" id="tg-token" placeholder="123456789:AAFxxxxxxxxxxxxxxx" />
+        </div>
+        <div class="admin-field full">
+          <label style="font-size:12px;color:#A07070;margin-bottom:2px;">Your Chat ID (from @userinfobot)</label>
+          <input type="text" id="tg-chatid" placeholder="123456789" />
         </div>
       </div>
     </div>
@@ -355,20 +359,16 @@
       <div id="summary-lines"><p class="empty-msg" data-en="No items selected yet." data-zh="尚未选择任何产品。">No items selected yet.</p></div>
     </div>
 
-    <button class="submit-btn" onclick="submitOrder()" data-en="Send order via WhatsApp →" data-zh="通过 WhatsApp 发送订单 →">Send order via WhatsApp →</button>
-    <p class="form-note" data-en="Your order details will be sent as a WhatsApp message. We'll confirm from there! 🍪" data-zh="您的订单详情将通过 WhatsApp 发送。我们将在那里确认！🍪">Your order details will be sent as a WhatsApp message. We'll confirm from there! 🍪</p>
+    <button class="submit-btn" onclick="submitOrder()" data-en="Submit order →" data-zh="提交订单 →">Submit order →</button>
+    <p class="form-note" data-en="Your order will be sent to us instantly. We'll confirm with you shortly! 🍪" data-zh="您的订单将立即发送给我们，我们会尽快与您确认！🍪">Your order will be sent to us instantly. We'll confirm with you shortly! 🍪</p>
 
   </div>
 
   <!-- SUCCESS -->
   <div id="success-view" style="display:none;">
     <div class="success-box">
-      <h2 data-en="Order received! 🍪" data-zh="订单已收到！🍪">Order received! 🍪</h2>
-      <p data-en="Thank you! We'll confirm your order via WhatsApp shortly." data-zh="谢谢！我们将尽快通过 WhatsApp 确认您的订单。">Thank you! We'll confirm your order via WhatsApp shortly.</p>
-      <a id="wa-link" class="wa-btn" href="#" target="_blank">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.556 4.112 1.528 5.836L0 24l6.334-1.508A11.95 11.95 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.8 9.8 0 01-5.032-1.388l-.361-.214-3.741.981 1.001-3.648-.235-.374A9.786 9.786 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/></svg>
-        <span data-en="Open WhatsApp" data-zh="打开 WhatsApp">Open WhatsApp</span>
-      </a>
+      <h2 data-en="Order placed! 🍪" data-zh="订单已提交！🍪">Order placed! 🍪</h2>
+      <p data-en="Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm." data-zh="谢谢！您的订单已发送给我们，我们将尽快与您确认。">Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.</p>
       <span class="reset-link" onclick="resetForm()" data-en="← Place another order" data-zh="← 再下一单">← Place another order</span>
     </div>
   </div>
@@ -483,7 +483,8 @@
       { id: 'box',     name: 'Cookie box / gift set',  desc: 'Beautifully packed assortment',       price: 45, unit: 'box' },
     ],
     shipping: { WM: 8, EM: 18 },
-    waNumber: '601XXXXXXXX',
+    tgToken: 'REDACTED_TOKEN',
+    tgChatId: '671603959',
   };
 
   function loadSettings() {
@@ -510,7 +511,8 @@
     renderProductList();
     document.getElementById('fee-wm').value = settings.shipping.WM;
     document.getElementById('fee-em').value = settings.shipping.EM;
-    document.getElementById('wa-number').value = settings.waNumber;
+    document.getElementById('tg-token').value = settings.tgToken;
+    document.getElementById('tg-chatid').value = settings.tgChatId;
     document.getElementById('save-msg').textContent = '';
   }
 
@@ -545,7 +547,8 @@
   function saveSettings() {
     settings.shipping.WM = parseFloat(document.getElementById('fee-wm').value) || 0;
     settings.shipping.EM = parseFloat(document.getElementById('fee-em').value) || 0;
-    settings.waNumber    = document.getElementById('wa-number').value.trim() || DEFAULTS.waNumber;
+    settings.tgToken     = document.getElementById('tg-token').value.trim() || DEFAULTS.tgToken;
+    settings.tgChatId    = document.getElementById('tg-chatid').value.trim() || DEFAULTS.tgChatId;
     for (let p of settings.products) {
       if (!p.name.trim()) { alert(t('Please fill in all product names.', '请填写所有产品名称。')); return; }
     }
@@ -693,9 +696,22 @@
     }
     msg += `\n*Total: RM ${total}*`;
 
-    document.getElementById('wa-link').href = `https://wa.me/${settings.waNumber}?text=${encodeURIComponent(msg)}`;
-    document.getElementById('form-view').style.display    = 'none';
-    document.getElementById('success-view').style.display = 'block';
+    const apiUrl = `https://api.telegram.org/bot${settings.tgToken}/sendMessage`;
+    fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: settings.tgChatId, text: msg, parse_mode: 'Markdown' })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.ok) {
+        document.getElementById('form-view').style.display    = 'none';
+        document.getElementById('success-view').style.display = 'block';
+      } else {
+        alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。'));
+      }
+    })
+    .catch(() => alert(t('Network error. Please check your connection.', '网络错误，请检查您的连接。')));
   }
 
   function resetForm() {
