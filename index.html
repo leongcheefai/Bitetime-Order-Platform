@@ -326,8 +326,40 @@
           </select>
         </div>
         <div class="field">
-          <label data-en="Delivery address" data-zh="送货地址">Delivery address</label>
-          <input type="text" id="cust-address" data-en-placeholder="Full address including postcode" data-zh-placeholder="完整地址（含邮政编码）" placeholder="Full address including postcode" />
+          <label data-en="Street address" data-zh="街道地址">Street address</label>
+          <input type="text" id="cust-address" data-en-placeholder="e.g. No. 12, Jalan Maju" data-zh-placeholder="例如：12号，马朱路" placeholder="e.g. No. 12, Jalan Maju" />
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label data-en="Postcode" data-zh="邮政编码">Postcode</label>
+            <input type="text" id="cust-postcode" data-en-placeholder="e.g. 47500" data-zh-placeholder="例如：47500" placeholder="e.g. 47500" maxlength="10" />
+          </div>
+          <div class="field">
+            <label data-en="City" data-zh="城市">City</label>
+            <input type="text" id="cust-city" data-en-placeholder="e.g. Subang Jaya" data-zh-placeholder="例如：梳邦再也" placeholder="e.g. Subang Jaya" />
+          </div>
+        </div>
+        <div class="field">
+          <label data-en="State" data-zh="州属">State</label>
+          <select id="cust-state">
+            <option value="" data-en="— Select state —" data-zh="— 选择州属 —">— Select state —</option>
+            <option value="Johor">Johor</option>
+            <option value="Kedah">Kedah</option>
+            <option value="Kelantan">Kelantan</option>
+            <option value="Kuala Lumpur">Kuala Lumpur</option>
+            <option value="Labuan">Labuan</option>
+            <option value="Melaka">Melaka</option>
+            <option value="Negeri Sembilan">Negeri Sembilan</option>
+            <option value="Pahang">Pahang</option>
+            <option value="Penang">Penang</option>
+            <option value="Perak">Perak</option>
+            <option value="Perlis">Perlis</option>
+            <option value="Putrajaya">Putrajaya</option>
+            <option value="Sabah">Sabah</option>
+            <option value="Sarawak">Sarawak</option>
+            <option value="Selangor">Selangor</option>
+            <option value="Terengganu">Terengganu</option>
+          </select>
         </div>
       </div>
     </div>
@@ -668,8 +700,11 @@
     if (!name || !wa) { alert(t('Please fill in your name and WhatsApp number.', '请填写您的姓名和 WhatsApp 号码。')); return; }
     if (mode === 'delivery') {
       const region  = document.getElementById('cust-region').value;
-      const address = document.getElementById('cust-address').value.trim();
-      if (!region || !address) { alert(t('Please fill in your delivery region and address.', '请填写送货地区和地址。')); return; }
+      const address  = document.getElementById('cust-address').value.trim();
+      const postcode = document.getElementById('cust-postcode').value.trim();
+      const city     = document.getElementById('cust-city').value.trim();
+      const state    = document.getElementById('cust-state').value;
+      if (!region || !address || !postcode || !city || !state) { alert(t('Please fill in all delivery address fields.', '请填写所有送货地址栏位。')); return; }
     }
 
     let msg = `🍪 *New Order from Bitetime & Co.*\n\n`;
@@ -687,10 +722,13 @@
 
     if (mode === 'delivery') {
       const region  = document.getElementById('cust-region').value;
-      const address = document.getElementById('cust-address').value.trim();
-      const fee     = settings.shipping[region] || 0;
+      const address  = document.getElementById('cust-address').value.trim();
+      const postcode = document.getElementById('cust-postcode').value.trim();
+      const city     = document.getElementById('cust-city').value.trim();
+      const state    = document.getElementById('cust-state').value;
+      const fee      = settings.shipping[region] || 0;
       total += fee;
-      msg += `\n*Delivery (${region}):* RM ${fee}\n*Address:* ${address}\n`;
+      msg += `\n*Delivery (${region}):* RM ${fee}\n*Address:* ${address}, ${postcode} ${city}, ${state}\n`;
     } else {
       msg += `\n*Order type:* Self-pickup\n`;
     }
