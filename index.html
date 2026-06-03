@@ -126,6 +126,21 @@
     .how-to-step { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: #7A4F55; line-height: 1.5; }
     .how-to-step .step-num { background: #7A1028; color: #F2EAE0; font-size: 10px; font-weight: 500; border-radius: 50%; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
 
+    /* AUTH VIEWS */
+    .auth-wrap { max-width: 420px; margin: 0 auto; padding-top: 2rem; }
+    .auth-card { background: #FBF6F0; border: 1.5px solid #C9A090; border-radius: 20px; padding: 2rem 2rem 1.75rem; }
+    .auth-title { font-family: 'Lora', serif; font-size: 20px; font-weight: 500; color: #7A1028; margin-bottom: 0.25rem; }
+    .auth-subtitle { font-size: 13px; color: #7A4F55; margin-bottom: 1.5rem; }
+    .auth-fields { display: flex; flex-direction: column; gap: 12px; margin-bottom: 1.25rem; }
+    .auth-btn { width: 100%; padding: 12px; background: #7A1028; color: #F2EAE0; border: none; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+    .auth-btn:hover { background: #550A1A; }
+    .auth-switch { font-size: 13px; color: #7A4F55; text-align: center; margin-top: 1rem; }
+    .auth-switch a { color: #7A1028; cursor: pointer; text-decoration: underline; }
+    .auth-error { font-size: 12px; color: #c0392b; background: #fde8e8; border-radius: 8px; padding: 8px 12px; margin-bottom: 8px; display: none; }
+    .auth-greeting { font-size: 13px; color: #7A4F55; text-align: right; margin-bottom: 1rem; }
+    .auth-greeting span { color: #7A1028; font-weight: 500; }
+    .auth-greeting a { color: #7A4F55; cursor: pointer; text-decoration: underline; margin-left: 8px; font-size: 12px; }
+
     @media (max-width: 520px) {
       .cookie-grid { grid-template-columns: 1fr; }
       .field-row { grid-template-columns: 1fr; }
@@ -138,7 +153,72 @@
 </head>
 <body>
 
-<div class="form-wrap">
+<!-- LOGIN VIEW -->
+<div id="login-view" style="display:none;">
+  <div class="auth-wrap">
+    <div class="brand" style="margin-bottom:1.75rem;">
+      <h1>Bitetime &amp; Co.</h1>
+      <div class="tagline">Gift the Story, Keep the Feeling.</div>
+    </div>
+    <div class="auth-card">
+      <div class="auth-title">Welcome back</div>
+      <div class="auth-subtitle">Sign in to place your order</div>
+      <div class="auth-error" id="login-error"></div>
+      <div class="auth-fields">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="login-email" placeholder="you@example.com" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="login-password" placeholder="Your password" />
+        </div>
+      </div>
+      <button class="auth-btn" onclick="doLogin()">Sign in</button>
+      <div class="auth-switch">Don't have an account? <a onclick="showRegister()">Create one</a></div>
+    </div>
+  </div>
+</div>
+
+<!-- REGISTER VIEW -->
+<div id="register-view" style="display:none;">
+  <div class="auth-wrap">
+    <div class="brand" style="margin-bottom:1.75rem;">
+      <h1>Bitetime &amp; Co.</h1>
+      <div class="tagline">Gift the Story, Keep the Feeling.</div>
+    </div>
+    <div class="auth-card">
+      <div class="auth-title">Create account</div>
+      <div class="auth-subtitle">Join us and start ordering your favourite cookies 🍪</div>
+      <div class="auth-error" id="register-error"></div>
+      <div class="auth-fields">
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="reg-name" placeholder="e.g. Sarah" />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="reg-email" placeholder="you@example.com" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="reg-password" placeholder="At least 6 characters" />
+        </div>
+        <div class="field">
+          <label>Confirm password</label>
+          <input type="password" id="reg-confirm" placeholder="Repeat your password" />
+        </div>
+      </div>
+      <button class="auth-btn" onclick="doRegister()">Create account</button>
+      <div class="auth-switch">Already have an account? <a onclick="showLogin()">Sign in</a></div>
+    </div>
+  </div>
+</div>
+
+<div class="form-wrap" id="main-app" style="display:none;">
+
+  <!-- USER GREETING -->
+  <div class="auth-greeting" id="user-greeting"></div>
 
   <!-- LANGUAGE SWITCHER -->
   <div class="lang-switcher">
@@ -294,8 +374,77 @@
   </div>
 
 </div>
+</div><!-- /main-app -->
 
 <script>
+  // ── AUTH ─────────────────────────────────────────────────────────────────
+  function getUsers() {
+    try { return JSON.parse(localStorage.getItem('bitetime_users') || '[]'); } catch(e) { return []; }
+  }
+  function saveUsers(users) { localStorage.setItem('bitetime_users', JSON.stringify(users)); }
+  function getSession() { return localStorage.getItem('bitetime_session'); }
+  function setSession(email) { localStorage.setItem('bitetime_session', email); }
+  function clearSession() { localStorage.removeItem('bitetime_session'); }
+
+  function showLogin() {
+    document.getElementById('login-view').style.display = 'block';
+    document.getElementById('register-view').style.display = 'none';
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('login-error').style.display = 'none';
+  }
+  function showRegister() {
+    document.getElementById('login-view').style.display = 'none';
+    document.getElementById('register-view').style.display = 'block';
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('register-error').style.display = 'none';
+  }
+  function showApp(email) {
+    document.getElementById('login-view').style.display = 'none';
+    document.getElementById('register-view').style.display = 'none';
+    document.getElementById('main-app').style.display = 'block';
+    const name = (getUsers().find(u => u.email === email) || {}).name || email;
+    document.getElementById('user-greeting').innerHTML =
+      `Hi, <span>${escHtml(name)}</span> &nbsp;<a onclick="doLogout()">Sign out</a>`;
+  }
+
+  function showAuthError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function doLogin() {
+    const email = document.getElementById('login-email').value.trim().toLowerCase();
+    const pass  = document.getElementById('login-password').value;
+    const users = getUsers();
+    const user  = users.find(u => u.email === email && u.password === pass);
+    if (!user) { showAuthError('login-error', 'Incorrect email or password.'); return; }
+    setSession(email);
+    showApp(email);
+  }
+
+  function doRegister() {
+    const name    = document.getElementById('reg-name').value.trim();
+    const email   = document.getElementById('reg-email').value.trim().toLowerCase();
+    const pass    = document.getElementById('reg-password').value;
+    const confirm = document.getElementById('reg-confirm').value;
+    if (!name)                        { showAuthError('register-error', 'Please enter your name.'); return; }
+    if (!email || !email.includes('@')){ showAuthError('register-error', 'Please enter a valid email.'); return; }
+    if (pass.length < 6)              { showAuthError('register-error', 'Password must be at least 6 characters.'); return; }
+    if (pass !== confirm)             { showAuthError('register-error', 'Passwords do not match.'); return; }
+    const users = getUsers();
+    if (users.find(u => u.email === email)) { showAuthError('register-error', 'An account with this email already exists.'); return; }
+    users.push({ name, email, password: pass });
+    saveUsers(users);
+    setSession(email);
+    showApp(email);
+  }
+
+  function doLogout() {
+    clearSession();
+    showLogin();
+  }
+
   // ── TRANSLATIONS ─────────────────────────────────────────────────────────
   let currentLang = 'en';
 
@@ -555,6 +704,8 @@
   }
 
   // ── INIT ──────────────────────────────────────────────────────────────────
+  const _session = getSession();
+  if (_session) { showApp(_session); } else { showLogin(); }
   renderCookieGrid();
   updateRegionLabels();
 </script>
