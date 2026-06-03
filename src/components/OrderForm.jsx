@@ -6,8 +6,11 @@ export default function OrderForm({ settings, lang, onSuccess }) {
   const [selected, setSelected] = useState({});
   const [qty, setQty] = useState({});
   const [mode, setMode] = useState('pickup');
-  const [region, setRegion] = useState('');
-  const [address, setAddress] = useState('');
+  const [addrLine1, setAddrLine1] = useState('');
+  const [addrLine2, setAddrLine2] = useState('');
+  const [city, setCity] = useState('');
+  const [postcode, setPostcode] = useState('');
+  const [state, setState] = useState('');
   const [custName, setCustName] = useState('');
   const [custWa, setCustWa] = useState('');
   const [custDate, setCustDate] = useState('');
@@ -34,14 +37,15 @@ export default function OrderForm({ settings, lang, onSuccess }) {
       const p = getProduct(id); if (!p) return;
       total += p.price * (qty[id] || 1);
     });
-    if (mode === 'delivery' && region) total += settings.shipping[region] || 0;
+    const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
+    if (mode === 'delivery' && state) total += settings.shipping[EM_STATES.includes(state) ? 'EM' : 'WM'] || 0;
     return total;
   }
 
   async function submitOrder() {
     if (!Object.keys(selected).length) { alert(t('Please select at least one item!', '请至少选择一种产品！')); return; }
     if (!custName.trim() || !custWa.trim()) { alert(t('Please fill in your name and WhatsApp number.', '请填写您的姓名和 WhatsApp 号码。')); return; }
-    if (mode === 'delivery' && (!region || !address.trim())) { alert(t('Please fill in your delivery region and address.', '请填写送货地区和地址。')); return; }
+    if (mode === 'delivery' && (!addrLine1.trim() || !city.trim() || !postcode.trim() || !state)) { alert(t('Please fill in all required delivery fields.', '请填写所有必填的送货资料。')); return; }
 
     let msg = `🍪 *New Order from Bitetime & Co.*\n\n`;
     msg += `*Name:* ${custName}\n*WhatsApp:* ${custWa}\n`;
@@ -57,9 +61,12 @@ export default function OrderForm({ settings, lang, onSuccess }) {
     });
 
     if (mode === 'delivery') {
+      const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
+      const region = EM_STATES.includes(state) ? 'EM' : 'WM';
       const fee = settings.shipping[region] || 0;
       total += fee;
-      msg += `\n*Delivery (${region}):* RM ${fee}\n*Address:* ${address}\n`;
+      const fullAddress = [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ');
+      msg += `\n*Delivery (${region}):* RM ${fee}\n*Address:* ${fullAddress}\n`;
     } else {
       msg += `\n*Order type:* Self-pickup\n`;
     }
@@ -89,7 +96,7 @@ export default function OrderForm({ settings, lang, onSuccess }) {
         <div className="how-to-title">{t('How to place your order 🍪', '如何下单 🍪')}</div>
         <div className="how-to-steps">
           <div className="how-to-step"><span className="step-num">1</span><span>{t('Pick the cookies you want and set the quantity for each item.', '选择您想要的饼干，并设置每种产品的数量。')}</span></div>
-          <div className="how-to-step"><span className="step-num">2</span><span dangerouslySetInnerHTML={{ __html: t('Choose <strong>Self-pickup</strong> or <strong>Delivery</strong> — if delivery, select your region and enter your address.', '选择<strong>自取</strong>或<strong>送货</strong> — 若选送货，请选择地区并填写地址。') }} /></div>
+          <div className="how-to-step"><span className="step-num">2</span><span dangerouslySetInnerHTML={{ __html: t('Choose <strong>Self-pickup</strong> or <strong>Delivery</strong> — if delivery, fill in your delivery address.', '选择<strong>自取</strong>或<strong>送货</strong> — 若选送货，请填写您的送货地址。') }} /></div>
           <div className="how-to-step"><span className="step-num">3</span><span>{t('Fill in your name, WhatsApp number, and preferred date.', '填写您的姓名、WhatsApp 号码和预计日期。')}</span></div>
           <div className="how-to-step"><span className="step-num">4</span><span dangerouslySetInnerHTML={{ __html: t('Tap <strong>Submit order</strong> — your order is sent to us instantly and we\'ll confirm shortly!', '点击<strong>提交订单</strong> — 您的订单将立即发送给我们，我们会尽快确认！') }} /></div>
         </div>
@@ -132,16 +139,31 @@ export default function OrderForm({ settings, lang, onSuccess }) {
           <div className="section-label">{t('Delivery details', '送货详情')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div className="field">
-              <label>{t('Region', '地区')}</label>
-              <select value={region} onChange={e => setRegion(e.target.value)}>
-                <option value="">{t('— Select region —', '— 选择地区 —')}</option>
-                <option value="WM">{t(`West Malaysia (WM) — RM ${settings.shipping.WM}`, `西马来西亚 (WM) — RM ${settings.shipping.WM}`)}</option>
-                <option value="EM">{t(`East Malaysia / Sabah / Sarawak (EM) — RM ${settings.shipping.EM}`, `东马 / 沙巴 / 砂拉越 (EM) — RM ${settings.shipping.EM}`)}</option>
-              </select>
+              <label>{t('Address Line 1', '地址第一行')} *</label>
+              <input type="text" placeholder={t('Unit no. / Street name', '单位号码 / 街道名称')} value={addrLine1} onChange={e => setAddrLine1(e.target.value)} />
             </div>
             <div className="field">
-              <label>{t('Delivery address', '送货地址')}</label>
-              <input type="text" placeholder={t('Full address including postcode', '完整地址（含邮政编码）')} value={address} onChange={e => setAddress(e.target.value)} />
+              <label>{t('Address Line 2', '地址第二行')} <span style={{ fontSize: '11px', color: '#aaa', fontStyle: 'italic' }}>{t('optional', '选填')}</span></label>
+              <input type="text" placeholder={t('Apartment, building, floor, etc.', '公寓、楼栋、楼层等')} value={addrLine2} onChange={e => setAddrLine2(e.target.value)} />
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>{t('City', '城市')} *</label>
+                <input type="text" placeholder={t('e.g. Kuala Lumpur', '例如：吉隆坡')} value={city} onChange={e => setCity(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>{t('Postcode', '邮政编码')} *</label>
+                <input type="text" placeholder="e.g. 50480" maxLength={5} value={postcode} onChange={e => setPostcode(e.target.value.replace(/\D/g, ''))} />
+              </div>
+            </div>
+            <div className="field">
+              <label>{t('State', '州属')} *</label>
+              <select value={state} onChange={e => setState(e.target.value)}>
+                <option value="">{t('— Select state —', '— 选择州属 —')}</option>
+                {['Johor','Kedah','Kelantan','Melaka','Negeri Sembilan','Pahang','Perak','Perlis','Pulau Pinang','Sabah','Sarawak','Selangor','Terengganu','W.P. Kuala Lumpur','W.P. Labuan','W.P. Putrajaya'].map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </div>
           </div>
         </div>
@@ -182,9 +204,10 @@ export default function OrderForm({ settings, lang, onSuccess }) {
               const q = qty[id] || 1;
               return <div key={id} className="summary-row"><span>{p.name} × {q} {p.unit}</span><span>RM {p.price * q}</span></div>;
             })}
-            {mode === 'delivery' && region && (
-              <div className="summary-row"><span>{t('Delivery', '送货')} ({region})</span><span>RM {settings.shipping[region] || 0}</span></div>
-            )}
+            {mode === 'delivery' && state && (() => {
+              const region = ['Sabah','Sarawak','W.P. Labuan'].includes(state) ? 'EM' : 'WM';
+              return <div className="summary-row"><span>{t('Delivery', '送货')} ({region})</span><span>RM {settings.shipping[region] || 0}</span></div>;
+            })()}
             <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {computeTotal()}</span></div>
           </>
         )}
