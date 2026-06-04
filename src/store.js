@@ -124,6 +124,31 @@ export async function saveDeliveryAddress(userId, address) {
   await supabase.from('profiles').upsert({ id: userId, delivery_address: address }, { onConflict: 'id' });
 }
 
+// ── Vouchers ──────────────────────────────────────────────────────────────────
+
+export async function loadVouchers() {
+  const { data } = await supabase.from('settings').select('value').eq('key', 'vouchers').single();
+  return data?.value ?? [];
+}
+
+export async function saveVouchers(vouchers) {
+  await supabase.from('settings').upsert({ key: 'vouchers', value: vouchers }, { onConflict: 'key' });
+}
+
+export async function createVoucher(voucher) {
+  const list = await loadVouchers();
+  const updated = [voucher, ...list];
+  await saveVouchers(updated);
+  return updated;
+}
+
+export async function markVoucherUsed(code) {
+  const list = await loadVouchers();
+  const updated = list.map(v => v.code === code ? { ...v, used: true } : v);
+  await saveVouchers(updated);
+  return updated;
+}
+
 export async function loadDeliveryAddress(userId) {
   const local = loadDeliveryAddressLocal(userId);
   if (local) return local;

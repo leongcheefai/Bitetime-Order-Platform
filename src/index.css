@@ -191,6 +191,50 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .order-history-item { display: flex; justify-content: space-between; font-size: 13px; color: #7A4F55; }
 .order-history-addr { font-size: 12px; color: #A07070; margin-top: 6px; border-top: 1px solid #C9A090; padding-top: 6px; }
 
+/* ── Voucher redemption (order form) ─────────────────────────────────────── */
+.voucher-input-row { display: flex; gap: 8px; }
+.voucher-text-input { flex: 1; padding: 10px 12px; border: 1.5px solid #C9A090; border-radius: 10px; font-size: 14px; font-family: 'DM Sans', sans-serif; background: #F2EAE0; color: #2B0A10; letter-spacing: 1px; }
+.voucher-text-input:focus { outline: none; border-color: #7A1028; box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
+.voucher-apply-btn { padding: 10px 18px; background: #7A1028; color: #F2EAE0; border: none; border-radius: 10px; font-size: 14px; font-family: 'DM Sans', sans-serif; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.voucher-apply-btn:hover:not(:disabled) { background: #5C0C1E; }
+.voucher-apply-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.voucher-feedback { font-size: 13px; margin-top: 6px; }
+.voucher-feedback.ok { color: #1A7A3A; }
+.voucher-feedback.err { color: #C0392B; }
+.voucher-applied-row { display: flex; align-items: center; gap: 10px; background: #DFF5E8; border: 1.5px solid #A8D8B5; border-radius: 10px; padding: 10px 14px; }
+.voucher-applied-badge { font-family: monospace; font-weight: 700; font-size: 14px; color: #1A7A3A; letter-spacing: 1px; }
+.voucher-applied-desc { font-size: 13px; color: #1A7A3A; flex: 1; }
+.voucher-remove-btn { font-size: 12px; color: #7A4F55; background: none; border: 1px solid #C9A090; border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+.voucher-remove-btn:hover { background: #F2EAE0; }
+.summary-row.discount { color: #1A7A3A; font-size: 13px; }
+.summary-row.discount span:last-child { font-weight: 600; }
+
+/* ── Vouchers ────────────────────────────────────────────────────────────── */
+.voucher-fields { display: flex; flex-direction: column; gap: 12px; }
+.voucher-field { display: flex; flex-direction: column; gap: 5px; }
+.voucher-field label { font-size: 13px; color: #7A4F55; font-weight: 500; }
+.voucher-field label span { font-weight: 400; color: #A07070; font-style: italic; margin-left: 4px; }
+.voucher-field input,
+.voucher-field select { padding: 9px 12px; border: 1px solid #C9A090; border-radius: 10px; font-size: 14px; background: #F2EAE0; color: #2B0A10; font-family: 'DM Sans', sans-serif; width: 100%; box-sizing: border-box; }
+.voucher-field input:focus,
+.voucher-field select:focus { outline: none; border-color: #7A1028; box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
+.voucher-code-row { display: flex; gap: 8px; align-items: center; }
+.voucher-code-row input { flex: 1; }
+.voucher-gen-btn { flex: 0 0 auto; padding: 9px 14px; border: 1.5px solid #C9A090; border-radius: 10px; background: #F2EAE0; color: #7A4F55; font-size: 13px; cursor: pointer; font-family: 'DM Sans', sans-serif; white-space: nowrap; }
+.voucher-gen-btn:hover { background: #EDE4D8; color: #7A1028; }
+
+.voucher-list { display: flex; flex-direction: column; gap: 8px; margin-top: 0.75rem; }
+.voucher-row { display: flex; align-items: center; gap: 10px; background: #F2EAE0; border: 1.5px solid #C9A090; border-radius: 12px; padding: 10px 14px; }
+.voucher-row.used { opacity: 0.55; }
+.voucher-code { font-family: 'DM Mono', monospace, 'DM Sans', sans-serif; font-weight: 700; font-size: 14px; color: #7A1028; letter-spacing: 1px; flex: 0 0 auto; }
+.voucher-meta { display: flex; align-items: center; gap: 8px; flex: 1; flex-wrap: wrap; }
+.voucher-discount { font-size: 13px; font-weight: 500; color: #2B0A10; background: #EDE4D8; padding: 2px 8px; border-radius: 8px; }
+.voucher-email { font-size: 12px; color: #7A4F55; }
+.voucher-date { font-size: 11px; color: #A07070; margin-left: auto; }
+.voucher-status { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+.voucher-status.active { background: #DFF5E8; color: #1A7A3A; }
+.voucher-status.used { background: #EDE4D8; color: #A07070; }
+
 @media (max-width: 520px) {
   .cookie-grid { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr; }

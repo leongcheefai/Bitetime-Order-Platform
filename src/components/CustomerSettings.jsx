@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchUserOrders, saveDeliveryAddress, loadDeliveryAddress } from '../store';
+import { fetchUserOrders, saveDeliveryAddress, loadDeliveryAddress, loadVouchers } from '../store';
 import { lookupPostcode } from '../postcodes';
 
 export default function CustomerSettings({ user, lang, onAddressSaved }) {
@@ -7,6 +7,8 @@ export default function CustomerSettings({ user, lang, onAddressSaved }) {
 
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [myVouchers, setMyVouchers] = useState([]);
+  const [vouchersLoading, setVouchersLoading] = useState(true);
 
   const [addrLine1, setAddrLine1] = useState('');
   const [addrLine2, setAddrLine2] = useState('');
@@ -20,6 +22,11 @@ export default function CustomerSettings({ user, lang, onAddressSaved }) {
 
   useEffect(() => {
     fetchUserOrders(user.id).then(data => { setOrders(data); setOrdersLoading(false); });
+    loadVouchers().then(all => {
+      const email = user.email?.toLowerCase() ?? '';
+      setMyVouchers(all.filter(v => !v.email || v.email === email));
+      setVouchersLoading(false);
+    });
     loadDeliveryAddress(user.id).then(addr => {
       if (addr) {
         setAddrLine1(addr.line1 || '');
@@ -106,6 +113,32 @@ export default function CustomerSettings({ user, lang, onAddressSaved }) {
           {saving ? t('Saving…', '保存中…') : t('Save address', '保存地址')}
         </button>
         {saveMsg && <div className="save-msg">{saveMsg}</div>}
+      </div>
+
+      {/* ── My Vouchers ── */}
+      <div className="settings-section">
+        <div className="settings-section-title">{t('My Vouchers', '我的优惠券')}</div>
+        {vouchersLoading ? (
+          <p className="settings-hint">{t('Loading…', '加载中…')}</p>
+        ) : myVouchers.length === 0 ? (
+          <p className="settings-hint">{t('No vouchers yet. Stay tuned for promotions!', '暂无优惠券，敬请期待！')}</p>
+        ) : (
+          <div className="voucher-list">
+            {myVouchers.map((v, i) => (
+              <div key={i} className={'voucher-row' + (v.used ? ' used' : '')}>
+                <div className="voucher-code">{v.code}</div>
+                <div className="voucher-meta">
+                  <span className="voucher-discount">
+                    {v.type === 'percent' ? `${v.value}% off` : `RM ${v.value} off`}
+                  </span>
+                </div>
+                <div className={'voucher-status' + (v.used ? ' used' : ' active')}>
+                  {v.used ? t('Used', '已使用') : t('Active', '有效')}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* ── Order history ── */}
