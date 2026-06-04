@@ -2,19 +2,19 @@ import { useState } from 'react';
 import { lookupPostcode } from '../postcodes';
 import { saveOrder } from '../store';
 
-export default function OrderForm({ settings, lang, user, onSuccess }) {
+export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
 
   const [selected, setSelected] = useState({});
   const [qty, setQty] = useState({});
   const [mode, setMode] = useState('pickup');
-  const [addrLine1, setAddrLine1] = useState('');
-  const [addrLine2, setAddrLine2] = useState('');
-  const [city, setCity] = useState('');
-  const [postcode, setPostcode] = useState('');
-  const [state, setState] = useState('');
-  const [custName, setCustName] = useState('');
-  const [custWa, setCustWa] = useState('');
+  const [addrLine1, setAddrLine1] = useState(savedAddress?.line1 || '');
+  const [addrLine2, setAddrLine2] = useState(savedAddress?.line2 || '');
+  const [city, setCity] = useState(savedAddress?.city || '');
+  const [postcode, setPostcode] = useState(savedAddress?.postcode || '');
+  const [state, setState] = useState(savedAddress?.state || '');
+  const [custName, setCustName] = useState(savedAddress?.name || '');
+  const [custWa, setCustWa] = useState(savedAddress?.wa || '');
   const [custDate, setCustDate] = useState('');
 
   function toggleCookie(id) {

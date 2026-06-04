@@ -156,6 +156,32 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .user-table tbody tr:hover td { background: #F5E6E8; }
 .user-table td:first-child { color: #A07070; font-size: 12px; width: 32px; }
 
+/* ── Customer tab nav ─────────────────────────────────────────────────────── */
+.cust-tab-nav { display: flex; gap: 8px; margin-bottom: 1.75rem; background: #EDE4D8; border-radius: 14px; padding: 5px; }
+.cust-tab { flex: 1; padding: 9px 12px; border: none; border-radius: 10px; background: none; font-size: 14px; font-family: 'DM Sans', sans-serif; color: #7A4F55; cursor: pointer; font-weight: 500; transition: all 0.15s; }
+.cust-tab:hover { background: #DDD0C4; color: #2B0A10; }
+.cust-tab.active { background: #7A1028; color: #F2EAE0; }
+
+/* ── Customer settings ───────────────────────────────────────────────────── */
+.cust-settings { display: flex; flex-direction: column; gap: 1.5rem; }
+.settings-section { background: #FBF6F0; border: 1.5px solid #C9A090; border-radius: 16px; padding: 1.25rem; }
+.settings-section-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: #7A1028; margin-bottom: 4px; }
+.settings-hint { font-size: 13px; color: #7A4F55; }
+
+/* ── Order history ───────────────────────────────────────────────────────── */
+.order-history-list { display: flex; flex-direction: column; gap: 10px; margin-top: 1rem; }
+.order-history-card { background: #F2EAE0; border: 1px solid #C9A090; border-radius: 12px; padding: 12px 14px; }
+.order-history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.order-history-date { font-size: 12px; color: #7A4F55; }
+.order-history-total { font-size: 15px; font-weight: 500; color: #2B0A10; }
+.order-history-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.order-mode-badge { font-size: 11px; font-weight: 500; padding: 2px 10px; border-radius: 20px; background: #DDD0C4; color: #7A4F55; }
+.order-mode-badge.delivery { background: #F5E6E8; color: #7A1028; }
+.order-history-pref { font-size: 12px; color: #A07070; }
+.order-history-items { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid #C9A090; padding-top: 8px; }
+.order-history-item { display: flex; justify-content: space-between; font-size: 13px; color: #7A4F55; }
+.order-history-addr { font-size: 12px; color: #A07070; margin-top: 6px; border-top: 1px solid #C9A090; padding-top: 6px; }
+
 @media (max-width: 520px) {
   .cookie-grid { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr; }

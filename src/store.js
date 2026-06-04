@@ -99,3 +99,38 @@ export async function saveOrder(order) {
   const { error } = await supabase.from('orders').insert(order);
   if (error) console.error('Failed to save order to Supabase:', error.message);
 }
+
+export async function fetchUserOrders(userId) {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) { console.error('Failed to fetch orders:', error.message); return []; }
+  return data ?? [];
+}
+
+// ── Delivery address ──────────────────────────────────────────────────────────
+
+export function loadDeliveryAddressLocal(userId) {
+  try {
+    const raw = localStorage.getItem(`bitetime_addr_${userId}`);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+export async function saveDeliveryAddress(userId, address) {
+  localStorage.setItem(`bitetime_addr_${userId}`, JSON.stringify(address));
+  await supabase.from('profiles').upsert({ id: userId, delivery_address: address }, { onConflict: 'id' });
+}
+
+export async function loadDeliveryAddress(userId) {
+  const local = loadDeliveryAddressLocal(userId);
+  if (local) return local;
+  const { data } = await supabase.from('profiles').select('delivery_address').eq('id', userId).single();
+  if (data?.delivery_address) {
+    localStorage.setItem(`bitetime_addr_${userId}`, JSON.stringify(data.delivery_address));
+    return data.delivery_address;
+  }
+  return null;
+}
