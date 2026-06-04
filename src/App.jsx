@@ -73,17 +73,12 @@ export default function App() {
           ← {t('Back to Owner View', '返回店主视图')}
         </div>
 
-        <div className="lang-switcher">
-          <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
-          <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
-        </div>
-
-        {/* Tab nav */}
-        <div className="cust-tab-nav">
-          <button className={'cust-tab' + (customerTab === 'order' ? ' active' : '')} onClick={() => { setCustomerTab('order'); setOrderDone(false); }}>
-            🍪 {t('Place Order', '下单')}
-          </button>
-          <button className={'cust-tab' + (customerTab === 'account' ? ' active' : '')} onClick={() => setCustomerTab('account')}>
+        <div className="cust-topbar">
+          <div className="lang-switcher">
+            <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
+            <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
+          </div>
+          <button className={'cust-account-btn' + (customerTab === 'account' ? ' active' : '')} onClick={() => setCustomerTab(customerTab === 'account' ? 'order' : 'account')}>
             👤 {t('My Account', '我的账户')}
           </button>
         </div>
@@ -95,7 +90,6 @@ export default function App() {
               <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
               <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
             </div>
-
             {orderDone ? (
               <div className="success-box">
                 <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
@@ -195,17 +189,12 @@ export default function App() {
         <a onClick={handleLogout}>{t('Sign out', '退出')}</a>
       </div>
 
-      <div className="lang-switcher">
-        <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
-        <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
-      </div>
-
-      {/* Tab nav */}
-      <div className="cust-tab-nav">
-        <button className={'cust-tab' + (customerTab === 'order' ? ' active' : '')} onClick={() => { setCustomerTab('order'); setOrderDone(false); }}>
-          🍪 {t('Place Order', '下单')}
-        </button>
-        <button className={'cust-tab' + (customerTab === 'account' ? ' active' : '')} onClick={() => setCustomerTab('account')}>
+      <div className="cust-topbar">
+        <div className="lang-switcher">
+          <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
+          <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
+        </div>
+        <button className={'cust-account-btn' + (customerTab === 'account' ? ' active' : '')} onClick={() => setCustomerTab(customerTab === 'account' ? 'order' : 'account')}>
           👤 {t('My Account', '我的账户')}
         </button>
       </div>

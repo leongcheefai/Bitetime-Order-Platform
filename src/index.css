@@ -5,6 +5,13 @@
 body { font-family: 'DM Sans', sans-serif; background: #F2EAE0; color: #2B0A10; min-height: 100vh; padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; }
 .form-wrap { max-width: 600px; width: 100%; }
 
+/* ── Customer top bar ─────────────────────────────────────────────────────── */
+.cust-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.75rem; }
+.cust-topbar .lang-switcher { margin-bottom: 0; }
+.cust-account-btn { padding: 7px 14px; border: 1.5px solid #C9A090; border-radius: 20px; background: none; color: #7A4F55; font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.cust-account-btn:hover { background: #EDE4D8; color: #2B0A10; }
+.cust-account-btn.active { background: #7A1028; color: #F2EAE0; border-color: #7A1028; }
+
 /* ── Owner layout ─────────────────────────────────────────────────────────── */
 body:has(.owner-layout) { padding: 1.25rem; }
 .owner-layout { display: flex; min-height: calc(100vh - 2.5rem); gap: 1.25rem; align-items: flex-start; width: 100%; }
