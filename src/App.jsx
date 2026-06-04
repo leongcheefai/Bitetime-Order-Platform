@@ -27,9 +27,18 @@ export default function App() {
     setView('login');
   }
 
-  function getUserName() {
+  function getUser() {
     const users = getUsers();
-    return (users.find(u => u.email === sessionEmail) || {}).name || sessionEmail;
+    return users.find(u => u.email === sessionEmail) || {};
+  }
+
+  function getUserName() {
+    const user = getUser();
+    return user.name || sessionEmail;
+  }
+
+  function isOwner() {
+    return sessionEmail === 'esthertan0716@gmail.com';
   }
 
   if (view === 'login') return <LoginView onLogin={handleLogin} onShowRegister={() => setView('register')} />;
@@ -56,12 +65,14 @@ export default function App() {
         <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
       </div>
 
-      {/* ADMIN TOGGLE */}
-      <div className="admin-toggle">
-        <button onClick={() => setAdminOpen(o => !o)}>{t('⚙️ Edit menu & settings', '⚙️ 编辑菜单与设置')}</button>
-      </div>
+      {/* ADMIN TOGGLE — owner only */}
+      {isOwner() && (
+        <div className="admin-toggle">
+          <button onClick={() => setAdminOpen(o => !o)}>{t('⚙️ Edit menu & settings', '⚙️ 编辑菜单与设置')}</button>
+        </div>
+      )}
 
-      {adminOpen && (
+      {isOwner() && adminOpen && (
         <AdminPanel
           settings={settings}
           lang={lang}

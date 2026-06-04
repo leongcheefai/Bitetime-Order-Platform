@@ -26,19 +26,30 @@ export default function AdminPanel({ settings, onSave, lang }) {
   }
 
   function handleSave() {
-    for (const p of products) {
-      if (!p.name.trim()) { alert(t('Please fill in all product names.', '请填写所有产品名称。')); return; }
+    console.log('[AdminPanel] handleSave clicked, products:', JSON.stringify(products));
+    try {
+      for (const p of products) {
+        if (!p.name || !p.name.trim()) {
+          console.log('[AdminPanel] Validation failed - empty name for product:', p);
+          setSaveMsg(t('⚠ Please fill in all product names.', '⚠ 请填写所有产品名称。'));
+          return;
+        }
+      }
+      const newSettings = {
+        products,
+        shipping: { WM: parseFloat(wmFee) || 0, EM: parseFloat(emFee) || 0 },
+        tgToken: tgToken.trim() || DEFAULTS.tgToken,
+        tgChatId: tgChatId.trim() || DEFAULTS.tgChatId,
+      };
+      console.log('[AdminPanel] Saving settings:', JSON.stringify(newSettings));
+      saveSettingsToStorage(newSettings);
+      onSave(newSettings);
+      setSaveMsg(t('✓ Saved!', '✓ 已保存！'));
+      setTimeout(() => setSaveMsg(''), 2500);
+    } catch (err) {
+      console.error('[AdminPanel] Save error:', err);
+      setSaveMsg('⚠ Error: ' + err.message);
     }
-    const newSettings = {
-      products,
-      shipping: { WM: parseFloat(wmFee) || 0, EM: parseFloat(emFee) || 0 },
-      tgToken: tgToken.trim() || DEFAULTS.tgToken,
-      tgChatId: tgChatId.trim() || DEFAULTS.tgChatId,
-    };
-    saveSettingsToStorage(newSettings);
-    onSave(newSettings);
-    setSaveMsg(t('✓ Saved!', '✓ 已保存！'));
-    setTimeout(() => setSaveMsg(''), 2500);
   }
 
   return (

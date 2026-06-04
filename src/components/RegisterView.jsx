@@ -15,7 +15,8 @@ export default function RegisterView({ onLogin, onShowLogin }) {
     if (password !== confirm)                  { setError('Passwords do not match.'); return; }
     const users = getUsers();
     if (users.find(u => u.email === email.trim().toLowerCase())) { setError('An account with this email already exists.'); return; }
-    const newUser = { name: name.trim(), email: email.trim().toLowerCase(), password };
+    const role = users.length === 0 ? 'owner' : 'customer';
+    const newUser = { name: name.trim(), email: email.trim().toLowerCase(), password, role };
     saveUsers([...users, newUser]);
     setSession(newUser.email);
     onLogin(newUser.email);
