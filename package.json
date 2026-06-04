@@ -11,6 +11,7 @@
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.107.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },

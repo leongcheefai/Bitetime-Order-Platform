@@ -1,3 +1,5 @@
+import { supabase } from './supabase';
+
 export const DEFAULTS = {
   products: [
     { id: 'chewy',   name: 'Soft & chewy cookies',  desc: 'Classic melt-in-your-mouth goodness', price: 12, unit: 'pc'  },
@@ -10,6 +12,42 @@ export const DEFAULTS = {
   tgChatId: '671603959',
 };
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+export async function signIn(email, password) {
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+export async function signUp(name, email, password) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { name } },
+  });
+  if (error) throw error;
+  return data.user;
+}
+
+export async function signOut() {
+  await supabase.auth.signOut();
+}
+
+export async function getCurrentUser() {
+  const { data } = await supabase.auth.getUser();
+  return data?.user ?? null;
+}
+
+export function onAuthChange(callback) {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    callback(session?.user ?? null);
+  });
+  return () => subscription.unsubscribe();
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+
 export function loadSettings() {
   try {
     const saved = localStorage.getItem('bitetime_settings');
@@ -21,14 +59,26 @@ export function saveSettingsToStorage(settings) {
   localStorage.setItem('bitetime_settings', JSON.stringify(settings));
 }
 
-export function getUsers() {
-  try { return JSON.parse(localStorage.getItem('bitetime_users') || '[]'); } catch { return []; }
+export async function loadSettingsFromDB() {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', 'main')
+    .single();
+  if (error || !data) return null;
+  return data.value;
 }
 
-export function saveUsers(users) {
-  localStorage.setItem('bitetime_users', JSON.stringify(users));
+export async function saveSettingsToDB(settings) {
+  await supabase
+    .from('settings')
+    .upsert({ key: 'main', value: settings }, { onConflict: 'key' });
+  saveSettingsToStorage(settings);
 }
 
-export function getSession() { return localStorage.getItem('bitetime_session'); }
-export function setSession(email) { localStorage.setItem('bitetime_session', email); }
-export function clearSession() { localStorage.removeItem('bitetime_session'); }
+// ── Orders ────────────────────────────────────────────────────────────────────
+
+export async function saveOrder(order) {
+  const { error } = await supabase.from('orders').insert(order);
+  if (error) console.error('Failed to save order to Supabase:', error.message);
+}

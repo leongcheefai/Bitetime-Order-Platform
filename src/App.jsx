@@ -1,54 +1,63 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
-import { loadSettings, getSession, getUsers, clearSession } from './store';
+import { loadSettings, loadSettingsFromDB, onAuthChange, signOut } from './store';
 import LoginView from './components/LoginView';
 import RegisterView from './components/RegisterView';
 import AdminPanel from './components/AdminPanel';
 import OrderForm from './components/OrderForm';
 
+const OWNER_EMAIL = 'esthertan0716@gmail.com';
+
 export default function App() {
-  const [view, setView] = useState(() => getSession() ? 'app' : 'login');
-  const [sessionEmail, setSessionEmail] = useState(() => getSession() || '');
+  const [user, setUser] = useState(undefined); // undefined = loading
   const [lang, setLang] = useState('en');
   const [settings, setSettings] = useState(loadSettings);
   const [adminOpen, setAdminOpen] = useState(false);
   const [orderDone, setOrderDone] = useState(false);
+  const [view, setView] = useState('login');
 
   const t = (en, zh) => lang === 'zh' ? zh : en;
 
-  function handleLogin(email) {
-    setSessionEmail(email);
-    setView('app');
-  }
+  useEffect(() => {
+    const unsubscribe = onAuthChange(u => setUser(u));
+    return unsubscribe;
+  }, []);
+
+  // Load settings from Supabase on mount
+  useEffect(() => {
+    loadSettingsFromDB().then(dbSettings => {
+      if (dbSettings) setSettings(dbSettings);
+    });
+  }, []);
 
   function handleLogout() {
-    clearSession();
-    setSessionEmail('');
-    setView('login');
+    signOut();
+    setOrderDone(false);
+    setAdminOpen(false);
   }
 
-  function getUser() {
-    const users = getUsers();
-    return users.find(u => u.email === sessionEmail) || {};
+  const isOwner = user?.email === OWNER_EMAIL;
+  const userName = user?.user_metadata?.name || user?.email || '';
+
+  // Still checking auth
+  if (user === undefined) {
+    return (
+      <div className="form-wrap" style={{ textAlign: 'center', paddingTop: '4rem', color: '#aaa' }}>
+        Loading…
+      </div>
+    );
   }
 
-  function getUserName() {
-    const user = getUser();
-    return user.name || sessionEmail;
+  if (!user) {
+    if (view === 'register') return <RegisterView onLogin={() => setView('login')} onShowLogin={() => setView('login')} />;
+    return <LoginView onLogin={() => {}} onShowRegister={() => setView('register')} />;
   }
-
-  function isOwner() {
-    return sessionEmail === 'esthertan0716@gmail.com';
-  }
-
-  if (view === 'login') return <LoginView onLogin={handleLogin} onShowRegister={() => setView('register')} />;
-  if (view === 'register') return <RegisterView onLogin={handleLogin} onShowLogin={() => setView('login')} />;
 
   return (
     <div className="form-wrap">
       {/* GREETING */}
       <div className="auth-greeting">
-        Hi, <span>{getUserName()}</span>&nbsp;
+        Hi, <span>{userName}</span>&nbsp;
         <a onClick={handleLogout}>Sign out</a>
       </div>
 
@@ -66,13 +75,13 @@ export default function App() {
       </div>
 
       {/* ADMIN TOGGLE — owner only */}
-      {isOwner() && (
+      {isOwner && (
         <div className="admin-toggle">
           <button onClick={() => setAdminOpen(o => !o)}>{t('⚙️ Edit menu & settings', '⚙️ 编辑菜单与设置')}</button>
         </div>
       )}
 
-      {isOwner() && adminOpen && (
+      {isOwner && adminOpen && (
         <AdminPanel
           settings={settings}
           lang={lang}
@@ -88,7 +97,7 @@ export default function App() {
           <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
         </div>
       ) : (
-        <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} onSuccess={() => setOrderDone(true)} />
+        <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} user={user} onSuccess={() => setOrderDone(true)} />
       )}
     </div>
   );

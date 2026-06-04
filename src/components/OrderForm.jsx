@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { lookupPostcode } from '../postcodes';
+import { saveOrder } from '../store';
 
-export default function OrderForm({ settings, lang, onSuccess }) {
+export default function OrderForm({ settings, lang, user, onSuccess }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
 
   const [selected, setSelected] = useState({});
@@ -80,8 +81,27 @@ export default function OrderForm({ settings, lang, onSuccess }) {
         body: JSON.stringify({ chat_id: settings.tgChatId, text: msg, parse_mode: 'Markdown' }),
       });
       const data = await res.json();
-      if (data.ok) { onSuccess(); }
-      else { alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。')); }
+      if (data.ok) {
+        const items = Object.keys(selected).map(id => {
+          const p = getProduct(id);
+          return { id, name: p.name, qty: qty[id] || 1, price: p.price };
+        });
+        const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
+        const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
+        await saveOrder({
+          user_id: user?.id ?? null,
+          customer_name: custName,
+          customer_wa: custWa,
+          preferred_date: custDate || null,
+          mode,
+          address: mode === 'delivery' ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ') : null,
+          region,
+          shipping_fee: region ? (settings.shipping[region] || 0) : 0,
+          items,
+          total: computeTotal(),
+        });
+        onSuccess();
+      } else { alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。')); }
     } catch {
       alert(t('Network error. Please check your connection.', '网络错误，请检查您的连接。'));
     }

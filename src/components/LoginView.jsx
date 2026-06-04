@@ -1,17 +1,23 @@
 import { useState } from 'react';
-import { getUsers, setSession } from '../store';
+import { signIn } from '../store';
 
 export default function LoginView({ onLogin, onShowRegister }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  function handleLogin() {
-    const users = getUsers();
-    const user = users.find(u => u.email === email.trim().toLowerCase() && u.password === password);
-    if (!user) { setError('Incorrect email or password.'); return; }
-    setSession(user.email);
-    onLogin(user.email);
+  async function handleLogin() {
+    if (!email.trim() || !password) { setError('Please enter your email and password.'); return; }
+    setLoading(true);
+    try {
+      await signIn(email.trim().toLowerCase(), password);
+      // App.jsx picks up the new session via onAuthChange — no callback needed
+    } catch (err) {
+      setError(err.message || 'Incorrect email or password.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -34,7 +40,7 @@ export default function LoginView({ onLogin, onShowRegister }) {
             <input type="password" placeholder="Your password" value={password} onChange={e => { setPassword(e.target.value); setError(''); }} onKeyDown={e => e.key === 'Enter' && handleLogin()} />
           </div>
         </div>
-        <button className="auth-btn" onClick={handleLogin}>Sign in</button>
+        <button className="auth-btn" onClick={handleLogin} disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>
         <div className="auth-switch">Don't have an account? <a onClick={onShowRegister}>Create one</a></div>
       </div>
     </div>

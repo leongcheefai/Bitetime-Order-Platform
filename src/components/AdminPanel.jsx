@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { DEFAULTS, saveSettingsToStorage } from '../store';
+import { DEFAULTS, saveSettingsToDB } from '../store';
 
 export default function AdminPanel({ settings, onSave, lang }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
@@ -42,7 +42,7 @@ export default function AdminPanel({ settings, onSave, lang }) {
         tgChatId: tgChatId.trim() || DEFAULTS.tgChatId,
       };
       console.log('[AdminPanel] Saving settings:', JSON.stringify(newSettings));
-      saveSettingsToStorage(newSettings);
+      saveSettingsToDB(newSettings);
       onSave(newSettings);
       setSaveMsg(t('✓ Saved!', '✓ 已保存！'));
       setTimeout(() => setSaveMsg(''), 2500);
