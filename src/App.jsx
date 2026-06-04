@@ -82,7 +82,7 @@ export default function App() {
             <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
           </div>
           <button className={'cust-account-btn' + (customerTab === 'account' ? ' active' : '')} onClick={() => setCustomerTab(customerTab === 'account' ? 'order' : 'account')}>
-            👤 {t('My Account', '我的账户')}
+            {customerTab === 'account' ? t('← Back to Order', '← 返回订单') : '👤 ' + t('My Account', '我的账户')}
           </button>
         </div>
 
@@ -199,7 +199,7 @@ export default function App() {
           <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
         </div>
         <button className={'cust-account-btn' + (customerTab === 'account' ? ' active' : '')} onClick={() => setCustomerTab(customerTab === 'account' ? 'order' : 'account')}>
-          👤 {t('My Account', '我的账户')}
+          {customerTab === 'account' ? t('← Back to Order', '← 返回订单') : '👤 ' + t('My Account', '我的账户')}
         </button>
       </div>
 
