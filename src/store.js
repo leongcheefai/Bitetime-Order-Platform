@@ -27,7 +27,24 @@ export async function signUp(name, email, password) {
     options: { data: { name } },
   });
   if (error) throw error;
+  if (data.user) {
+    await supabase.from('profiles').upsert({
+      id: data.user.id,
+      name,
+      email,
+      created_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+  }
   return data.user;
+}
+
+export async function fetchAllProfiles() {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, email, created_at')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function signOut() {
