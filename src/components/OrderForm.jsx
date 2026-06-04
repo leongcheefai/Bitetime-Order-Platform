@@ -20,15 +20,25 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   function toggleCookie(id) {
     setSelected(prev => {
       const next = { ...prev };
-      if (next[id]) delete next[id]; else next[id] = true;
+      if (next[id]) {
+        delete next[id];
+        setQty(q => ({ ...q, [id]: 0 }));
+      } else {
+        next[id] = true;
+        setQty(q => ({ ...q, [id]: Math.max(1, q[id] || 0) }));
+      }
       return next;
     });
-    setQty(prev => ({ ...prev, [id]: prev[id] || 0 }));
   }
 
   function changeQty(e, id, delta) {
     e.stopPropagation();
-    setQty(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }));
+    setQty(prev => {
+      const newQty = Math.max(0, (prev[id] || 0) + delta);
+      if (newQty > 0) setSelected(s => ({ ...s, [id]: true }));
+      else setSelected(s => { const n = { ...s }; delete n[id]; return n; });
+      return { ...prev, [id]: newQty };
+    });
   }
 
   function getProduct(id) { return settings.products.find(p => p.id === id); }
