@@ -28,6 +28,7 @@ export default function App() {
   const [ownerPage, setOwnerPage] = useState('home');
   const [customerTab, setCustomerTab] = useState('order');
   const [savedAddress, setSavedAddress] = useState(null);
+  const [orderCount, setOrderCount] = useState(0);
 
   const t = (en, zh) => lang === 'zh' ? zh : en;
 
@@ -99,13 +100,13 @@ export default function App() {
                 <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
               </div>
             ) : (
-              <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={user} savedAddress={savedAddress} onSuccess={() => setOrderDone(true)} />
+              <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={user} savedAddress={savedAddress} onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }} />
             )}
           </>
         )}
 
         {customerTab === 'account' && (
-          <CustomerSettings user={user} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} />
+          <CustomerSettings user={user} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} />
         )}
       </div>
     );
@@ -164,7 +165,7 @@ export default function App() {
                   <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
                 </div>
               ) : (
-                <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} user={user} onSuccess={() => setOrderDone(true)} />
+                <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} user={user} onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }} />
               )}
             </>
           )}
@@ -223,7 +224,7 @@ export default function App() {
               lang={lang}
               user={user}
               savedAddress={savedAddress}
-              onSuccess={() => setOrderDone(true)}
+              onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }}
             />
           )}
         </>
@@ -234,6 +235,7 @@ export default function App() {
           user={user}
           lang={lang}
           onAddressSaved={addr => setSavedAddress(addr)}
+          refreshKey={orderCount}
         />
       )}
     </div>

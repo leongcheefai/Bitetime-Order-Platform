@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { DayPicker } from 'react-day-picker';
+import { format } from 'date-fns';
+import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
 import { saveOrder, loadVouchers, markVoucherUsed } from '../store';
 
@@ -16,6 +19,14 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   const [custName, setCustName] = useState(savedAddress?.name || '');
   const [custWa, setCustWa] = useState(savedAddress?.wa || '');
   const [custDate, setCustDate] = useState('');
+  const [custDateObj, setCustDateObj] = useState(null);
+  const [showCal, setShowCal] = useState(false);
+  const calRef = useRef(null);
+  useEffect(() => {
+    const handler = (e) => { if (calRef.current && !calRef.current.contains(e.target)) setShowCal(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
   const [voucherInput, setVoucherInput] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState(null);
   const [voucherMsg, setVoucherMsg] = useState('');
@@ -157,7 +168,6 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
           shipping_fee: region ? (settings.shipping[region] || 0) : 0,
           items,
           total: computeTotal(),
-          voucher_code: appliedVoucher?.code ?? null,
         });
         onSuccess();
       } else { alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。')); }
@@ -274,9 +284,22 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
               <input type="tel" placeholder="e.g. 011-2345678" value={custWa} onChange={e => setCustWa(e.target.value)} />
             </div>
           </div>
-          <div className="field">
+          <div className="field" ref={calRef} style={{position:'relative'}}>
             <label>{t('Preferred date', '预计日期')}</label>
-            <input type="date" value={custDate} onChange={e => setCustDate(e.target.value)} />
+            <button type="button" className="date-picker-btn" onClick={() => setShowCal(v => !v)}>
+              <span>{custDateObj ? format(custDateObj, 'dd MMM yyyy') : t('Select a date', '选择日期')}</span>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="13" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M1 6h14" stroke="currentColor" strokeWidth="1.4"/><path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+            </button>
+            {showCal && (
+              <div className="date-picker-popup">
+                <DayPicker
+                  mode="single"
+                  selected={custDateObj}
+                  onSelect={(d) => { setCustDateObj(d); setCustDate(d ? format(d, 'yyyy-MM-dd') : ''); setShowCal(false); }}
+                  disabled={(d) => { const min = new Date(); min.setHours(0,0,0,0); min.setDate(min.getDate() + 3); return d < min; }}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { fetchUserOrders, saveDeliveryAddress, loadDeliveryAddress, loadVouchers } from '../store';
 import { lookupPostcode } from '../postcodes';
 
-export default function CustomerSettings({ user, lang, onAddressSaved }) {
+export default function CustomerSettings({ user, lang, onAddressSaved, refreshKey }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
 
   const [orders, setOrders] = useState([]);
@@ -38,7 +38,7 @@ export default function CustomerSettings({ user, lang, onAddressSaved }) {
         setAddrWa(addr.wa || '');
       }
     });
-  }, [user.id]);
+  }, [user.id, refreshKey]);
 
   async function handleSave() {
     setSaving(true);

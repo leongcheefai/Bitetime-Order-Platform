@@ -97,7 +97,7 @@ export async function saveSettingsToDB(settings) {
 
 export async function saveOrder(order) {
   const { error } = await supabase.from('orders').insert(order);
-  if (error) console.error('Failed to save order to Supabase:', error.message);
+  if (error) console.error('Failed to save order to Supabase:', error.message, error.code, error.details, error.hint);
 }
 
 export async function fetchUserOrders(userId) {
@@ -106,7 +106,7 @@ export async function fetchUserOrders(userId) {
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  if (error) { console.error('Failed to fetch orders:', error.message); return []; }
+  if (error) { console.error('Failed to fetch orders:', error.message, error.code, error.details, error.hint); return []; }
   return data ?? [];
 }
 
