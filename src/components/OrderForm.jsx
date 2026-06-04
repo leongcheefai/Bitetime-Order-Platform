@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { lookupPostcode } from '../postcodes';
-import { saveOrder } from '../store';
+import { saveOrder, loadVouchers, markVoucherUsed } from '../store';
 
 export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
@@ -16,6 +16,10 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   const [custName, setCustName] = useState(savedAddress?.name || '');
   const [custWa, setCustWa] = useState(savedAddress?.wa || '');
   const [custDate, setCustDate] = useState('');
+  const [voucherInput, setVoucherInput] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState(null);
+  const [voucherMsg, setVoucherMsg] = useState('');
+  const [voucherApplying, setVoucherApplying] = useState(false);
 
   function toggleCookie(id) {
     setSelected(prev => {
@@ -43,6 +47,41 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
 
   function getProduct(id) { return settings.products.find(p => p.id === id); }
 
+  async function applyVoucher() {
+    const code = voucherInput.trim().toUpperCase();
+    if (!code) return;
+    setVoucherApplying(true);
+    setVoucherMsg('');
+    const vouchers = await loadVouchers();
+    const v = vouchers.find(v => v.code === code);
+    if (!v) {
+      setVoucherMsg(t('❌ Invalid voucher code.', '❌ 无效的优惠码。'));
+    } else if (v.used) {
+      setVoucherMsg(t('❌ This voucher has already been used.', '❌ 此优惠券已被使用。'));
+    } else if (v.email && v.email !== (user?.email ?? '').toLowerCase()) {
+      setVoucherMsg(t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。'));
+    } else {
+      setAppliedVoucher(v);
+      const label = v.type === 'percent' ? `${v.value}% off` : `RM ${v.value} off`;
+      setVoucherMsg(t(`✓ Voucher applied: ${label}`, `✓ 优惠券已应用：${label}`));
+    }
+    setVoucherApplying(false);
+  }
+
+  function removeVoucher() {
+    setAppliedVoucher(null);
+    setVoucherInput('');
+    setVoucherMsg('');
+  }
+
+  function computeDiscount(subtotalBeforeDiscount) {
+    if (!appliedVoucher) return 0;
+    if (appliedVoucher.type === 'percent') {
+      return parseFloat(((subtotalBeforeDiscount * appliedVoucher.value) / 100).toFixed(2));
+    }
+    return Math.min(appliedVoucher.value, subtotalBeforeDiscount);
+  }
+
   function computeTotal() {
     let total = 0;
     Object.keys(selected).forEach(id => {
@@ -51,7 +90,8 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     });
     const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
     if (mode === 'delivery' && state) total += settings.shipping[EM_STATES.includes(state) ? 'EM' : 'WM'] || 0;
-    return total;
+    const discount = computeDiscount(total);
+    return parseFloat((total - discount).toFixed(2));
   }
 
   async function submitOrder() {
@@ -82,6 +122,13 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     } else {
       msg += `\n*Order type:* Self-pickup\n`;
     }
+    if (appliedVoucher) {
+      const discountAmt = appliedVoucher.type === 'percent'
+        ? parseFloat(((total * appliedVoucher.value) / 100).toFixed(2))
+        : Math.min(appliedVoucher.value, total);
+      msg += `\n*Voucher (${appliedVoucher.code}):* −RM ${discountAmt}`;
+      total = parseFloat((total - discountAmt).toFixed(2));
+    }
     msg += `\n*Total: RM ${total}*`;
 
     try {
@@ -98,6 +145,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         });
         const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
         const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
+        if (appliedVoucher) await markVoucherUsed(appliedVoucher.code);
         await saveOrder({
           user_id: user?.id ?? null,
           customer_name: custName,
@@ -109,6 +157,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
           shipping_fee: region ? (settings.shipping[region] || 0) : 0,
           items,
           total: computeTotal(),
+          voucher_code: appliedVoucher?.code ?? null,
         });
         onSuccess();
       } else { alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。')); }
@@ -232,6 +281,37 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         </div>
       </div>
 
+      {/* VOUCHER */}
+      <div className="section">
+        <div className="section-label">{t('Have a voucher?', '有优惠码？')}</div>
+        {appliedVoucher ? (
+          <div className="voucher-applied-row">
+            <span className="voucher-applied-badge">🎟️ {appliedVoucher.code}</span>
+            <span className="voucher-applied-desc">
+              {appliedVoucher.type === 'percent' ? `${appliedVoucher.value}% off` : `RM ${appliedVoucher.value} off`}
+            </span>
+            <button className="voucher-remove-btn" onClick={removeVoucher}>{t('Remove', '移除')}</button>
+          </div>
+        ) : (
+          <div className="voucher-input-row">
+            <input
+              type="text"
+              className="voucher-text-input"
+              placeholder={t('Enter voucher code', '输入优惠码')}
+              value={voucherInput}
+              onChange={e => { setVoucherInput(e.target.value.toUpperCase()); setVoucherMsg(''); }}
+              onKeyDown={e => e.key === 'Enter' && applyVoucher()}
+            />
+            <button className="voucher-apply-btn" onClick={applyVoucher} disabled={voucherApplying || !voucherInput.trim()}>
+              {voucherApplying ? '…' : t('Apply', '应用')}
+            </button>
+          </div>
+        )}
+        {voucherMsg && (
+          <p className={'voucher-feedback' + (appliedVoucher ? ' ok' : ' err')}>{voucherMsg}</p>
+        )}
+      </div>
+
       <hr className="divider" />
 
       {/* SUMMARY */}
@@ -249,6 +329,18 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             {mode === 'delivery' && state && (() => {
               const region = ['Sabah','Sarawak','W.P. Labuan'].includes(state) ? 'EM' : 'WM';
               return <div className="summary-row"><span>{t('Delivery', '送货')} ({region})</span><span>RM {settings.shipping[region] || 0}</span></div>;
+            })()}
+            {appliedVoucher && (() => {
+              let sub = 0;
+              Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) sub += p.price * (qty[id] || 0); });
+              if (mode === 'delivery' && state) sub += settings.shipping[(['Sabah','Sarawak','W.P. Labuan'].includes(state) ? 'EM' : 'WM')] || 0;
+              const disc = computeDiscount(sub);
+              return (
+                <div className="summary-row discount">
+                  <span>🎟️ {appliedVoucher.code}</span>
+                  <span>− RM {disc}</span>
+                </div>
+              );
             })()}
             <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {computeTotal()}</span></div>
           </>
