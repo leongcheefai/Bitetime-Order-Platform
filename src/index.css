@@ -78,9 +78,11 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .section-label { font-size: 11px; font-weight: 500; color: #7A1028; text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 0.75rem; }
 
 .cookie-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.cookie-card { border: 1px solid #C9A090; border-radius: 14px; padding: 14px 16px; cursor: pointer; background: #FBF6F0; transition: border-color 0.15s, background 0.15s; }
+.cookie-card { border: 1px solid #C9A090; border-radius: 14px; padding: 14px 16px; cursor: pointer; background: #FBF6F0; transition: border-color 0.15s, background 0.15s; position: relative; }
 .cookie-card:hover { border-color: #7A1028; }
 .cookie-card.selected { border: 1.5px solid #7A1028; background: #F5E6E8; }
+.cookie-check-badge { position: absolute; top: 10px; right: 12px; width: 22px; height: 22px; border-radius: 4px; border: 1.5px solid #C9A090; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: transparent; transition: background 0.15s, border-color 0.15s, color 0.15s; pointer-events: none; }
+.cookie-card.selected .cookie-check-badge { background: #7A1028; border-color: #7A1028; color: #fff; }
 .cookie-name { font-size: 14px; font-weight: 500; color: #2B0A10; }
 .cookie-card.selected .cookie-name { color: #7A1028; }
 .cookie-desc { font-size: 12px; color: #7A4F55; margin-top: 3px; }

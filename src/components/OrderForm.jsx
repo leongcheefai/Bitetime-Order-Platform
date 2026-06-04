@@ -23,12 +23,12 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       if (next[id]) delete next[id]; else next[id] = true;
       return next;
     });
-    setQty(prev => ({ ...prev, [id]: prev[id] || 1 }));
+    setQty(prev => ({ ...prev, [id]: prev[id] || 0 }));
   }
 
   function changeQty(e, id, delta) {
     e.stopPropagation();
-    setQty(prev => ({ ...prev, [id]: Math.max(1, (prev[id] || 1) + delta) }));
+    setQty(prev => ({ ...prev, [id]: Math.max(0, (prev[id] || 0) + delta) }));
   }
 
   function getProduct(id) { return settings.products.find(p => p.id === id); }
@@ -37,7 +37,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     let total = 0;
     Object.keys(selected).forEach(id => {
       const p = getProduct(id); if (!p) return;
-      total += p.price * (qty[id] || 1);
+      total += p.price * (qty[id] || 0);
     });
     const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
     if (mode === 'delivery' && state) total += settings.shipping[EM_STATES.includes(state) ? 'EM' : 'WM'] || 0;
@@ -57,7 +57,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     let total = 0;
     Object.keys(selected).forEach(id => {
       const p = getProduct(id); if (!p) return;
-      const q = qty[id] || 1, sub = p.price * q;
+      const q = qty[id] || 0, sub = p.price * q;
       total += sub;
       msg += `• ${p.name} × ${q} — RM ${sub}\n`;
     });
@@ -84,7 +84,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       if (data.ok) {
         const items = Object.keys(selected).map(id => {
           const p = getProduct(id);
-          return { id, name: p.name, qty: qty[id] || 1, price: p.price };
+          return { id, name: p.name, qty: qty[id] || 0, price: p.price };
         });
         const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
         const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
@@ -129,6 +129,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         <div className="cookie-grid">
           {settings.products.map(p => (
             <div key={p.id} className={'cookie-card' + (selected[p.id] ? ' selected' : '')} onClick={() => toggleCookie(p.id)}>
+              <div className="cookie-check-badge">{selected[p.id] ? '✓' : ''}</div>
               <div className="cookie-name">{p.name}</div>
               <div className="cookie-desc">{p.desc}</div>
               <div className="cookie-price">RM {p.price} / {p.unit}</div>
@@ -136,7 +137,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
                 <label>{t('Qty', '数量')} ({p.unit}s)</label>
                 <div className="qty-ctrl">
                   <button className="qty-btn" onClick={e => changeQty(e, p.id, -1)}>−</button>
-                  <span className="qty-val">{qty[p.id] || 1}</span>
+                  <span className="qty-val">{qty[p.id] || 0}</span>
                   <button className="qty-btn" onClick={e => changeQty(e, p.id, 1)}>+</button>
                 </div>
               </div>
@@ -232,7 +233,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
           <>
             {selectedIds.map(id => {
               const p = getProduct(id); if (!p) return null;
-              const q = qty[id] || 1;
+              const q = qty[id] || 0;
               return <div key={id} className="summary-row"><span>{p.name} × {q} {p.unit}</span><span>RM {p.price * q}</span></div>;
             })}
             {mode === 'delivery' && state && (() => {
