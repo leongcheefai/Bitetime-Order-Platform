@@ -66,7 +66,7 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
           <div className="field-row">
             <div className="field">
               <label>{t('Your name', '您的姓名')}</label>
-              <input type="text" placeholder={t('e.g. Sarah', '例如：小明')} value={addrName} onChange={e => setAddrName(e.target.value)} />
+              <input type="text" placeholder={t('Your name', '您的名字')} value={addrName} onChange={e => setAddrName(e.target.value)} />
             </div>
             <div className="field">
               <label>{t('WhatsApp number', 'WhatsApp 号码')}</label>

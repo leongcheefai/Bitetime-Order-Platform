@@ -57,7 +57,7 @@ export default function RegisterView({ onLogin, onShowLogin }) {
         <div className="auth-fields">
           <div className="field">
             <label>Full name</label>
-            <input type="text" placeholder="e.g. Sarah" value={name} onChange={e => { setName(e.target.value); setError(''); }} />
+            <input type="text" placeholder="Your name" value={name} onChange={e => { setName(e.target.value); setError(''); }} />
           </div>
           <div className="field">
             <label>Email</label>
