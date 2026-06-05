@@ -219,8 +219,8 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       <div className="section">
         <div className="section-label">{t('Delivery or self-pickup?', '送货或自取？')}</div>
         <div className="radio-row">
-          <div className={'radio-opt' + (mode === 'pickup' ? ' active' : '')} onClick={() => setMode('pickup')}>{t('🚶 Self-pickup', '🚶 自取')}</div>
-          <div className={'radio-opt' + (mode === 'delivery' ? ' active' : '')} onClick={() => setMode('delivery')}>{t('🛵 Delivery', '🛵 送货')}</div>
+          <div className={'radio-opt' + (mode === 'pickup' ? ' active' : '')} onClick={() => setMode('pickup')}>{t('Self-pickup', '自取')}</div>
+          <div className={'radio-opt' + (mode === 'delivery' ? ' active' : '')} onClick={() => setMode('delivery')}>{t('Delivery', '送货')}</div>
         </div>
       </div>
 
@@ -309,7 +309,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         <div className="section-label">{t('Have a voucher?', '有优惠码？')}</div>
         {appliedVoucher ? (
           <div className="voucher-applied-row">
-            <span className="voucher-applied-badge">🎟️ {appliedVoucher.code}</span>
+            <span className="voucher-applied-badge">{appliedVoucher.code}</span>
             <span className="voucher-applied-desc">
               {appliedVoucher.type === 'percent' ? `${appliedVoucher.value}% off` : `RM ${appliedVoucher.value} off`}
             </span>
@@ -360,7 +360,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
               const disc = computeDiscount(sub);
               return (
                 <div className="summary-row discount">
-                  <span>🎟️ {appliedVoucher.code}</span>
+                  <span>{appliedVoucher.code}</span>
                   <span>− RM {disc}</span>
                 </div>
               );
