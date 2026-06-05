@@ -55,7 +55,7 @@ export default function VoucherPanel({ lang }) {
 
   return (
     <div className="admin-panel">
-      <div className="admin-title"><span>🎟️</span> {t('Vouchers', '优惠券')}</div>
+      <div className="admin-title">{t('Vouchers', '优惠券')}</div>
 
       {/* Create voucher */}
       <div className="admin-section">

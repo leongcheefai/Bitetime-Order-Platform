@@ -12,11 +12,11 @@ import VoucherPanel from './components/VoucherPanel';
 const OWNER_EMAIL = 'esthertan0716@gmail.com';
 
 const OWNER_NAV = [
-  { key: 'home',     icon: '🏠', label: 'Home',               labelZh: '主页' },
-  { key: 'menu',     icon: '⚙️', label: 'Menu & Settings',    labelZh: '菜单与设置' },
-  { key: 'users',    icon: '👥', label: 'Users',               labelZh: '用户' },
-  { key: 'vouchers', icon: '🎟️', label: 'Vouchers',            labelZh: '优惠券' },
-  { key: 'preview',  icon: '👁️', label: 'Customer View',      labelZh: '顾客视图' },
+  { key: 'home',     icon: '', label: 'Home',               labelZh: '主页' },
+  { key: 'menu',     icon: '', label: 'Menu & Settings',    labelZh: '菜单与设置' },
+  { key: 'users',    icon: '', label: 'Users',               labelZh: '用户' },
+  { key: 'vouchers', icon: '', label: 'Vouchers',            labelZh: '优惠券' },
+  { key: 'preview',  icon: '', label: 'Customer View',      labelZh: '顾客视图' },
 ];
 
 export default function App() {
@@ -131,7 +131,6 @@ export default function App() {
                 className={'sidebar-nav-item' + (ownerPage === item.key ? ' active' : '')}
                 onClick={() => { setOwnerPage(item.key); setOrderDone(false); }}
               >
-                <span className="sidebar-nav-icon">{item.icon}</span>
                 <span>{t(item.label, item.labelZh)}</span>
               </button>
             ))}

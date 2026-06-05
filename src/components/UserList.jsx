@@ -16,7 +16,7 @@ export default function UserList({ lang }) {
 
   return (
     <div className="user-list-panel">
-      <div className="admin-title"><span>👥</span> {t('Registered Users', '注册用户')}</div>
+      <div className="admin-title">{t('Registered Users', '注册用户')}</div>
       {loading && <p className="user-list-status">{t('Loading…', '加载中…')}</p>}
       {error && <p className="user-list-status user-list-error">{t('Error: ', '错误：')}{error}</p>}
       {!loading && !error && users.length === 0 && (
