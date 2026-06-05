@@ -372,6 +372,15 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
 
       <button className="submit-btn" onClick={submitOrder}>{t('Submit order →', '提交订单 →')}</button>
       <p className="form-note">{t("Your order will be sent to us instantly. We'll confirm with you shortly! 🍪", '您的订单将立即发送给我们，我们会尽快与您确认！🍪')}</p>
+
+      <div className="order-disclaimer">
+        <ul>
+          <li>{t('All goods sold are not refundable or exchangeable.', '所有售出商品均不退款或换货。')}</li>
+          <li>{t('Best consumed within 14 days of receiving your order.', '请在收到订单后 14 天内食用。')}</li>
+          <li>{t('Handmade with no preservatives — enjoy fresh for best taste.', '手工制作，不含防腐剂，请趁新鲜享用。')}</li>
+          <li>{t('May contain nuts, dairy, and gluten. Please contact us if you have any allergies before ordering.', '可能含有坚果、乳制品及麸质。如有过敏，请在下单前联系我们。')}</li>
+        </ul>
+      </div>
     </>
   );
 }
