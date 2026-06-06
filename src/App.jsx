@@ -26,7 +26,8 @@ export default function App() {
   const [orderDone, setOrderDone] = useState(false);
   const [view, setView] = useState('login');
   const [ownerPage, setOwnerPage] = useState('home');
-  const [customerTab, setCustomerTab] = useState('order');
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [accountSection, setAccountSection] = useState(null);
   const [savedAddress, setSavedAddress] = useState(null);
   const [orderCount, setOrderCount] = useState(0);
 
@@ -50,6 +51,7 @@ export default function App() {
     signOut();
     setOrderDone(false);
     setOwnerPage('home');
+    setDrawerOpen(false);
   }
 
   const isOwner = user?.email === OWNER_EMAIL;
@@ -68,47 +70,97 @@ export default function App() {
     return <LoginView onLogin={() => {}} onShowRegister={() => setView('register')} />;
   }
 
+  const drawerNavItems = [
+    { key: 'details',  label: t('Personal Details', '个人信息') },
+    { key: 'vouchers', label: t('Vouchers', '优惠券') },
+    { key: 'history',  label: t('Order History', '历史订单') },
+  ];
+
+  function openSection(key) {
+    setAccountSection(key);
+    setDrawerOpen(false);
+  }
+
+  const sideDrawer = (
+    <>
+      {drawerOpen && <div className="drawer-overlay" onClick={() => setDrawerOpen(false)} />}
+      <div className={'side-drawer' + (drawerOpen ? ' open' : '')}>
+        <div className="drawer-header">
+          <div>
+            <div className="drawer-brand-logo">B&amp;C</div>
+            <div className="drawer-brand-name">Bitetime &amp; Co.</div>
+          </div>
+          <button className="drawer-close" onClick={() => setDrawerOpen(false)}>✕</button>
+        </div>
+        <div className="drawer-user">
+          <div className="drawer-user-greeting">{t('Welcome back,', '欢迎回来，')}</div>
+          <div className="drawer-user-name">{userName}</div>
+        </div>
+        <nav className="drawer-nav">
+          {drawerNavItems.map(({ key, label }) => (
+            <button
+              key={key}
+              className={'drawer-nav-btn' + (accountSection === key ? ' active' : '')}
+              onClick={() => openSection(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="drawer-footer">
+          <button className="drawer-signout" onClick={handleLogout}>{t('Sign out', '退出登录')}</button>
+        </div>
+      </div>
+    </>
+  );
+
   // ── Owner: Customer View (full-width, sidebar hidden) ──────────────────────
   if (isOwner && ownerPage === 'preview') {
     return (
-      <div className="form-wrap" style={{ position: 'relative' }}>
-        <div className="preview-back-pill" onClick={() => { setOwnerPage('home'); setCustomerTab('order'); setOrderDone(false); }}>
-          ← {t('Back to Owner View', '返回店主视图')}
-        </div>
-
-        <div className="cust-topbar">
-          <div className="lang-switcher">
-            <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
-            <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
+      <>
+        <div className="form-wrap" style={{ position: 'relative' }}>
+          <div className="preview-back-pill" onClick={() => { setOwnerPage('home'); setDrawerOpen(false); setOrderDone(false); }}>
+            ← {t('Back to Owner View', '返回店主视图')}
           </div>
-          <button className={'cust-account-btn' + (customerTab === 'account' ? ' active' : '')} onClick={() => setCustomerTab(customerTab === 'account' ? 'order' : 'account')}>
-            {customerTab === 'account' ? t('← Back to Order', '← 返回订单') : '👤 ' + t('My Account', '我的账户')}
-          </button>
-        </div>
 
-        {customerTab === 'order' && (
-          <>
-            <div className="brand">
-              <h1>Bitetime &amp; Co.</h1>
-              <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
-              <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
+          <div className="cust-topbar">
+            <button className="hamburger-btn" onClick={() => setDrawerOpen(true)} aria-label="My Account">
+              <span /><span /><span />
+            </button>
+            <div className="lang-switcher">
+              <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
+              <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
             </div>
-            {orderDone ? (
-              <div className="success-box">
-                <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
-                <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
-                <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
-              </div>
-            ) : (
-              <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={user} savedAddress={savedAddress} onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }} />
-            )}
-          </>
-        )}
+          </div>
 
-        {customerTab === 'account' && (
-          <CustomerSettings user={user} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} />
-        )}
-      </div>
+          {accountSection ? (
+            <>
+              <span className="reset-link" style={{ display: 'inline-block', marginBottom: '1.25rem' }} onClick={() => setAccountSection(null)}>
+                {t('← Back to Order', '← 返回订单')}
+              </span>
+              <CustomerSettings user={user} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
+            </>
+          ) : (
+            <>
+              <div className="brand">
+                <h1>Bitetime &amp; Co.</h1>
+                <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
+                <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
+              </div>
+              {orderDone ? (
+                <div className="success-box">
+                  <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
+                  <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
+                  <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
+                </div>
+              ) : (
+                <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={user} savedAddress={savedAddress} onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }} />
+              )}
+            </>
+          )}
+        </div>
+        {sideDrawer}
+      </>
     );
   }
 
@@ -186,57 +238,57 @@ export default function App() {
 
   // ── Regular user layout ─────────────────────────────────────────────────────
   return (
-    <div className="form-wrap">
-      <div className="auth-greeting">
-        Hi, <span>{userName}</span>&nbsp;
-        <a onClick={handleLogout}>{t('Sign out', '退出')}</a>
-      </div>
-
-      <div className="cust-topbar">
-        <div className="lang-switcher">
-          <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
-          <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
+    <>
+      <div className="form-wrap">
+        <div className="auth-greeting">
+          Hi, <span>{userName}</span>&nbsp;
+          <a onClick={handleLogout}>{t('Sign out', '退出')}</a>
         </div>
-        <button className={'cust-account-btn' + (customerTab === 'account' ? ' active' : '')} onClick={() => setCustomerTab(customerTab === 'account' ? 'order' : 'account')}>
-          {customerTab === 'account' ? t('← Back to Order', '← 返回订单') : '👤 ' + t('My Account', '我的账户')}
-        </button>
-      </div>
 
-      {customerTab === 'order' && (
-        <>
-          <div className="brand">
-            <h1>Bitetime &amp; Co.</h1>
-            <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
-            <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
+        <div className="cust-topbar">
+          <button className="hamburger-btn" onClick={() => setDrawerOpen(true)} aria-label="My Account">
+            <span /><span /><span />
+          </button>
+          <div className="lang-switcher">
+            <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
+            <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
           </div>
+        </div>
 
-          {orderDone ? (
-            <div className="success-box">
-              <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
-              <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
-              <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
+        {accountSection ? (
+          <>
+            <span className="reset-link" style={{ display: 'inline-block', marginBottom: '1.25rem' }} onClick={() => setAccountSection(null)}>
+              {t('← Back to Order', '← 返回订单')}
+            </span>
+            <CustomerSettings user={user} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
+          </>
+        ) : (
+          <>
+            <div className="brand">
+              <h1>Bitetime &amp; Co.</h1>
+              <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
+              <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
             </div>
-          ) : (
-            <OrderForm
-              key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)}
-              settings={settings}
-              lang={lang}
-              user={user}
-              savedAddress={savedAddress}
-              onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }}
-            />
-          )}
-        </>
-      )}
-
-      {customerTab === 'account' && (
-        <CustomerSettings
-          user={user}
-          lang={lang}
-          onAddressSaved={addr => setSavedAddress(addr)}
-          refreshKey={orderCount}
-        />
-      )}
-    </div>
+            {orderDone ? (
+              <div className="success-box">
+                <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
+                <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
+                <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
+              </div>
+            ) : (
+              <OrderForm
+                key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)}
+                settings={settings}
+                lang={lang}
+                user={user}
+                savedAddress={savedAddress}
+                onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }}
+              />
+            )}
+          </>
+        )}
+      </div>
+      {sideDrawer}
+    </>
   );
 }

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { fetchUserOrders, saveDeliveryAddress, loadDeliveryAddress, loadVouchers } from '../store';
 import { lookupPostcode } from '../postcodes';
 
-export default function CustomerSettings({ user, lang, onAddressSaved, refreshKey }) {
+export default function CustomerSettings({ user, lang, onAddressSaved, refreshKey, section = 'details' }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
 
   const [orders, setOrders] = useState([]);
@@ -57,129 +57,137 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
 
   return (
     <div className="cust-settings">
-      {/* ── Saved delivery address ── */}
-      <div className="settings-section">
-        <div className="settings-section-title">{t('Saved delivery address', '已保存的送货地址')}</div>
-        <p className="settings-hint">{t('Save your details once — we\'ll pre-fill them next time you order.', '保存一次，下次下单自动填入。')}</p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1rem' }}>
-          <div className="field-row">
-            <div className="field">
-              <label>{t('Your name', '您的姓名')}</label>
-              <input type="text" placeholder={t('Your name', '您的名字')} value={addrName} onChange={e => setAddrName(e.target.value)} />
+      {/* ── Personal Details ── */}
+      {section === 'details' && (
+        <div className="settings-section">
+          <div className="settings-section-title">{t('Saved delivery address', '已保存的送货地址')}</div>
+          <p className="settings-hint">{t('Save your details once — we\'ll pre-fill them next time you order.', '保存一次，下次下单自动填入。')}</p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '1rem' }}>
+            <div className="field-row">
+              <div className="field">
+                <label>{t('Your name', '您的姓名')}</label>
+                <input type="text" placeholder={t('Your name', '您的名字')} value={addrName} onChange={e => setAddrName(e.target.value)} />
+              </div>
+              <div className="field">
+                <label>{t('WhatsApp number', 'WhatsApp 号码')}</label>
+                <input type="tel" placeholder="e.g. 011-2345678" value={addrWa} onChange={e => setAddrWa(e.target.value)} />
+              </div>
             </div>
             <div className="field">
-              <label>{t('WhatsApp number', 'WhatsApp 号码')}</label>
-              <input type="tel" placeholder="e.g. 011-2345678" value={addrWa} onChange={e => setAddrWa(e.target.value)} />
-            </div>
-          </div>
-          <div className="field">
-            <label>{t('Address Line 1', '地址第一行')}</label>
-            <input type="text" placeholder={t('Unit no. / Street name', '单位号码 / 街道名称')} value={addrLine1} onChange={e => setAddrLine1(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>{t('Address Line 2', '地址第二行')} <span style={{ fontSize: '11px', color: '#aaa', fontStyle: 'italic' }}>{t('optional', '选填')}</span></label>
-            <input type="text" placeholder={t('Apartment, building, floor, etc.', '公寓、楼栋、楼层等')} value={addrLine2} onChange={e => setAddrLine2(e.target.value)} />
-          </div>
-          <div className="field-row">
-            <div className="field">
-              <label>{t('Postcode', '邮政编码')}</label>
-              <input type="text" placeholder="e.g. 50480" maxLength={5} value={postcode} onChange={e => {
-                const val = e.target.value.replace(/\D/g, '');
-                setPostcode(val);
-                if (val.length === 5) {
-                  const result = lookupPostcode(val);
-                  if (result) { setCity(result.city); setState(result.state); }
-                }
-              }} />
+              <label>{t('Address Line 1', '地址第一行')}</label>
+              <input type="text" placeholder={t('Unit no. / Street name', '单位号码 / 街道名称')} value={addrLine1} onChange={e => setAddrLine1(e.target.value)} />
             </div>
             <div className="field">
-              <label>{t('City', '城市')}</label>
-              <input type="text" placeholder={t('e.g. Kuala Lumpur', '例如：吉隆坡')} value={city} onChange={e => setCity(e.target.value)} />
+              <label>{t('Address Line 2', '地址第二行')} <span style={{ fontSize: '11px', color: '#aaa', fontStyle: 'italic' }}>{t('optional', '选填')}</span></label>
+              <input type="text" placeholder={t('Apartment, building, floor, etc.', '公寓、楼栋、楼层等')} value={addrLine2} onChange={e => setAddrLine2(e.target.value)} />
+            </div>
+            <div className="field-row">
+              <div className="field">
+                <label>{t('Postcode', '邮政编码')}</label>
+                <input type="text" placeholder="e.g. 50480" maxLength={5} value={postcode} onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setPostcode(val);
+                  if (val.length === 5) {
+                    const result = lookupPostcode(val);
+                    if (result) { setCity(result.city); setState(result.state); }
+                  }
+                }} />
+              </div>
+              <div className="field">
+                <label>{t('City', '城市')}</label>
+                <input type="text" placeholder={t('e.g. Kuala Lumpur', '例如：吉隆坡')} value={city} onChange={e => setCity(e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label>{t('State', '州属')}</label>
+              <select value={state} onChange={e => setState(e.target.value)}>
+                <option value="">{t('— Select state —', '— 选择州属 —')}</option>
+                {['Johor','Kedah','Kelantan','Melaka','Negeri Sembilan','Pahang','Perak','Perlis','Pulau Pinang','Sabah','Sarawak','Selangor','Terengganu','W.P. Kuala Lumpur','W.P. Labuan','W.P. Putrajaya'].map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </div>
           </div>
-          <div className="field">
-            <label>{t('State', '州属')}</label>
-            <select value={state} onChange={e => setState(e.target.value)}>
-              <option value="">{t('— Select state —', '— 选择州属 —')}</option>
-              {['Johor','Kedah','Kelantan','Melaka','Negeri Sembilan','Pahang','Perak','Perlis','Pulau Pinang','Sabah','Sarawak','Selangor','Terengganu','W.P. Kuala Lumpur','W.P. Labuan','W.P. Putrajaya'].map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          </div>
+
+          <button className="save-btn" style={{ marginTop: '1rem' }} onClick={handleSave} disabled={saving}>
+            {saving ? t('Saving…', '保存中…') : t('Save address', '保存地址')}
+          </button>
+          {saveMsg && <div className="save-msg">{saveMsg}</div>}
         </div>
+      )}
 
-        <button className="save-btn" style={{ marginTop: '1rem' }} onClick={handleSave} disabled={saving}>
-          {saving ? t('Saving…', '保存中…') : t('Save address', '保存地址')}
-        </button>
-        {saveMsg && <div className="save-msg">{saveMsg}</div>}
-      </div>
-
-      {/* ── My Vouchers ── */}
-      <div className="settings-section">
-        <div className="settings-section-title">{t('My Vouchers', '我的优惠券')}</div>
-        {vouchersLoading ? (
-          <p className="settings-hint">{t('Loading…', '加载中…')}</p>
-        ) : myVouchers.length === 0 ? (
-          <p className="settings-hint">{t('No vouchers yet. Stay tuned for promotions!', '暂无优惠券，敬请期待！')}</p>
-        ) : (
-          <div className="voucher-list">
-            {myVouchers.map((v, i) => (
-              <div key={i} className={'voucher-row' + (v.used ? ' used' : '')}>
-                <div className="voucher-code">{v.code}</div>
-                <div className="voucher-meta">
-                  <span className="voucher-discount">
-                    {v.type === 'percent' ? `${v.value}% off` : `RM ${v.value} off`}
-                  </span>
-                </div>
-                <div className={'voucher-status' + (v.used ? ' used' : ' active')}>
-                  {v.used ? t('Used', '已使用') : t('Active', '有效')}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Order history ── */}
-      <div className="settings-section">
-        <div className="settings-section-title">{t('Order history', '历史订单')}</div>
-        {ordersLoading ? (
-          <p className="settings-hint">{t('Loading…', '加载中…')}</p>
-        ) : orders.length === 0 ? (
-          <p className="settings-hint">{t('No orders yet. Place your first order!', '暂无订单，快来下第一单吧！')}</p>
-        ) : (
-          <div className="order-history-list">
-            {orders.map((order, i) => (
-              <div key={order.id ?? i} className="order-history-card">
-                <div className="order-history-header">
-                  <div className="order-history-date">{formatDate(order.created_at)}</div>
-                  <div className="order-history-total">RM {order.total}</div>
-                </div>
-                <div className="order-history-meta">
-                  <span className={'order-mode-badge' + (order.mode === 'delivery' ? ' delivery' : '')}>
-                    {order.mode === 'delivery' ? t('Delivery', '送货') : t('Self-pickup', '自取')}
-                  </span>
-                  {order.preferred_date && <span className="order-history-pref">{t('Pref. date:', '预计日期：')} {order.preferred_date}</span>}
-                </div>
-                {order.items && order.items.length > 0 && (
-                  <div className="order-history-items">
-                    {order.items.map((item, j) => (
-                      <div key={j} className="order-history-item">
-                        <span>{item.name} × {item.qty}</span>
-                        <span>RM {item.price * item.qty}</span>
-                      </div>
-                    ))}
+      {/* ── Vouchers ── */}
+      {section === 'vouchers' && (
+        <div className="settings-section">
+          <div className="settings-section-title">{t('My Vouchers', '我的优惠券')}</div>
+          {vouchersLoading ? (
+            <p className="settings-hint">{t('Loading…', '加载中…')}</p>
+          ) : myVouchers.length === 0 ? (
+            <p className="settings-hint">{t('No vouchers yet. Stay tuned for promotions!', '暂无优惠券，敬请期待！')}</p>
+          ) : (
+            <div className="voucher-list">
+              {myVouchers.map((v, i) => (
+                <div key={i} className={'voucher-row' + (v.used ? ' used' : '')}>
+                  <div className="voucher-code">{v.code}</div>
+                  <div className="voucher-meta">
+                    <span className="voucher-discount">
+                      {v.type === 'percent' ? `${v.value}% off` : `RM ${v.value} off`}
+                    </span>
                   </div>
-                )}
-                {order.address && (
-                  <div className="order-history-addr">{order.address}</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+                  <div className={'voucher-status' + (v.used ? ' used' : ' active')}>
+                    {v.used ? t('Used', '已使用') : t('Active', '有效')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Order History ── */}
+      {section === 'history' && (
+        <div className="settings-section">
+          <div className="settings-section-title">{t('Order history', '历史订单')}</div>
+          {ordersLoading ? (
+            <p className="settings-hint">{t('Loading…', '加载中…')}</p>
+          ) : orders.length === 0 ? (
+            <p className="settings-hint">{t('No orders yet. Place your first order!', '暂无订单，快来下第一单吧！')}</p>
+          ) : (
+            <div className="order-history-list">
+              {orders.map((order, i) => (
+                <div key={order.id ?? i} className="order-history-card">
+                  <div className="order-history-header">
+                    <div className="order-history-date">{formatDate(order.created_at)}</div>
+                    <div className="order-history-total">RM {order.total}</div>
+                  </div>
+                  <div className="order-history-meta">
+                    <span className={'order-mode-badge' + (order.mode === 'delivery' ? ' delivery' : '')}>
+                      {order.mode === 'delivery' ? t('Delivery', '送货') : t('Self-pickup', '自取')}
+                    </span>
+                    {order.preferred_date && <span className="order-history-pref">{t('Pref. date:', '预计日期：')} {order.preferred_date}</span>}
+                  </div>
+                  {order.items && order.items.length > 0 && (
+                    <div className="order-history-items">
+                      {order.items.map((item, j) => (
+                        <div key={j} className="order-history-item">
+                          <span>{item.name} × {item.qty}</span>
+                          <span>RM {item.price * item.qty}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {order.address && (
+                    <div className="order-history-addr">{order.address}</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
