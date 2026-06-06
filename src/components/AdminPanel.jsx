@@ -8,6 +8,9 @@ export default function AdminPanel({ settings, onSave, lang }) {
   const [emFee, setEmFee] = useState(settings.shipping.EM);
   const [tgToken, setTgToken] = useState(settings.tgToken);
   const [tgChatId, setTgChatId] = useState(settings.tgChatId);
+  const [ejsServiceId, setEjsServiceId] = useState(settings.ejsServiceId || '');
+  const [ejsTemplateId, setEjsTemplateId] = useState(settings.ejsTemplateId || '');
+  const [ejsPublicKey, setEjsPublicKey] = useState(settings.ejsPublicKey || '');
   const [saveMsg, setSaveMsg] = useState('');
 
   function updateProduct(i, field, value) {
@@ -40,6 +43,9 @@ export default function AdminPanel({ settings, onSave, lang }) {
         shipping: { WM: parseFloat(wmFee) || 0, EM: parseFloat(emFee) || 0 },
         tgToken: tgToken.trim() || DEFAULTS.tgToken,
         tgChatId: tgChatId.trim() || DEFAULTS.tgChatId,
+        ejsServiceId: ejsServiceId.trim(),
+        ejsTemplateId: ejsTemplateId.trim(),
+        ejsPublicKey: ejsPublicKey.trim(),
       };
       console.log('[AdminPanel] Saving settings:', JSON.stringify(newSettings));
       saveSettingsToDB(newSettings);
@@ -103,6 +109,30 @@ export default function AdminPanel({ settings, onSave, lang }) {
           <div className="admin-field full">
             <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Your Chat ID (from @userinfobot)</label>
             <input type="text" placeholder="123456789" value={tgChatId} onChange={e => setTgChatId(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="admin-section">
+        <div className="admin-section-label">EmailJS — Order Confirmation Email</div>
+        <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+          {t(
+            'Logged-in customers will receive a confirmation email after placing an order. Set up at emailjs.com — create a service, then a template using these variables: {{to_name}}, {{to_email}}, {{order_summary}}, {{order_total}}, {{order_type}}.',
+            '登录客户下单后将收到确认邮件。在 emailjs.com 设置 — 创建服务，然后使用以下变量创建模板：{{to_name}}、{{to_email}}、{{order_summary}}、{{order_total}}、{{order_type}}。'
+          )}
+        </p>
+        <div className="admin-fields">
+          <div className="admin-field full">
+            <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Service ID</label>
+            <input type="text" placeholder="service_xxxxxxx" value={ejsServiceId} onChange={e => setEjsServiceId(e.target.value)} />
+          </div>
+          <div className="admin-field full">
+            <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Template ID</label>
+            <input type="text" placeholder="template_xxxxxxx" value={ejsTemplateId} onChange={e => setEjsTemplateId(e.target.value)} />
+          </div>
+          <div className="admin-field full">
+            <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Public Key</label>
+            <input type="text" placeholder="xxxxxxxxxxxxxxxx" value={ejsPublicKey} onChange={e => setEjsPublicKey(e.target.value)} />
           </div>
         </div>
       </div>

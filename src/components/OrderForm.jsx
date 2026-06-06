@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { DayPicker } from 'react-day-picker';
 import { format } from 'date-fns';
+import emailjs from '@emailjs/browser';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
 import { saveOrder, loadVouchers, markVoucherUsed } from '../store';
@@ -169,6 +170,29 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
           items,
           total: computeTotal(),
         });
+
+        if (user?.email && settings.ejsServiceId && settings.ejsTemplateId && settings.ejsPublicKey) {
+          const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${i.price * i.qty}`).join('\n');
+          const fullAddress = mode === 'delivery'
+            ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')
+            : null;
+          const orderDetails = mode === 'delivery'
+            ? `${orderSummary}\n\nDelivery address: ${fullAddress}`
+            : orderSummary;
+          emailjs.send(
+            settings.ejsServiceId,
+            settings.ejsTemplateId,
+            {
+              to_name: custName,
+              to_email: user.email,
+              order_summary: orderDetails,
+              order_total: `RM ${computeTotal()}`,
+              order_type: mode === 'delivery' ? 'Delivery' : 'Self-pickup',
+            },
+            settings.ejsPublicKey,
+          ).catch(() => {});
+        }
+
         onSuccess();
       } else { alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。')); }
     } catch {

@@ -10,6 +10,9 @@ export const DEFAULTS = {
   shipping: { WM: 8, EM: 18 },
   tgToken: '8706031871:AAHaSZlTqokNvgvgSh0_2vcRqgj6lcFOxaU',
   tgChatId: '671603959',
+  ejsServiceId: '',
+  ejsTemplateId: '',
+  ejsPublicKey: '',
 };
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
