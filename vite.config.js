@@ -4,5 +4,5 @@ import react from '@vitejs/plugin-react'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
-  base: '/Bitetime-Order-Platform/',
+  base: process.env.GITHUB_PAGES === 'true' ? '/Bitetime-Order-Platform/' : '/',
 })
