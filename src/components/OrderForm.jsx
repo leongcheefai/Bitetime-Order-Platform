@@ -364,10 +364,30 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       {/* SUMMARY */}
       <div className="summary-card">
         <div className="summary-title">{t('Order summary', '订单摘要')}</div>
+
+        {/* Section 1: Customer details */}
+        <div className="summary-section-label">{t('Your details', '您的资料')}</div>
+        <div className="summary-section">
+          <div className="summary-detail-grid">
+            {custName && <div className="summary-detail-cell"><span className="detail-label">{t('Name', '姓名')}</span><span className="detail-value">{custName}</span></div>}
+            {custWa && <div className="summary-detail-cell"><span className="detail-label">{t('Phone', '电话')}</span><span className="detail-value">{custWa}</span></div>}
+            <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{mode === 'delivery' ? t('Delivery', '送货') : t('Self-pickup', '自取')}</span></div>
+            {custDate && <div className="summary-detail-cell"><span className="detail-label">{t('Preferred date', '预计日期')}</span><span className="detail-value">{custDate}</span></div>}
+            {mode === 'delivery' && (addrLine1 || city || postcode || state) && (
+              <div className="summary-detail-cell" style={{ gridColumn: '1 / -1' }}>
+                <span className="detail-label">{t('Delivery address', '送货地址')}</span>
+                <span className="detail-value">{[addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Section 2: Items, delivery, voucher */}
+        <div className="summary-section-label" style={{ marginTop: '12px' }}>{t('Your order', '您的订单')}</div>
         {!hasItems ? (
           <p className="empty-msg">{t('No items selected yet.', '尚未选择任何产品。')}</p>
         ) : (
-          <>
+          <div className="summary-section">
             {selectedIds.map(id => {
               const p = getProduct(id); if (!p) return null;
               const q = qty[id] || 0;
@@ -390,7 +410,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
               );
             })()}
             <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {computeTotal()}</span></div>
-          </>
+          </div>
         )}
       </div>
 

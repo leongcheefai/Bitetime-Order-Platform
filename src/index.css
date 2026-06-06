@@ -119,7 +119,15 @@ body:has(.owner-layout) { padding: 1.25rem; }
 
 .summary-card { background: #F5E6E8; border: 1px solid #C9A0A8; border-radius: 14px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
 .summary-title { font-family: 'Lora', serif; font-size: 14px; font-weight: 500; color: #7A1028; margin-bottom: 10px; }
-.summary-row { display: flex; justify-content: space-between; font-size: 14px; color: #7A4F55; padding: 3px 0; }
+.summary-section-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: #A07070; margin-bottom: 4px; }
+.summary-section { border: 1px solid #C9A0A8; border-radius: 8px; padding: 8px 10px; margin-bottom: 4px; }
+.summary-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+.summary-detail-cell { display: flex; flex-direction: column; gap: 1px; }
+.detail-label { font-size: 11px; color: #A07070; }
+.detail-value { font-size: 14px; color: #7A4F55; font-weight: 500; }
+.summary-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; font-size: 14px; color: #7A4F55; padding: 3px 0; }
+.summary-row span:first-child { flex-shrink: 0; }
+.summary-row span:last-child { text-align: right; }
 .summary-row.total { font-size: 15px; font-weight: 500; color: #2B0A10; border-top: 1px solid #C9A0A8; margin-top: 8px; padding-top: 10px; }
 .empty-msg { font-size: 13px; color: #A07070; font-style: italic; }
 
