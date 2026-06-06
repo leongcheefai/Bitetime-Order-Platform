@@ -87,7 +87,6 @@ export default function App() {
       <div className={'side-drawer' + (drawerOpen ? ' open' : '')}>
         <div className="drawer-header">
           <div>
-            <div className="drawer-brand-logo">B&amp;C</div>
             <div className="drawer-brand-name">Bitetime &amp; Co.</div>
           </div>
           <button className="drawer-close" onClick={() => setDrawerOpen(false)}>✕</button>
