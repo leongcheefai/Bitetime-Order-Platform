@@ -76,6 +76,10 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
               </div>
             </div>
             <div className="field">
+              <label>{t('Email address', '电子邮件')}</label>
+              <input type="email" value={user.email || ''} readOnly style={{ background: '#f5f5f5', cursor: 'default', color: '#888' }} />
+            </div>
+            <div className="field">
               <label>{t('Address Line 1', '地址第一行')}</label>
               <input type="text" placeholder={t('Unit no. / Street name', '单位号码 / 街道名称')} value={addrLine1} onChange={e => setAddrLine1(e.target.value)} />
             </div>

@@ -9,7 +9,7 @@ import OrderForm from './components/OrderForm';
 import CustomerSettings from './components/CustomerSettings';
 import VoucherPanel from './components/VoucherPanel';
 
-const OWNER_EMAIL = 'esthertan0716@gmail.com';
+const OWNER_EMAIL = 'bitetimeandco@gmail.com';
 
 const OWNER_NAV = [
   { key: 'home',     icon: '', label: 'Home',               labelZh: '主页' },
