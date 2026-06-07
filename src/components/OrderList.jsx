@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
-import { fetchAllOrders, loadOrderStatuses, saveOrderStatus } from '../store';
+import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB } from '../store';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
 
 const STATUS_LABELS = {
   pending:   { en: 'Pending',   zh: '待处理' },
   confirmed: { en: 'Confirmed', zh: '已确认' },
-  preparing: { en: 'Preparing', zh: '制作中' },
-  ready:     { en: 'Ready',     zh: '已备好' },
+  preparing: { en: 'Ready to Deliver', zh: '准备送货' },
+  ready:     { en: 'Out for Delivery', zh: '派送中'  },
   completed: { en: 'Completed', zh: '已完成' },
   cancelled: { en: 'Cancelled', zh: '已取消' },
 };
@@ -21,14 +21,31 @@ export default function OrderList({ lang }) {
   const [saving, setSaving] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [awbs, setAwbs] = useState({});
+  const [awbInputs, setAwbInputs] = useState({});
+  const [awbSaving, setAwbSaving] = useState(null);
 
   useEffect(() => {
-    Promise.all([fetchAllOrders(), loadOrderStatuses()]).then(([ords, stats]) => {
+    Promise.all([fetchAllOrders(), loadOrderStatuses(), loadOrderAWBs()]).then(([ords, stats, awbData]) => {
       setOrders(ords);
       setStatuses(stats);
+      setAwbs(awbData);
+      setAwbInputs(awbData);
       setLoading(false);
     });
   }, []);
+
+  async function handleAwbSave(orderNumber) {
+    setAwbSaving(orderNumber);
+    try {
+      const updated = await saveOrderAWB(orderNumber, awbInputs[orderNumber] || '');
+      setAwbs(updated);
+    } catch (err) {
+      console.error('Failed to save AWB:', err);
+    } finally {
+      setAwbSaving(null);
+    }
+  }
 
   async function handleStatusChange(orderNumber, newStatus) {
     // Optimistic update — change UI instantly
@@ -169,6 +186,33 @@ export default function OrderList({ lang }) {
                       ))}
                     </div>
                   </div>
+
+                  {status === 'ready' && (
+                    <div className="owner-order-awb-row">
+                      <div className="owner-order-detail-label">{t('Tracking / AWB Number', '追踪号码')}</div>
+                      <div className="awb-input-row">
+                        <input
+                          type="text"
+                          className="awb-input"
+                          placeholder={t('e.g. JT1234567890MY', '例如：JT1234567890MY')}
+                          value={awbInputs[order.order_number] || ''}
+                          onChange={e => setAwbInputs(prev => ({ ...prev, [order.order_number]: e.target.value }))}
+                        />
+                        <button
+                          className="awb-save-btn"
+                          disabled={awbSaving === order.order_number}
+                          onClick={() => handleAwbSave(order.order_number)}
+                        >
+                          {awbSaving === order.order_number ? t('Saving…', '保存中…') : t('Save', '保存')}
+                        </button>
+                      </div>
+                      {awbs[order.order_number] && (
+                        <div style={{ fontSize: '12px', color: '#1A7A3A', marginTop: '4px' }}>
+                          ✓ {t('Saved:', '已保存：')} {awbs[order.order_number]}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

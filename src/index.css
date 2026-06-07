@@ -313,6 +313,15 @@ body:has(.owner-layout) { padding: 1.25rem; }
   .owner-main { padding: 1rem 1rem 3rem; }
 }
 
+/* ── Customer order status badge ─────────────────────────────────────────── */
+.cust-status-badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; white-space: nowrap; flex-shrink: 0; }
+.cust-status-received  { background: #C3E6CB; color: #155724; }
+.cust-status-confirmed { background: #D1ECF1; color: #0C5460; }
+.cust-status-preparing { background: #E8D5F5; color: #5A1A7A; }
+.cust-status-ready     { background: #FFF3CD; color: #856404; }
+.cust-status-completed { background: #C3E6CB; color: #155724; }
+.cust-status-cancelled { background: #F8D7DA; color: #721C24; }
+
 /* ── Owner Orders List ───────────────────────────────────────────────────── */
 .order-list-panel { display: flex; flex-direction: column; gap: 1rem; }
 .order-list-header { display: flex; flex-direction: column; gap: 0.75rem; }
@@ -366,6 +375,19 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .owner-status-opt.active.status-ready     { background: #C3E6CB; color: #155724; border-color: #155724; }
 .owner-status-opt.active.status-completed { background: #EDE4D8; color: #4A3020; border-color: #4A3020; }
 .owner-status-opt.active.status-cancelled { background: #F8D7DA; color: #721C24; border-color: #721C24; }
+
+/* ── AWB / Tracking ──────────────────────────────────────────────────────── */
+.owner-order-awb-row { display: flex; flex-direction: column; gap: 6px; background: #FFF8E6; border: 1px solid #E8C96A; border-radius: 10px; padding: 10px 12px; }
+.awb-input-row { display: flex; gap: 8px; }
+.awb-input { flex: 1; padding: 8px 12px; border: 1.5px solid #E8C96A; border-radius: 8px; font-size: 13px; font-family: 'DM Sans', sans-serif; background: #fff; color: #2B0A10; letter-spacing: 0.5px; }
+.awb-input:focus { outline: none; border-color: #C9A030; box-shadow: 0 0 0 2px rgba(201,160,48,0.15); }
+.awb-save-btn { padding: 8px 16px; background: #C9A030; color: #fff; border: none; border-radius: 8px; font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; cursor: pointer; white-space: nowrap; transition: background 0.15s; }
+.awb-save-btn:hover:not(:disabled) { background: #A07820; }
+.awb-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.cust-awb-box { background: #FFF8E6; border: 1.5px solid #E8C96A; border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; }
+.cust-awb-label { font-size: 10px; font-weight: 500; color: #A07820; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.cust-awb-num { font-family: 'Courier New', monospace; font-size: 15px; font-weight: 700; color: #7A5810; letter-spacing: 1px; }
 
 /* Custom date picker */
 .date-picker-btn { width: 100%; padding: 10px 13px; border: 1px solid #C9A090; border-radius: 10px; font-size: 14px; background: #FBF6F0; color: #2B0A10; font-family: 'DM Sans', sans-serif; cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: border-color 0.15s, box-shadow 0.15s; text-align: left; }

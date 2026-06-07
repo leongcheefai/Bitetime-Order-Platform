@@ -127,6 +127,19 @@ export async function loadOrderStatuses() {
   return data?.value ?? {};
 }
 
+export async function loadOrderAWBs() {
+  const { data } = await supabase.from('settings').select('value').eq('key', 'order_awb').single();
+  return data?.value ?? {};
+}
+
+export async function saveOrderAWB(orderNumber, awb) {
+  const current = await loadOrderAWBs();
+  const updated = { ...current, [orderNumber]: awb };
+  const { error } = await supabase.from('settings').upsert({ key: 'order_awb', value: updated }, { onConflict: 'key' });
+  if (error) throw new Error(error.message);
+  return updated;
+}
+
 export async function saveOrderStatus(orderNumber, status) {
   const current = await loadOrderStatuses();
   const updated = { ...current, [orderNumber]: status };

@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react';
-import { fetchUserOrders, saveDeliveryAddress, loadDeliveryAddress, loadVouchers } from '../store';
+import { fetchUserOrders, saveDeliveryAddress, loadDeliveryAddress, loadVouchers, loadOrderStatuses, loadOrderAWBs } from '../store';
 import { lookupPostcode } from '../postcodes';
+
+const CUST_STATUS = {
+  pending:   { en: 'Order Received',   zh: '已收到订单',   cls: 'cust-status-received'  },
+  confirmed: { en: 'Order Confirmed',  zh: '订单已确认',   cls: 'cust-status-confirmed' },
+  preparing: { en: 'Ready to Deliver', zh: '准备送货',      cls: 'cust-status-preparing' },
+  ready:     { en: 'Out for Delivery', zh: '派送中',       cls: 'cust-status-ready'     },
+  completed: { en: 'Completed',        zh: '已完成',       cls: 'cust-status-completed' },
+  cancelled: { en: 'Cancelled',        zh: '已取消',       cls: 'cust-status-cancelled' },
+};
 
 export default function CustomerSettings({ user, lang, onAddressSaved, refreshKey, section = 'details' }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
 
   const [orders, setOrders] = useState([]);
+  const [orderStatuses, setOrderStatuses] = useState({});
+  const [orderAWBs, setOrderAWBs] = useState({});
   const [ordersLoading, setOrdersLoading] = useState(true);
   const [expandedOrders, setExpandedOrders] = useState({});
   const toggleOrder = (key) => setExpandedOrders(prev => ({ ...prev, [key]: !prev[key] }));
@@ -23,8 +34,10 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
   const [saveMsg, setSaveMsg] = useState('');
 
   useEffect(() => {
-    fetchUserOrders(user.id).then(data => {
+    Promise.all([fetchUserOrders(user.id), loadOrderStatuses(), loadOrderAWBs()]).then(([data, statuses, awbs]) => {
       setOrders(data);
+      setOrderStatuses(statuses);
+      setOrderAWBs(awbs);
       setOrdersLoading(false);
       if (data.length > 0) {
         const latestKey = data[0].id ?? 0;
@@ -186,6 +199,11 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
                         )}
                       </div>
                       <div className="order-accordion-right">
+                        {(() => {
+                          const s = orderStatuses[order.order_number] || 'pending';
+                          const info = CUST_STATUS[s] || CUST_STATUS.pending;
+                          return <span className={'cust-status-badge ' + info.cls}>{t(info.en, info.zh)}</span>;
+                        })()}
                         <span className="order-accordion-total">RM {order.total}</span>
                         <span className="order-accordion-chevron">{expanded ? '▲' : '▼'}</span>
                       </div>
@@ -195,6 +213,13 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
                     {expanded && (
                       <div className="order-accordion-body">
                         <div style={{ fontSize: '12px', color: '#A07070', marginBottom: '10px' }}>{formatDate(order.created_at)}</div>
+
+                        {orderStatuses[order.order_number] === 'ready' && orderAWBs[order.order_number] && (
+                          <div className="cust-awb-box">
+                            <div className="cust-awb-label">{t('Tracking / AWB Number', '追踪号码')}</div>
+                            <div className="cust-awb-num">{orderAWBs[order.order_number]}</div>
+                          </div>
+                        )}
 
                         <div className="summary-section-label">{t('Your details', '您的资料')}</div>
                         <div className="summary-section">
