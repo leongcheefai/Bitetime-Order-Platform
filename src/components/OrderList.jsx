@@ -31,14 +31,17 @@ export default function OrderList({ lang }) {
   }, []);
 
   async function handleStatusChange(orderNumber, newStatus) {
+    // Optimistic update — change UI instantly
+    setStatuses(prev => ({ ...prev, [orderNumber]: newStatus }));
     setSaving(orderNumber);
     setSaveError(null);
     try {
-      const updated = await saveOrderStatus(orderNumber, newStatus);
-      setStatuses(updated);
+      await saveOrderStatus(orderNumber, newStatus);
     } catch (err) {
       console.error('Failed to save status:', err);
-      setSaveError('Failed to save. Try again.');
+      setSaveError('Save failed: ' + err.message);
+      // Revert on failure
+      setStatuses(prev => { const r = { ...prev }; delete r[orderNumber]; return r; });
     } finally {
       setSaving(null);
     }
@@ -152,13 +155,13 @@ export default function OrderList({ lang }) {
 
                   <div className="owner-order-status-row">
                     <span className="owner-order-detail-label">{t('Update Status', '更新状态')}</span>
-                    {saveError && saving === null && <span style={{ fontSize: '12px', color: '#c0392b' }}>{saveError}</span>}
+                    {saveError && <span style={{ fontSize: '12px', color: '#c0392b' }}>{saveError}</span>}
                     <div className="owner-status-btns">
                       {STATUS_OPTIONS.map(s => (
                         <button
                           key={s}
                           className={'owner-status-opt' + (status === s ? ' active status-' + s : '')}
-                          disabled={saving === order.order_number}
+                          disabled={saving !== null && saving === order.order_number}
                           onClick={() => handleStatusChange(order.order_number, s)}
                         >
                           {t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}
