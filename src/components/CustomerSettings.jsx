@@ -7,6 +7,8 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
 
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(true);
+  const [expandedOrders, setExpandedOrders] = useState({});
+  const toggleOrder = (key) => setExpandedOrders(prev => ({ ...prev, [key]: !prev[key] }));
   const [myVouchers, setMyVouchers] = useState([]);
   const [vouchersLoading, setVouchersLoading] = useState(true);
 
@@ -160,59 +162,75 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
             <p className="settings-hint">{t('No orders yet. Place your first order!', '暂无订单，快来下第一单吧！')}</p>
           ) : (
             <div className="order-history-list">
-              {orders.map((order, i) => (
-                <div key={order.id ?? i} className="summary-card">
-                  {/* Title row: order number + date */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
-                    <div className="summary-title" style={{ marginBottom: 0 }}>
-                      {order.order_number
-                        ? <>{t('Order No.', '订单号码')} <span style={{ fontFamily: "'Courier New', monospace" }}>{order.order_number}</span></>
-                        : t('Order', '订单')}
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#A07070', textAlign: 'right' }}>{formatDate(order.created_at)}</div>
-                  </div>
-
-                  {/* Section 1: Your details */}
-                  <div className="summary-section-label">{t('Your details', '您的资料')}</div>
-                  <div className="summary-section">
-                    <div className="summary-detail-grid">
-                      {order.customer_name && <div className="summary-detail-cell"><span className="detail-label">{t('Name', '姓名')}</span><span className="detail-value">{order.customer_name}</span></div>}
-                      {order.customer_wa && <div className="summary-detail-cell"><span className="detail-label">{t('Phone', '电话')}</span><span className="detail-value">{order.customer_wa}</span></div>}
-                      <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{order.mode === 'delivery' ? t('Delivery', '送货') : t('Self-pickup', '自取')}</span></div>
-                      {order.preferred_date && <div className="summary-detail-cell"><span className="detail-label">{t('Preferred date', '预计日期')}</span><span className="detail-value">{order.preferred_date}</span></div>}
-                      {order.address && (
-                        <div className="summary-detail-cell" style={{ gridColumn: '1 / -1' }}>
-                          <span className="detail-label">{t('Delivery address', '送货地址')}</span>
-                          <span className="detail-value">{order.address}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Section 2: Your order */}
-                  <div className="summary-section-label" style={{ marginTop: '12px' }}>{t('Your order', '您的订单')}</div>
-                  {order.items && order.items.length > 0 && (
-                    <div className="summary-section">
-                      {order.items.map((item, j) => (
-                        <div key={j} className="summary-row">
-                          <span>{item.name} × {item.qty}</span>
-                          <span>RM {item.price * item.qty}</span>
-                        </div>
-                      ))}
-                      {order.mode === 'delivery' && order.shipping_fee > 0 && (
-                        <div className="summary-row">
-                          <span>{t('Delivery', '送货')} {order.region ? `(${order.region})` : ''}</span>
-                          <span>RM {order.shipping_fee}</span>
-                        </div>
-                      )}
-                      <div className="summary-row total">
-                        <span>{t('Total', '总计')}</span>
-                        <span>RM {order.total}</span>
+              {orders.map((order, i) => {
+                const key = order.id ?? i;
+                const expanded = !!expandedOrders[key];
+                const label = order.order_number || formatDate(order.created_at);
+                return (
+                  <div key={key} className="order-accordion">
+                    {/* Collapsed header — always visible */}
+                    <button className="order-accordion-header" onClick={() => toggleOrder(key)}>
+                      <div className="order-accordion-left">
+                        <span className="order-accordion-num">{label}</span>
+                        {!expanded && order.items && order.items.length > 0 && (
+                          <span className="order-accordion-preview">
+                            {order.items.map(it => `${it.name} ×${it.qty}`).join(', ')}
+                          </span>
+                        )}
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                      <div className="order-accordion-right">
+                        <span className="order-accordion-total">RM {order.total}</span>
+                        <span className="order-accordion-chevron">{expanded ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
+
+                    {/* Expanded detail — same layout as order summary */}
+                    {expanded && (
+                      <div className="order-accordion-body">
+                        <div style={{ fontSize: '12px', color: '#A07070', marginBottom: '10px' }}>{formatDate(order.created_at)}</div>
+
+                        <div className="summary-section-label">{t('Your details', '您的资料')}</div>
+                        <div className="summary-section">
+                          <div className="summary-detail-grid">
+                            {order.customer_name && <div className="summary-detail-cell"><span className="detail-label">{t('Name', '姓名')}</span><span className="detail-value">{order.customer_name}</span></div>}
+                            {order.customer_wa && <div className="summary-detail-cell"><span className="detail-label">{t('Phone', '电话')}</span><span className="detail-value">{order.customer_wa}</span></div>}
+                            <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{order.mode === 'delivery' ? t('Delivery', '送货') : t('Self-pickup', '自取')}</span></div>
+                            {order.preferred_date && <div className="summary-detail-cell"><span className="detail-label">{t('Preferred date', '预计日期')}</span><span className="detail-value">{order.preferred_date}</span></div>}
+                            {order.address && (
+                              <div className="summary-detail-cell" style={{ gridColumn: '1 / -1' }}>
+                                <span className="detail-label">{t('Delivery address', '送货地址')}</span>
+                                <span className="detail-value">{order.address}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="summary-section-label" style={{ marginTop: '12px' }}>{t('Your order', '您的订单')}</div>
+                        {order.items && order.items.length > 0 && (
+                          <div className="summary-section">
+                            {order.items.map((item, j) => (
+                              <div key={j} className="summary-row">
+                                <span>{item.name} × {item.qty}</span>
+                                <span>RM {item.price * item.qty}</span>
+                              </div>
+                            ))}
+                            {order.mode === 'delivery' && order.shipping_fee > 0 && (
+                              <div className="summary-row">
+                                <span>{t('Delivery', '送货')} {order.region ? `(${order.region})` : ''}</span>
+                                <span>RM {order.shipping_fee}</span>
+                              </div>
+                            )}
+                            <div className="summary-row total">
+                              <span>{t('Total', '总计')}</span>
+                              <span>RM {order.total}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

@@ -197,21 +197,18 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .settings-section-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: #7A1028; margin-bottom: 4px; }
 .settings-hint { font-size: 13px; color: #7A4F55; }
 
-/* ── Order history ───────────────────────────────────────────────────────── */
-.order-history-list { display: flex; flex-direction: column; gap: 10px; margin-top: 1rem; }
-.order-history-card { background: #F2EAE0; border: 1px solid #C9A090; border-radius: 12px; padding: 12px 14px; }
-.order-history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.order-history-date { font-size: 12px; color: #7A4F55; }
-.order-history-total { font-size: 15px; font-weight: 500; color: #2B0A10; }
-.order-history-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
-.order-mode-badge { font-size: 11px; font-weight: 500; padding: 2px 10px; border-radius: 20px; background: #DDD0C4; color: #7A4F55; }
-.order-mode-badge.delivery { background: #F5E6E8; color: #7A1028; }
-.order-history-pref { font-size: 12px; color: #A07070; }
-.order-history-items { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid #C9A090; padding-top: 8px; }
-.order-history-item { display: flex; justify-content: space-between; font-size: 13px; color: #7A4F55; }
-.order-history-addr { font-size: 12px; color: #A07070; margin-top: 6px; border-top: 1px solid #C9A090; padding-top: 6px; }
-.order-history-number { font-size: 12px; color: #7A4F55; margin-bottom: 6px; }
-.order-history-number strong { font-family: 'Courier New', monospace; color: #7A1028; }
+/* ── Order history accordion ─────────────────────────────────────────────── */
+.order-history-list { display: flex; flex-direction: column; gap: 8px; margin-top: 1rem; }
+.order-accordion { background: #F5E6E8; border: 1px solid #C9A0A8; border-radius: 14px; overflow: hidden; }
+.order-accordion-header { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; background: none; border: none; cursor: pointer; text-align: left; }
+.order-accordion-header:hover { background: #f0dde0; }
+.order-accordion-left { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.order-accordion-num { font-family: 'Courier New', monospace; font-size: 13px; font-weight: 600; color: #7A1028; }
+.order-accordion-preview { font-size: 12px; color: #7A4F55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.order-accordion-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.order-accordion-total { font-size: 14px; font-weight: 500; color: #2B0A10; }
+.order-accordion-chevron { font-size: 10px; color: #A07070; }
+.order-accordion-body { padding: 0 14px 14px; border-top: 1px solid #C9A0A8; }
 
 /* ── Voucher redemption (order form) ─────────────────────────────────────── */
 .voucher-input-row { display: flex; gap: 8px; }
