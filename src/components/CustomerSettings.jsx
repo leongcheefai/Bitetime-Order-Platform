@@ -166,6 +166,9 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
                     <div className="order-history-date">{formatDate(order.created_at)}</div>
                     <div className="order-history-total">RM {order.total}</div>
                   </div>
+                  {order.order_number && (
+                    <div className="order-history-number">{t('Order No.', '订单号码')} <strong>{order.order_number}</strong></div>
+                  )}
                   <div className="order-history-meta">
                     <span className={'order-mode-badge' + (order.mode === 'delivery' ? ' delivery' : '')}>
                       {order.mode === 'delivery' ? t('Delivery', '送货') : t('Self-pickup', '自取')}

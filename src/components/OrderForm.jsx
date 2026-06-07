@@ -106,12 +106,22 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     return parseFloat((total - discount).toFixed(2));
   }
 
+  function generateOrderNumber() {
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const rand = Math.floor(Math.random() * 0xFFFF).toString(16).toUpperCase().padStart(4, '0');
+    return `BT-${yy}${mm}${dd}-${rand}`;
+  }
+
   async function submitOrder() {
     if (!Object.keys(selected).length) { alert(t('Please select at least one item!', '请至少选择一种产品！')); return; }
     if (!custName.trim() || !custWa.trim()) { alert(t('Please fill in your name and WhatsApp number.', '请填写您的姓名和 WhatsApp 号码。')); return; }
     if (mode === 'delivery' && (!addrLine1.trim() || !city.trim() || !postcode.trim() || !state)) { alert(t('Please fill in all required delivery fields.', '请填写所有必填的送货资料。')); return; }
 
-    let msg = `🍪 *New Order from Bitetime & Co.*\n\n`;
+    const orderNumber = generateOrderNumber();
+    let msg = `🍪 *New Order from Bitetime & Co.*\n\n*Order No.:* ${orderNumber}\n`;
     msg += `*Name:* ${custName}\n*WhatsApp:* ${custWa}\n`;
     if (custDate) msg += `*Preferred date:* ${custDate}\n`;
     msg += `\n*Items:*\n`;
@@ -159,6 +169,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
         if (appliedVoucher) await markVoucherUsed(appliedVoucher.code);
         await saveOrder({
+          order_number: orderNumber,
           user_id: user?.id ?? null,
           customer_name: custName,
           customer_wa: custWa,
@@ -185,6 +196,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             {
               to_name: custName,
               to_email: user.email,
+              order_number: orderNumber,
               order_summary: orderDetails,
               order_total: `RM ${computeTotal()}`,
               order_type: mode === 'delivery' ? 'Delivery' : 'Self-pickup',
@@ -193,7 +205,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
           ).catch(() => {});
         }
 
-        onSuccess();
+        onSuccess(orderNumber);
       } else { alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。')); }
     } catch {
       alert(t('Network error. Please check your connection.', '网络错误，请检查您的连接。'));

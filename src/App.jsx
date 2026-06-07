@@ -24,6 +24,7 @@ export default function App() {
   const [lang, setLang] = useState('en');
   const [settings, setSettings] = useState(loadSettings);
   const [orderDone, setOrderDone] = useState(false);
+  const [lastOrderNumber, setLastOrderNumber] = useState('');
   const [view, setView] = useState('login');
   const [ownerPage, setOwnerPage] = useState('home');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -149,11 +150,12 @@ export default function App() {
               {orderDone ? (
                 <div className="success-box">
                   <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
+                  {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
                   <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
                   <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
                 </div>
               ) : (
-                <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={user} savedAddress={savedAddress} onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }} />
+                <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={user} savedAddress={savedAddress} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
               )}
             </>
           )}
@@ -211,11 +213,12 @@ export default function App() {
               {orderDone ? (
                 <div className="success-box">
                   <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
+                  {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
                   <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
                   <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
                 </div>
               ) : (
-                <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} user={user} onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }} />
+                <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} user={user} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
               )}
             </>
           )}
@@ -271,6 +274,7 @@ export default function App() {
             {orderDone ? (
               <div className="success-box">
                 <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
+                {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
                 <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
                 <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
               </div>
@@ -281,7 +285,7 @@ export default function App() {
                 lang={lang}
                 user={user}
                 savedAddress={savedAddress}
-                onSuccess={() => { setOrderDone(true); setOrderCount(c => c + 1); }}
+                onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }}
               />
             )}
           </>

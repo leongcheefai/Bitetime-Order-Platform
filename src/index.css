@@ -147,6 +147,8 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .success-box { text-align: center; padding: 3rem 1.5rem; }
 .success-box h2 { font-family: 'Lora', serif; font-size: 24px; font-weight: 500; color: #7A1028; margin-bottom: 8px; }
 .success-box p { font-size: 14px; color: #7A4F55; margin-bottom: 1.5rem; line-height: 1.6; }
+.order-number-display { font-size: 15px; color: #7A1028; margin-bottom: 0.75rem !important; letter-spacing: 0.5px; }
+.order-number-display strong { font-family: 'Courier New', monospace; font-size: 16px; }
 .reset-link { font-size: 13px; color: #7A4F55; cursor: pointer; text-decoration: underline; margin-top: 1.25rem; display: inline-block; }
 
 .how-to { background: #FBF6F0; border: 1px solid #C9A090; border-radius: 14px; padding: 1rem 1.25rem; margin-bottom: 1.75rem; }
@@ -208,6 +210,8 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .order-history-items { display: flex; flex-direction: column; gap: 3px; border-top: 1px solid #C9A090; padding-top: 8px; }
 .order-history-item { display: flex; justify-content: space-between; font-size: 13px; color: #7A4F55; }
 .order-history-addr { font-size: 12px; color: #A07070; margin-top: 6px; border-top: 1px solid #C9A090; padding-top: 6px; }
+.order-history-number { font-size: 12px; color: #7A4F55; margin-bottom: 6px; }
+.order-history-number strong { font-family: 'Courier New', monospace; color: #7A1028; }
 
 /* ── Voucher redemption (order form) ─────────────────────────────────────── */
 .voucher-input-row { display: flex; gap: 8px; }
