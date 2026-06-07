@@ -118,7 +118,7 @@ export default function App() {
   if (isOwner && ownerPage === 'preview') {
     return (
       <>
-        <div className="form-wrap" style={{ position: 'relative' }}>
+        <div className={`form-wrap${accountSection ? ' form-wrap--wide' : ''}`} style={{ position: 'relative' }}>
           <div className="preview-back-pill" onClick={() => { setOwnerPage('home'); setDrawerOpen(false); setOrderDone(false); }}>
             ← {t('Back to Owner View', '返回店主视图')}
           </div>
@@ -241,7 +241,7 @@ export default function App() {
   // ── Regular user layout ─────────────────────────────────────────────────────
   return (
     <>
-      <div className="form-wrap">
+      <div className={`form-wrap${accountSection ? ' form-wrap--wide' : ''}`}>
         <div className="auth-greeting">
           Hi, <span>{userName}</span>&nbsp;
           <a onClick={handleLogout}>{t('Sign out', '退出')}</a>

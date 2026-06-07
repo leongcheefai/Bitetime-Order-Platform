@@ -4,6 +4,7 @@
 
 body { font-family: 'DM Sans', sans-serif; background: #F2EAE0; color: #2B0A10; min-height: 100vh; padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; }
 .form-wrap { max-width: 600px; width: 100%; }
+.form-wrap--wide { max-width: 760px; }
 
 /* ── Customer top bar ─────────────────────────────────────────────────────── */
 .cust-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.75rem; }
