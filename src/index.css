@@ -194,8 +194,8 @@ body:has(.owner-layout) { padding: 1.25rem; }
 /* ── Customer settings ───────────────────────────────────────────────────── */
 .cust-settings { display: flex; flex-direction: column; gap: 1.5rem; }
 .settings-section { background: #FBF6F0; border: 1.5px solid #C9A090; border-radius: 16px; padding: 1.25rem; }
-.settings-section--history { background: none; border: none; border-radius: 0; padding: 0; }
-.settings-section--history .settings-section-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: #7A1028; margin-bottom: 4px; }
+.settings-section--history { padding: 1.25rem 0.75rem 0.75rem; }
+.settings-section--history .order-history-list { margin-top: 0.75rem; }
 .settings-section-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: #7A1028; margin-bottom: 4px; }
 .settings-hint { font-size: 13px; color: #7A4F55; }
 
