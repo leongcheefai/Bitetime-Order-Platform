@@ -130,7 +130,8 @@ export async function loadOrderStatuses() {
 export async function saveOrderStatus(orderNumber, status) {
   const current = await loadOrderStatuses();
   const updated = { ...current, [orderNumber]: status };
-  await supabase.from('settings').upsert({ key: 'order_statuses', value: updated }, { onConflict: 'key' });
+  const { error } = await supabase.from('settings').upsert({ key: 'order_statuses', value: updated }, { onConflict: 'key' });
+  if (error) throw new Error(error.message);
   return updated;
 }
 

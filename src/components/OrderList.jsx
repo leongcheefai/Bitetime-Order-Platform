@@ -19,6 +19,7 @@ export default function OrderList({ lang }) {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [saving, setSaving] = useState(null);
+  const [saveError, setSaveError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
 
   useEffect(() => {
@@ -31,9 +32,16 @@ export default function OrderList({ lang }) {
 
   async function handleStatusChange(orderNumber, newStatus) {
     setSaving(orderNumber);
-    const updated = await saveOrderStatus(orderNumber, newStatus);
-    setStatuses(updated);
-    setSaving(null);
+    setSaveError(null);
+    try {
+      const updated = await saveOrderStatus(orderNumber, newStatus);
+      setStatuses(updated);
+    } catch (err) {
+      console.error('Failed to save status:', err);
+      setSaveError('Failed to save. Try again.');
+    } finally {
+      setSaving(null);
+    }
   }
 
   const filtered = filterStatus === 'all'
@@ -144,6 +152,7 @@ export default function OrderList({ lang }) {
 
                   <div className="owner-order-status-row">
                     <span className="owner-order-detail-label">{t('Update Status', '更新状态')}</span>
+                    {saveError && saving === null && <span style={{ fontSize: '12px', color: '#c0392b' }}>{saveError}</span>}
                     <div className="owner-status-btns">
                       {STATUS_OPTIONS.map(s => (
                         <button
