@@ -23,7 +23,14 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
   const [saveMsg, setSaveMsg] = useState('');
 
   useEffect(() => {
-    fetchUserOrders(user.id).then(data => { setOrders(data); setOrdersLoading(false); });
+    fetchUserOrders(user.id).then(data => {
+      setOrders(data);
+      setOrdersLoading(false);
+      if (data.length > 0) {
+        const latestKey = data[0].id ?? 0;
+        setExpandedOrders({ [latestKey]: true });
+      }
+    });
     loadVouchers().then(all => {
       const email = user.email?.toLowerCase() ?? '';
       setMyVouchers(all.filter(v => !v.email || v.email === email));
