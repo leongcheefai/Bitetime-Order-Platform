@@ -154,7 +154,7 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
 
       {/* ── Order History ── */}
       {section === 'history' && (
-        <div className="settings-section">
+        <div className="settings-section settings-section--history">
           <div className="settings-section-title">{t('Order history', '历史订单')}</div>
           {ordersLoading ? (
             <p className="settings-hint">{t('Loading…', '加载中…')}</p>
