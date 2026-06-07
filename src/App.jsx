@@ -8,11 +8,13 @@ import UserList from './components/UserList';
 import OrderForm from './components/OrderForm';
 import CustomerSettings from './components/CustomerSettings';
 import VoucherPanel from './components/VoucherPanel';
+import OrderList from './components/OrderList';
 
 const OWNER_EMAIL = 'bitetimeandco@gmail.com';
 
 const OWNER_NAV = [
   { key: 'home',     icon: '', label: 'Home',               labelZh: '主页' },
+  { key: 'orders',   icon: '', label: 'Orders',              labelZh: '订单' },
   { key: 'menu',     icon: '', label: 'Menu & Settings',    labelZh: '菜单与设置' },
   { key: 'users',    icon: '', label: 'Users',               labelZh: '用户' },
   { key: 'vouchers', icon: '', label: 'Vouchers',            labelZh: '优惠券' },
@@ -231,6 +233,7 @@ export default function App() {
             />
           )}
 
+          {ownerPage === 'orders' && <OrderList lang={lang} />}
           {ownerPage === 'users' && <UserList lang={lang} />}
           {ownerPage === 'vouchers' && <VoucherPanel lang={lang} />}
         </main>

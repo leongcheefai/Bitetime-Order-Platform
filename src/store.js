@@ -113,6 +113,27 @@ export async function fetchUserOrders(userId) {
   return data ?? [];
 }
 
+export async function fetchAllOrders() {
+  const { data, error } = await supabase
+    .from('orders')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) { console.error('Failed to fetch all orders:', error.message); return []; }
+  return data ?? [];
+}
+
+export async function loadOrderStatuses() {
+  const { data } = await supabase.from('settings').select('value').eq('key', 'order_statuses').single();
+  return data?.value ?? {};
+}
+
+export async function saveOrderStatus(orderNumber, status) {
+  const current = await loadOrderStatuses();
+  const updated = { ...current, [orderNumber]: status };
+  await supabase.from('settings').upsert({ key: 'order_statuses', value: updated }, { onConflict: 'key' });
+  return updated;
+}
+
 // ── Delivery address ──────────────────────────────────────────────────────────
 
 export function loadDeliveryAddressLocal(userId) {
