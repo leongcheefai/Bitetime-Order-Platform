@@ -345,10 +345,10 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .owner-order-total { font-size: 14px; font-weight: 500; color: #2B0A10; }
 
 .order-status-badge { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
-.status-pending   { background: #FFF3CD; color: #856404; }
+.status-pending   { background: #C3E6CB; color: #155724; }
 .status-confirmed { background: #D1ECF1; color: #0C5460; }
 .status-preparing { background: #E8D5F5; color: #5A1A7A; }
-.status-ready     { background: #C3E6CB; color: #155724; }
+.status-ready     { background: #FFF3CD; color: #856404; }
 .status-completed { background: #EDE4D8; color: #4A3020; }
 .status-cancelled { background: #F8D7DA; color: #721C24; }
 
@@ -369,10 +369,10 @@ body:has(.owner-layout) { padding: 1.25rem; }
 .owner-status-opt:hover:not(:disabled) { border-color: #7A1028; color: #7A1028; }
 .owner-status-opt:disabled { opacity: 0.6; cursor: not-allowed; }
 .owner-status-opt.active { font-weight: 600; border-width: 1.5px; }
-.owner-status-opt.active.status-pending   { background: #FFF3CD; color: #856404; border-color: #856404; }
+.owner-status-opt.active.status-pending   { background: #C3E6CB; color: #155724; border-color: #155724; }
 .owner-status-opt.active.status-confirmed { background: #D1ECF1; color: #0C5460; border-color: #0C5460; }
 .owner-status-opt.active.status-preparing { background: #E8D5F5; color: #5A1A7A; border-color: #5A1A7A; }
-.owner-status-opt.active.status-ready     { background: #C3E6CB; color: #155724; border-color: #155724; }
+.owner-status-opt.active.status-ready     { background: #FFF3CD; color: #856404; border-color: #856404; }
 .owner-status-opt.active.status-completed { background: #EDE4D8; color: #4A3020; border-color: #4A3020; }
 .owner-status-opt.active.status-cancelled { background: #F8D7DA; color: #721C24; border-color: #721C24; }
 
