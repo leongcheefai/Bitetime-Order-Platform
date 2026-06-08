@@ -2,7 +2,7 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-body { font-family: 'DM Sans', sans-serif; background: #F2EAE0; color: #2B0A10; min-height: 100vh; padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; }
+body { font-family: 'DM Sans', sans-serif; background: #F2EAE0; color: #2B0A10; min-height: 100vh; padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; scrollbar-gutter: stable; }
 .form-wrap { max-width: 600px; width: 100%; }
 .form-wrap--wide { max-width: 900px; }
 body:has(.form-wrap--wide) { padding-left: 0.5rem; padding-right: 0.5rem; }
