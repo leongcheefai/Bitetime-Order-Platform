@@ -49,7 +49,7 @@ export async function fetchAllProfiles() {
   const { data, error } = await supabase
     .from('profiles')
     .select('id, name, email, email_confirmed, created_at')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: true });
   if (error) throw error;
   return data ?? [];
 }
