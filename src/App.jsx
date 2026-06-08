@@ -29,6 +29,7 @@ export default function App() {
   const [lastOrderNumber, setLastOrderNumber] = useState('');
   const [view, setView] = useState('login');
   const [ownerPage, setOwnerPage] = useState('home');
+  const [ordersKey, setOrdersKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [accountSection, setAccountSection] = useState(null);
   const [savedAddress, setSavedAddress] = useState(null);
@@ -184,7 +185,7 @@ export default function App() {
               <button
                 key={item.key}
                 className={'sidebar-nav-item' + (ownerPage === item.key ? ' active' : '')}
-                onClick={() => { setOwnerPage(item.key); setOrderDone(false); }}
+                onClick={() => { setOwnerPage(item.key); setOrderDone(false); if (item.key === 'orders') setOrdersKey(k => k + 1); }}
               >
                 <span>{t(item.label, item.labelZh)}</span>
               </button>
@@ -233,7 +234,7 @@ export default function App() {
             />
           )}
 
-          {ownerPage === 'orders' && <OrderList lang={lang} />}
+          {ownerPage === 'orders' && <OrderList key={ordersKey} lang={lang} />}
           {ownerPage === 'users' && <UserList lang={lang} />}
           {ownerPage === 'vouchers' && <VoucherPanel lang={lang} />}
         </main>

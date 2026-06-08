@@ -17,7 +17,7 @@ export default function OrderList({ lang }) {
   const [orders, setOrders] = useState([]);
   const [statuses, setStatuses] = useState({});
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(null);
+  const [expanded, setExpanded] = useState(false);
   const [saving, setSaving] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
@@ -102,13 +102,13 @@ export default function OrderList({ lang }) {
       <div className="order-list">
         {filtered.map(order => {
           const status = statuses[order.order_number] || 'pending';
-          const isOpen = expanded === order.order_number;
+          const isOpen = expanded !== false && expanded === order.order_number;
           const items = Array.isArray(order.items) ? order.items : [];
           return (
             <div key={order.order_number} className={'owner-order-card' + (isOpen ? ' open' : '')}>
               <button
                 className="owner-order-header"
-                onClick={() => setExpanded(isOpen ? null : order.order_number)}
+                onClick={() => setExpanded(isOpen ? false : order.order_number)}
               >
                 <div className="owner-order-left">
                   <span className="owner-order-num">{order.order_number}</span>
