@@ -21,6 +21,7 @@ export default function OrderList({ lang }) {
   const [saving, setSaving] = useState(null);
   const [saveError, setSaveError] = useState(null);
   const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [awbs, setAwbs] = useState({});
   const [awbInputs, setAwbInputs] = useState({});
   const [awbSaving, setAwbSaving] = useState(null);
@@ -64,9 +65,15 @@ export default function OrderList({ lang }) {
     }
   }
 
-  const filtered = filterStatus === 'all'
-    ? orders
-    : orders.filter(o => (statuses[o.order_number] || 'pending') === filterStatus);
+  const q = searchQuery.trim().toLowerCase();
+  const filtered = orders.filter(o => {
+    const statusMatch = filterStatus === 'all' || (statuses[o.order_number] || 'pending') === filterStatus;
+    const searchMatch = !q ||
+      (o.order_number || '').toLowerCase().includes(q) ||
+      (o.customer_name || '').toLowerCase().includes(q) ||
+      (o.customer_wa || '').toLowerCase().includes(q);
+    return statusMatch && searchMatch;
+  });
 
   function formatDate(iso) {
     if (!iso) return '—';
@@ -81,6 +88,18 @@ export default function OrderList({ lang }) {
         <div className="admin-title" style={{ marginBottom: 0 }}>
           {t('All Orders', '全部订单')}
           <span className="order-list-count">{orders.length}</span>
+        </div>
+        <div className="order-list-search-row">
+          <input
+            type="text"
+            className="order-search-input"
+            placeholder={t('Search by order no., name, or WhatsApp…', '搜索订单号、姓名或WhatsApp…')}
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button className="order-search-clear" onClick={() => setSearchQuery('')}>✕</button>
+          )}
         </div>
         <div className="order-list-filters">
           {['all', ...STATUS_OPTIONS].map(s => (
