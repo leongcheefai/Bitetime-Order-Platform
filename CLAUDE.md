@@ -9,7 +9,7 @@ npm run dev        # start Vite dev server (localhost:5173)
 npm run build      # production build → dist/
 npm run lint       # ESLint check
 npm run preview    # serve dist/ locally
-npm run deploy     # build with GITHUB_PAGES=true and push to gh-pages branch
+npm run deploy     # production build (deploy via Vercel)
 ```
 
 No test suite exists in this project.
@@ -59,4 +59,4 @@ No i18n library. Every string is passed as `t(englishString, chineseString)` whe
 
 ### Deployment
 
-`npm run deploy` sets `GITHUB_PAGES=true`, which changes the Vite `base` from `/` to `/Bitetime-Order-Platform/`, then pushes `dist/` to the `gh-pages` branch.
+Deployed via Vercel. `npm run deploy` just runs `npm run build`. Vite `base` is `/`.
