@@ -179,6 +179,24 @@ export async function saveDeliveryAddress(userId, address) {
   await supabase.from('profiles').upsert({ id: userId, delivery_address: address }, { onConflict: 'id' });
 }
 
+// ── Order counter ─────────────────────────────────────────────────────────────
+
+export async function getNextOrderNumber() {
+  const now = new Date();
+  const yy = String(now.getFullYear()).slice(2);
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const today = `${yy}${mm}${dd}`;
+
+  const { data } = await supabase.from('settings').select('value').eq('key', 'order_counter').single();
+  const current = data?.value ?? null;
+
+  const nextValue = (current && current.date === today) ? current.value + 1 : 50;
+  await supabase.from('settings').upsert({ key: 'order_counter', value: { date: today, value: nextValue } }, { onConflict: 'key' });
+
+  return `BT-${today}-${String(nextValue).padStart(4, '0')}`;
+}
+
 // ── Vouchers ──────────────────────────────────────────────────────────────────
 
 export async function loadVouchers() {
