@@ -206,7 +206,7 @@ export default function OrderList({ lang }) {
                     </div>
                   </div>
 
-                  {status === 'ready' && (
+                  {(status === 'ready' || awbs[order.order_number]) && (
                     <div className="owner-order-awb-row">
                       <div className="owner-order-detail-label">{t('Tracking / AWB Number', '追踪号码')}</div>
                       <div className="awb-input-row">

@@ -214,7 +214,7 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
                       <div className="order-accordion-body">
                         <div style={{ fontSize: '12px', color: '#A07070', marginBottom: '10px' }}>{formatDate(order.created_at)}</div>
 
-                        {orderStatuses[order.order_number] === 'ready' && orderAWBs[order.order_number] && (
+                        {orderAWBs[order.order_number] && (
                           <div className="cust-awb-box">
                             <div className="cust-awb-label">{t('Tracking / AWB Number', '追踪号码')}</div>
                             <div className="cust-awb-num">{orderAWBs[order.order_number]}</div>
