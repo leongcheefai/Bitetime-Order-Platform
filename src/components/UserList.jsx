@@ -32,6 +32,7 @@ export default function UserList({ lang }) {
                   <th>#</th>
                   <th>{t('Name', '姓名')}</th>
                   <th>{t('Email', '邮箱')}</th>
+                  <th>{t('Verified', '已验证')}</th>
                   <th>{t('Joined', '注册时间')}</th>
                 </tr>
               </thead>
@@ -41,6 +42,11 @@ export default function UserList({ lang }) {
                     <td>{i + 1}</td>
                     <td>{u.name || '—'}</td>
                     <td>{u.email}</td>
+                    <td>
+                      {u.email_confirmed
+                        ? <span className="order-status-badge status-pending">{t('Verified', '已验证')}</span>
+                        : <span className="order-status-badge status-cancelled">{t('Unverified', '未验证')}</span>}
+                    </td>
                     <td>{u.created_at ? new Date(u.created_at).toLocaleDateString('en-MY', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</td>
                   </tr>
                 ))}

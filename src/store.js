@@ -31,10 +31,14 @@ export async function signUp(name, email, password) {
   });
   if (error) throw error;
   if (data.user) {
+    // If email confirmation is required, there is no session yet and RLS will
+    // block this insert — it will succeed (or upsert) once the user confirms
+    // and signs in, which is handled in onAuthChange below.
     await supabase.from('profiles').upsert({
       id: data.user.id,
       name,
       email,
+      email_confirmed: !!data.user.email_confirmed_at,
       created_at: new Date().toISOString(),
     }, { onConflict: 'id' });
   }
@@ -44,7 +48,7 @@ export async function signUp(name, email, password) {
 export async function fetchAllProfiles() {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, email, created_at')
+    .select('id, name, email, email_confirmed, created_at')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data ?? [];
@@ -60,8 +64,21 @@ export async function getCurrentUser() {
 }
 
 export function onAuthChange(callback) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    callback(session?.user ?? null);
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const user = session?.user ?? null;
+    if (user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+      // Ensure profile exists and email_confirmed is up to date.
+      // This handles the case where email confirmation was required at signUp
+      // and the profile insert was blocked by RLS (no session at that point).
+      await supabase.from('profiles').upsert({
+        id: user.id,
+        name: user.user_metadata?.name || user.email?.split('@')[0] || '',
+        email: user.email,
+        email_confirmed: !!user.email_confirmed_at,
+        created_at: user.created_at,
+      }, { onConflict: 'id' });
+    }
+    callback(user);
   });
   return () => subscription.unsubscribe();
 }
