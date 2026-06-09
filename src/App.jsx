@@ -173,7 +173,7 @@ export default function App() {
   if (isUser) {
     return (
       <>
-        <div className="form-wrap form-wrap--wide">
+        <div className="form-wrap form-wrap--owner">
           {userPage === 'preview' && (
             <div className="preview-back-pill" onClick={() => { setUserPage('home'); setDrawerOpen(false); setOrderDone(false); }}>
               ← {t('Back to User View', '返回用户视图')}

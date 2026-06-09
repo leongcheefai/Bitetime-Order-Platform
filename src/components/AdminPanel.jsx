@@ -98,11 +98,11 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
           <div className="admin-fields">
             <div className="admin-field full">
               <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('West Malaysia (WM) — RM', '西马来西亚 (WM) — RM')}</label>
-              <input type="number" min="0" value={wmFee} onChange={e => setWmFee(e.target.value)} style={{ maxWidth: '160px' }} />
+              <input type="number" min="0" value={wmFee} onChange={e => setWmFee(e.target.value)} />
             </div>
             <div className="admin-field full">
               <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('East Malaysia / Sabah / Sarawak (EM) — RM', '东马来西亚 / 沙巴 / 砂拉越 (EM) — RM')}</label>
-              <input type="number" min="0" value={emFee} onChange={e => setEmFee(e.target.value)} style={{ maxWidth: '160px' }} />
+              <input type="number" min="0" value={emFee} onChange={e => setEmFee(e.target.value)} />
             </div>
           </div>
         </div>
