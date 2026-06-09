@@ -104,7 +104,7 @@ export default function App() {
           <div className="drawer-user-name">{accountName}</div>
         </div>
         <nav className="drawer-nav">
-          {isUser ? USER_NAV.map(({ key, label, labelZh }) => (
+          {isUser && userPage !== 'preview' ? USER_NAV.map(({ key, label, labelZh }) => (
             key === 'menu' ? (
               <div key="menu">
                 <button
@@ -192,20 +192,31 @@ export default function App() {
 
           {(userPage === 'home' || userPage === 'preview') && (
             <>
-              <div className="brand">
-                <h1>Bitetime &amp; Co.</h1>
-                <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
-                <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
-              </div>
-              {orderDone ? (
-                <div className="success-box">
-                  <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
-                  {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
-                  <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
-                  <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
-                </div>
+              {userPage === 'preview' && accountSection ? (
+                <>
+                  <span className="reset-link" style={{ display: 'inline-block', marginBottom: '1.25rem' }} onClick={() => setAccountSection(null)}>
+                    {t('← Back to Order', '← 返回订单')}
+                  </span>
+                  <CustomerSettings user={account} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
+                </>
               ) : (
-                <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={account} savedAddress={savedAddress} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
+                <>
+                  <div className="brand">
+                    <h1>Bitetime &amp; Co.</h1>
+                    <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
+                    <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
+                  </div>
+                  {orderDone ? (
+                    <div className="success-box">
+                      <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
+                      {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
+                      <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
+                      <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
+                    </div>
+                  ) : (
+                    <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={account} savedAddress={savedAddress} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
+                  )}
+                </>
               )}
             </>
           )}
