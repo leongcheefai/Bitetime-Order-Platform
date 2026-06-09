@@ -15,6 +15,7 @@ export const DEFAULTS = {
   tgChatId: '671603959',
   ejsServiceId: '',
   ejsTemplateId: '',
+  ejsShippingTemplateId: '',
   ejsPublicKey: '',
 };
 
@@ -46,6 +47,16 @@ export async function signUp(name, email, password) {
     }, { onConflict: 'id' });
   }
   return data.user;
+}
+
+export async function fetchProfileByUserId(userId) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, email')
+    .eq('id', userId)
+    .single();
+  if (error) return null;
+  return data;
 }
 
 export async function fetchAllProfiles() {

@@ -10,6 +10,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const [tgChatId, setTgChatId] = useState(settings.tgChatId);
   const [ejsServiceId, setEjsServiceId] = useState(settings.ejsServiceId || '');
   const [ejsTemplateId, setEjsTemplateId] = useState(settings.ejsTemplateId || '');
+  const [ejsShippingTemplateId, setEjsShippingTemplateId] = useState(settings.ejsShippingTemplateId || '');
   const [ejsPublicKey, setEjsPublicKey] = useState(settings.ejsPublicKey || '');
   const [availableDays, setAvailableDays] = useState(settings.availableDays ?? [1,2,3,4,5,6]);
   const [leadDays, setLeadDays] = useState(settings.leadDays ?? 3);
@@ -49,6 +50,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         tgChatId: tgChatId.trim() || DEFAULTS.tgChatId,
         ejsServiceId: ejsServiceId.trim(),
         ejsTemplateId: ejsTemplateId.trim(),
+        ejsShippingTemplateId: ejsShippingTemplateId.trim(),
         ejsPublicKey: ejsPublicKey.trim(),
         availableDays,
         leadDays: parseInt(leadDays) || 1,
@@ -249,8 +251,18 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
               <input type="text" placeholder="service_xxxxxxx" value={ejsServiceId} onChange={e => setEjsServiceId(e.target.value)} />
             </div>
             <div className="admin-field full">
-              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Template ID</label>
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Order Confirmation Template ID</label>
               <input type="text" placeholder="template_xxxxxxx" value={ejsTemplateId} onChange={e => setEjsTemplateId(e.target.value)} />
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Shipping Notification Template ID</label>
+              <p style={{ fontSize: '11px', color: '#aaa', margin: '2px 0 4px' }}>
+                {t(
+                  'Sent once when order status changes to "Out for Delivery". Template variables: {{to_name}}, {{to_email}}, {{order_number}}, {{tracking_number}}.',
+                  '订单状态改为"派送中"时发送一次。模板变量：{{to_name}}、{{to_email}}、{{order_number}}、{{tracking_number}}。'
+                )}
+              </p>
+              <input type="text" placeholder="template_xxxxxxx" value={ejsShippingTemplateId} onChange={e => setEjsShippingTemplateId(e.target.value)} />
             </div>
             <div className="admin-field full">
               <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Public Key</label>

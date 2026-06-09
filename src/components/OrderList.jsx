@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote } from '../store';
+import emailjs from '@emailjs/browser';
+import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId } from '../store';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
 
@@ -12,7 +13,7 @@ const STATUS_LABELS = {
   cancelled: { en: 'Cancelled',        zh: '已取消' },
 };
 
-export default function OrderList({ lang }) {
+export default function OrderList({ lang, settings = {} }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
   const [orders, setOrders] = useState([]);
   const [statuses, setStatuses] = useState({});
@@ -74,6 +75,30 @@ export default function OrderList({ lang }) {
     setSaveError(null);
     try {
       await saveOrderStatus(orderNumber, newStatus);
+      if (
+        newStatus === 'ready' &&
+        settings.ejsServiceId &&
+        settings.ejsShippingTemplateId &&
+        settings.ejsPublicKey
+      ) {
+        const order = orders.find(o => o.order_number === orderNumber);
+        if (order?.user_id) {
+          const profile = await fetchProfileByUserId(order.user_id);
+          if (profile?.email) {
+            emailjs.send(
+              settings.ejsServiceId,
+              settings.ejsShippingTemplateId,
+              {
+                to_name: order.customer_name || profile.name || '',
+                to_email: profile.email,
+                order_number: orderNumber,
+                tracking_number: awbs[orderNumber] || '',
+              },
+              settings.ejsPublicKey,
+            ).catch(() => {});
+          }
+        }
+      }
     } catch (err) {
       console.error('Failed to save status:', err);
       setSaveError('Save failed: ' + err.message);
