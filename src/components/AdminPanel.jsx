@@ -11,6 +11,10 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const [ejsServiceId, setEjsServiceId] = useState(settings.ejsServiceId || '');
   const [ejsTemplateId, setEjsTemplateId] = useState(settings.ejsTemplateId || '');
   const [ejsPublicKey, setEjsPublicKey] = useState(settings.ejsPublicKey || '');
+  const [availableDays, setAvailableDays] = useState(settings.availableDays ?? [1,2,3,4,5,6]);
+  const [leadDays, setLeadDays] = useState(settings.leadDays ?? 3);
+  const [blockedDates, setBlockedDates] = useState(settings.blockedDates ?? []);
+  const [blockedDateInput, setBlockedDateInput] = useState('');
   const [saveMsg, setSaveMsg] = useState('');
 
   function updateProduct(i, field, value) {
@@ -46,6 +50,9 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         ejsServiceId: ejsServiceId.trim(),
         ejsTemplateId: ejsTemplateId.trim(),
         ejsPublicKey: ejsPublicKey.trim(),
+        availableDays,
+        leadDays: parseInt(leadDays) || 1,
+        blockedDates,
       };
       console.log('[AdminPanel] Saving settings:', JSON.stringify(newSettings));
       saveSettingsToDB(newSettings);
@@ -104,6 +111,109 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
               <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('East Malaysia / Sabah / Sarawak (EM) — RM', '东马来西亚 / 沙巴 / 砂拉越 (EM) — RM')}</label>
               <input type="number" min="0" value={emFee} onChange={e => setEmFee(e.target.value)} />
             </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'delivery' && (
+        <div className="admin-section" style={{ marginTop: '18px' }}>
+          <div className="admin-section-label">{t('Available order days', '可下单日期')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t('Customers can only pick dates on the selected days.', '顾客只能选择已勾选的日期。')}
+          </p>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {[
+              { day: 0, en: 'Sun', zh: '日' },
+              { day: 1, en: 'Mon', zh: '一' },
+              { day: 2, en: 'Tue', zh: '二' },
+              { day: 3, en: 'Wed', zh: '三' },
+              { day: 4, en: 'Thu', zh: '四' },
+              { day: 5, en: 'Fri', zh: '五' },
+              { day: 6, en: 'Sat', zh: '六' },
+            ].map(({ day, en, zh }) => {
+              const active = availableDays.includes(day);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  onClick={() => setAvailableDays(active ? availableDays.filter(d => d !== day) : [...availableDays, day].sort())}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '20px',
+                    border: '1.5px solid',
+                    borderColor: active ? '#7a2828' : '#ccc',
+                    background: active ? '#7a2828' : '#fff',
+                    color: active ? '#fff' : '#888',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t(en, zh)}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {tab === 'delivery' && (
+        <div className="admin-section" style={{ marginTop: '18px' }}>
+          <div className="admin-section-label">{t('Minimum lead time (days)', '最少提前天数')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t('Customers must order at least this many days in advance.', '顾客必须提前此天数下单。')}
+          </p>
+          <input
+            type="number"
+            min="1"
+            max="30"
+            value={leadDays}
+            onChange={e => setLeadDays(e.target.value)}
+            style={{ width: '80px' }}
+          />
+        </div>
+      )}
+
+      {tab === 'delivery' && (
+        <div className="admin-section" style={{ marginTop: '18px' }}>
+          <div className="admin-section-label">{t('Blocked dates', '封锁日期')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t('These specific dates will be unavailable (e.g. public holidays).', '这些日期将无法选择（例如公共假日）。')}
+          </p>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '10px' }}>
+            <input
+              type="date"
+              value={blockedDateInput}
+              onChange={e => setBlockedDateInput(e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="add-btn"
+              style={{ margin: 0, whiteSpace: 'nowrap' }}
+              onClick={() => {
+                if (!blockedDateInput || blockedDates.includes(blockedDateInput)) return;
+                setBlockedDates([...blockedDates, blockedDateInput].sort());
+                setBlockedDateInput('');
+              }}
+            >
+              {t('+ Add', '+ 添加')}
+            </button>
+          </div>
+          {blockedDates.length === 0 && (
+            <p style={{ fontSize: '12px', color: '#bbb' }}>{t('No blocked dates.', '无封锁日期。')}</p>
+          )}
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            {blockedDates.map(d => (
+              <span key={d} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '4px 10px', borderRadius: '20px', background: '#f5e8e8', border: '1.5px solid #d9a0a0', fontSize: '13px', color: '#7a2828' }}>
+                {d}
+                <button
+                  type="button"
+                  onClick={() => setBlockedDates(blockedDates.filter(x => x !== d))}
+                  style={{ background: 'none', border: 'none', color: '#7a2828', cursor: 'pointer', padding: '0', lineHeight: 1, fontSize: '14px' }}
+                >×</button>
+              </span>
+            ))}
           </div>
         </div>
       )}

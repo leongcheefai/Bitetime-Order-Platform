@@ -338,7 +338,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
                   mode="single"
                   selected={custDateObj}
                   onSelect={(d) => { setCustDateObj(d); setCustDate(d ? format(d, 'yyyy-MM-dd') : ''); setShowCal(false); }}
-                  disabled={(d) => { const min = new Date(); min.setHours(0,0,0,0); min.setDate(min.getDate() + 3); return d < min; }}
+                  disabled={(d) => { const min = new Date(); min.setHours(0,0,0,0); min.setDate(min.getDate() + (settings.leadDays ?? 3)); const allowed = settings.availableDays ?? [1,2,3,4,5,6]; const blocked = settings.blockedDates ?? []; return d < min || !allowed.includes(d.getDay()) || blocked.includes(format(d, 'yyyy-MM-dd')); }}
                 />
               </div>
             )}
