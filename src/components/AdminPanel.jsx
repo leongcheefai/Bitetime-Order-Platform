@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { DEFAULTS, saveSettingsToDB } from '../store';
 
-export default function AdminPanel({ settings, onSave, lang }) {
+export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
   const [products, setProducts] = useState(() => JSON.parse(JSON.stringify(settings.products)));
   const [wmFee, setWmFee] = useState(settings.shipping.WM);
@@ -60,82 +60,97 @@ export default function AdminPanel({ settings, onSave, lang }) {
 
   return (
     <div className="admin-panel">
-      <div className="admin-title"><span>✏️</span> {t('Menu Editor', '菜单编辑器')}</div>
+      <div className="admin-title">
+        <span>✏️</span>{' '}
+        {{ menu: t('Menu', '菜单'), delivery: t('Delivery', '送货费'), bot: t('Bot Settings', '机器人设置'), email: t('Email Settings', '邮件设置') }[tab]}
+      </div>
 
-      <div className="admin-section">
-        <div className="admin-section-label">{t('Products', '产品')}</div>
-        <div className="product-row-header">
-          <span>{t('Name', '名称')}</span>
-          <span className="desc-head">{t('Description', '描述')}</span>
-          <span>{t('Unit', '单位')}</span>
-          <span>{t('Price (RM)', '价格 (RM)')}</span>
-          <span></span>
+      <div className="admin-tab-content">
+
+      {tab === 'menu' && (
+        <div className="admin-section">
+          <div className="admin-section-label">{t('Products', '产品')}</div>
+          <div className="product-row-header">
+            <span>{t('Name', '名称')}</span>
+            <span className="desc-head">{t('Description', '描述')}</span>
+            <span>{t('Unit', '单位')}</span>
+            <span>{t('Price (RM)', '价格 (RM)')}</span>
+            <span></span>
+          </div>
+          <div className="product-list">
+            {products.map((p, i) => (
+              <div className="product-row" key={p.id}>
+                <input type="text" value={p.name} placeholder="Product name" onChange={e => updateProduct(i, 'name', e.target.value)} />
+                <input type="text" className="desc-input" value={p.desc} placeholder="Description" onChange={e => updateProduct(i, 'desc', e.target.value)} />
+                <input type="text" className="unit-input" value={p.unit} placeholder="pc" onChange={e => updateProduct(i, 'unit', e.target.value)} />
+                <input type="number" className="price-input" value={p.price} min="0" step="0.50" onChange={e => updateProduct(i, 'price', parseFloat(e.target.value) || 0)} />
+                <button className="del-btn" onClick={() => deleteProduct(i)} title="Remove">×</button>
+              </div>
+            ))}
+          </div>
+          <button className="add-btn" onClick={addProduct}>{t('+ Add product', '+ 添加产品')}</button>
         </div>
-        <div className="product-list">
-          {products.map((p, i) => (
-            <div className="product-row" key={p.id}>
-              <input type="text" value={p.name} placeholder="Product name" onChange={e => updateProduct(i, 'name', e.target.value)} />
-              <input type="text" className="desc-input" value={p.desc} placeholder="Description" onChange={e => updateProduct(i, 'desc', e.target.value)} />
-              <input type="text" className="unit-input" value={p.unit} placeholder="pc" onChange={e => updateProduct(i, 'unit', e.target.value)} />
-              <input type="number" className="price-input" value={p.price} min="0" step="0.50" onChange={e => updateProduct(i, 'price', parseFloat(e.target.value) || 0)} />
-              <button className="del-btn" onClick={() => deleteProduct(i)} title="Remove">×</button>
+      )}
+
+      {tab === 'delivery' && (
+        <div className="admin-section">
+          <div className="admin-section-label">{t('Delivery fees', '送货费')}</div>
+          <div className="admin-fields">
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('West Malaysia (WM) — RM', '西马来西亚 (WM) — RM')}</label>
+              <input type="number" min="0" value={wmFee} onChange={e => setWmFee(e.target.value)} style={{ maxWidth: '160px' }} />
             </div>
-          ))}
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('East Malaysia / Sabah / Sarawak (EM) — RM', '东马来西亚 / 沙巴 / 砂拉越 (EM) — RM')}</label>
+              <input type="number" min="0" value={emFee} onChange={e => setEmFee(e.target.value)} style={{ maxWidth: '160px' }} />
+            </div>
+          </div>
         </div>
-        <button className="add-btn" onClick={addProduct}>{t('+ Add product', '+ 添加产品')}</button>
-      </div>
+      )}
 
-      <div className="admin-section">
-        <div className="admin-section-label">{t('Delivery fees', '送货费')}</div>
-        <div className="admin-fields">
-          <div className="admin-field">
-            <label>{t('West Malaysia (WM) — RM', '西马来西亚 (WM) — RM')}</label>
-            <input type="number" min="0" value={wmFee} onChange={e => setWmFee(e.target.value)} />
-          </div>
-          <div className="admin-field">
-            <label>{t('East Malaysia / Sabah / Sarawak (EM) — RM', '东马来西亚 / 沙巴 / 砂拉越 (EM) — RM')}</label>
-            <input type="number" min="0" value={emFee} onChange={e => setEmFee(e.target.value)} />
+      {tab === 'bot' && (
+        <div className="admin-section">
+          <div className="admin-section-label">Telegram Bot Settings</div>
+          <div className="admin-fields">
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Bot Token (from @BotFather)</label>
+              <input type="text" placeholder="123456789:AAFxxxxxxxxxxxxxxx" value={tgToken} onChange={e => setTgToken(e.target.value)} />
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Your Chat ID (from @userinfobot)</label>
+              <input type="text" placeholder="123456789" value={tgChatId} onChange={e => setTgChatId(e.target.value)} />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="admin-section">
-        <div className="admin-section-label">Telegram Bot Settings</div>
-        <div className="admin-fields">
-          <div className="admin-field full">
-            <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Bot Token (from @BotFather)</label>
-            <input type="text" placeholder="123456789:AAFxxxxxxxxxxxxxxx" value={tgToken} onChange={e => setTgToken(e.target.value)} />
-          </div>
-          <div className="admin-field full">
-            <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Your Chat ID (from @userinfobot)</label>
-            <input type="text" placeholder="123456789" value={tgChatId} onChange={e => setTgChatId(e.target.value)} />
+      {tab === 'email' && (
+        <div className="admin-section">
+          <div className="admin-section-label">EmailJS — Order Confirmation Email</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t(
+              'Logged-in customers will receive a confirmation email after placing an order. Set up at emailjs.com — create a service, then a template using these variables: {{to_name}}, {{to_email}}, {{order_summary}}, {{order_total}}, {{order_type}}.',
+              '登录客户下单后将收到确认邮件。在 emailjs.com 设置 — 创建服务，然后使用以下变量创建模板：{{to_name}}、{{to_email}}、{{order_summary}}、{{order_total}}、{{order_type}}。'
+            )}
+          </p>
+          <div className="admin-fields">
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Service ID</label>
+              <input type="text" placeholder="service_xxxxxxx" value={ejsServiceId} onChange={e => setEjsServiceId(e.target.value)} />
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Template ID</label>
+              <input type="text" placeholder="template_xxxxxxx" value={ejsTemplateId} onChange={e => setEjsTemplateId(e.target.value)} />
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Public Key</label>
+              <input type="text" placeholder="xxxxxxxxxxxxxxxx" value={ejsPublicKey} onChange={e => setEjsPublicKey(e.target.value)} />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="admin-section">
-        <div className="admin-section-label">EmailJS — Order Confirmation Email</div>
-        <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
-          {t(
-            'Logged-in customers will receive a confirmation email after placing an order. Set up at emailjs.com — create a service, then a template using these variables: {{to_name}}, {{to_email}}, {{order_summary}}, {{order_total}}, {{order_type}}.',
-            '登录客户下单后将收到确认邮件。在 emailjs.com 设置 — 创建服务，然后使用以下变量创建模板：{{to_name}}、{{to_email}}、{{order_summary}}、{{order_total}}、{{order_type}}。'
-          )}
-        </p>
-        <div className="admin-fields">
-          <div className="admin-field full">
-            <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Service ID</label>
-            <input type="text" placeholder="service_xxxxxxx" value={ejsServiceId} onChange={e => setEjsServiceId(e.target.value)} />
-          </div>
-          <div className="admin-field full">
-            <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Template ID</label>
-            <input type="text" placeholder="template_xxxxxxx" value={ejsTemplateId} onChange={e => setEjsTemplateId(e.target.value)} />
-          </div>
-          <div className="admin-field full">
-            <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>Public Key</label>
-            <input type="text" placeholder="xxxxxxxxxxxxxxxx" value={ejsPublicKey} onChange={e => setEjsPublicKey(e.target.value)} />
-          </div>
-        </div>
-      </div>
+      </div>{/* admin-tab-content */}
 
       <button className="save-btn" onClick={handleSave}>{t('💾 Save changes', '💾 保存更改')}</button>
       <p className="save-msg">{saveMsg}</p>

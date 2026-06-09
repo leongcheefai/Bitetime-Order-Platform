@@ -65,9 +65,10 @@ body:has(.user-layout) { padding: 1.25rem; }
 .admin-toggle button { background: none; border: 1px dashed #C9A090; border-radius: 8px; padding: 6px 16px; font-size: 12px; color: #7A4F55; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; }
 .admin-toggle button:hover { border-color: #7A1028; color: #7A1028; }
 
-.admin-panel { background: #FBF6F0; border: 1.5px solid #C9A0A8; border-radius: 16px; padding: 1.25rem; margin-bottom: 2rem; }
+.admin-panel { background: #FBF6F0; border: 1.5px solid #C9A0A8; border-radius: 16px; padding: 1.25rem; margin-bottom: 2rem; width: 100%; box-sizing: border-box; }
 .admin-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: #7A1028; margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
 .admin-section { margin-bottom: 1.25rem; }
+.admin-tab-content { width: 100%; }
 .admin-section-label { font-size: 11px; font-weight: 500; color: #7A1028; text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 0.6rem; }
 
 .product-list { display: flex; flex-direction: column; gap: 8px; }
@@ -290,6 +291,9 @@ body:has(.user-layout) { padding: 1.25rem; }
 .drawer-nav-btn.active { background: #F5E6E8; color: #7A1028; font-weight: 600; }
 .drawer-nav-btn.active::before { transform: scaleY(1); }
 .drawer-nav-btn.active::after { color: #7A1028; }
+.drawer-nav-btn--expand::after { content: none; }
+.drawer-nav-sub { padding-left: 2.5rem; font-size: 13px; color: #7A4A55; background: #FAF3EE; }
+.drawer-nav-sub::before { left: 1.5rem; }
 
 .drawer-footer { padding: 1.25rem 1.5rem 2.5rem; border-top: 1px solid #E8D5C8; flex-shrink: 0; }
 .drawer-signout { width: 100%; padding: 10px 16px; background: none; border: 1px solid #C9A090; border-radius: 10px; color: #7A4F55; font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; letter-spacing: 0.01em; }

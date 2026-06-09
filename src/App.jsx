@@ -33,6 +33,8 @@ export default function App() {
   const [userPage, setUserPage] = useState('home');
   const [ordersKey, setOrdersKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [menuExpanded, setMenuExpanded] = useState(false);
+  const [menuTab, setMenuTab] = useState('menu');
   const [accountSection, setAccountSection] = useState(null);
   const [savedAddress, setSavedAddress] = useState(null);
   const [orderCount, setOrderCount] = useState(0);
@@ -103,6 +105,45 @@ export default function App() {
         </div>
         <nav className="drawer-nav">
           {isUser ? USER_NAV.map(({ key, label, labelZh }) => (
+            key === 'menu' ? (
+              <div key="menu">
+                <button
+                  className={'drawer-nav-btn drawer-nav-btn--expand' + (userPage === 'menu' ? ' active' : '')}
+                  onClick={() => setMenuExpanded(e => !e)}
+                >
+                  <span>{t(label, labelZh)}</span>
+                  <span style={{ fontSize: '10px', opacity: 0.7 }}>{menuExpanded ? '▲' : '▼'}</span>
+                </button>
+                {menuExpanded && (
+                  <>
+                    <button
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'menu' ? ' active' : '')}
+                      onClick={() => { setUserPage('menu'); setMenuTab('menu'); setDrawerOpen(false); setOrderDone(false); }}
+                    >
+                      {t('Menu', '菜单')}
+                    </button>
+                    <button
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'delivery' ? ' active' : '')}
+                      onClick={() => { setUserPage('menu'); setMenuTab('delivery'); setDrawerOpen(false); setOrderDone(false); }}
+                    >
+                      {t('Delivery', '送货费')}
+                    </button>
+                    <button
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'bot' ? ' active' : '')}
+                      onClick={() => { setUserPage('menu'); setMenuTab('bot'); setDrawerOpen(false); setOrderDone(false); }}
+                    >
+                      {t('Bot', '机器人')}
+                    </button>
+                    <button
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'email' ? ' active' : '')}
+                      onClick={() => { setUserPage('menu'); setMenuTab('email'); setDrawerOpen(false); setOrderDone(false); }}
+                    >
+                      {t('Email', '邮件')}
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : (
             <button
               key={key}
               className={'drawer-nav-btn' + (userPage === key ? ' active' : '')}
@@ -110,6 +151,7 @@ export default function App() {
             >
               {t(label, labelZh)}
             </button>
+            )
           )) : drawerNavItems.map(({ key, label }) => (
             <button
               key={key}
@@ -169,7 +211,7 @@ export default function App() {
           )}
 
           {userPage === 'menu' && (
-            <AdminPanel settings={settings} lang={lang} onSave={newSettings => setSettings(newSettings)} />
+            <AdminPanel settings={settings} lang={lang} onSave={newSettings => setSettings(newSettings)} tab={menuTab} />
           )}
 
           {userPage === 'analytics' && <SalesDashboard lang={lang} />}
