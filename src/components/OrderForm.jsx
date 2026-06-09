@@ -66,12 +66,27 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     setVoucherMsg('');
     const vouchers = await loadVouchers();
     const v = vouchers.find(v => v.code === code);
+    let errMsg = '';
     if (!v) {
-      setVoucherMsg(t('❌ Invalid voucher code.', '❌ 无效的优惠码。'));
+      errMsg = t('❌ Invalid voucher code.', '❌ 无效的优惠码。');
     } else if (v.used) {
-      setVoucherMsg(t('❌ This voucher has already been used.', '❌ 此优惠券已被使用。'));
+      errMsg = t('❌ This voucher has already been used.', '❌ 此优惠券已被使用。');
     } else if (v.email && v.email !== (user?.email ?? '').toLowerCase()) {
-      setVoucherMsg(t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。'));
+      errMsg = t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。');
+    } else if (v.expiresAt && new Date(v.expiresAt) < new Date()) {
+      errMsg = t('❌ This voucher has expired.', '❌ 此优惠券已过期。');
+    } else if (v.minOrder) {
+      let subtotal = 0;
+      Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) subtotal += p.price * (qty[id] || 0); });
+      if (mode === 'delivery' && state) {
+        subtotal += settings.shipping[['Sabah', 'Sarawak', 'W.P. Labuan'].includes(state) ? 'EM' : 'WM'] || 0;
+      }
+      if (subtotal < v.minOrder) {
+        errMsg = t(`❌ Minimum order of RM ${v.minOrder} required.`, `❌ 需要最低消费 RM ${v.minOrder}。`);
+      }
+    }
+    if (errMsg) {
+      setVoucherMsg(errMsg);
     } else {
       setAppliedVoucher(v);
       const label = v.type === 'percent' ? `${v.value}% off` : `RM ${v.value} off`;

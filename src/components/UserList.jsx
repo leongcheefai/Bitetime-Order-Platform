@@ -1,58 +1,168 @@
 import { useState, useEffect } from 'react';
-import { fetchAllProfiles } from '../store';
+import { fetchAllProfiles, fetchAllOrders, loadOrderStatuses } from '../store';
+
+const STATUS_LABELS = {
+  pending:   { en: 'Pending',          zh: '待处理' },
+  confirmed: { en: 'Confirmed',        zh: '已确认' },
+  preparing: { en: 'Ready to Deliver', zh: '准备送货' },
+  ready:     { en: 'Out for Delivery', zh: '派送中' },
+  completed: { en: 'Completed',        zh: '已完成' },
+  cancelled: { en: 'Cancelled',        zh: '已取消' },
+};
 
 export default function UserList({ lang }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
   const [users, setUsers] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [statuses, setStatuses] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [expandedUser, setExpandedUser] = useState(null);
 
   useEffect(() => {
-    fetchAllProfiles()
-      .then(setUsers)
+    Promise.all([fetchAllProfiles(), fetchAllOrders(), loadOrderStatuses()])
+      .then(([profiles, ords, stats]) => {
+        setUsers(profiles);
+        setOrders(ords);
+        setStatuses(stats);
+      })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
+  const q = search.trim().toLowerCase();
+  const filtered = users.filter(u =>
+    !q || (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
+  );
+
+  function userOrders(userId) {
+    return orders.filter(o => o.user_id === userId);
+  }
+
+  function userStats(userId) {
+    const ords = userOrders(userId).filter(o => (statuses[o.order_number] || 'pending') !== 'cancelled');
+    return {
+      count: ords.length,
+      total: ords.reduce((s, o) => s + (o.total || 0), 0),
+    };
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-MY', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function formatDateTime(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-MY', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
   return (
     <div className="user-list-panel">
       <div className="admin-title">{t('Registered Users', '注册用户')}</div>
+
       {loading && <p className="user-list-status">{t('Loading…', '加载中…')}</p>}
       {error && <p className="user-list-status user-list-error">{t('Error: ', '错误：')}{error}</p>}
-      {!loading && !error && users.length === 0 && (
-        <p className="user-list-status">{t('No registered users yet.', '暂无注册用户。')}</p>
-      )}
-      {!loading && !error && users.length > 0 && (
+
+      {!loading && !error && (
         <>
-          <div className="user-count">{users.length} {t('user(s)', '位用户')}</div>
-          <div className="user-table-wrap">
-            <table className="user-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>{t('Name', '姓名')}</th>
-                  <th>{t('Email', '邮箱')}</th>
-                  <th>{t('Verified', '已验证')}</th>
-                  <th>{t('Joined', '注册时间')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u, i) => (
-                  <tr key={u.id}>
-                    <td>{i + 1}</td>
-                    <td>{u.name || '—'}</td>
-                    <td>{u.email}</td>
-                    <td>
-                      {u.email_confirmed
-                        ? <span className="order-status-badge status-pending">{t('Verified', '已验证')}</span>
-                        : <span className="order-status-badge status-cancelled">{t('Unverified', '未验证')}</span>}
-                    </td>
-                    <td>{u.created_at ? new Date(u.created_at).toLocaleDateString('en-MY', { year: 'numeric', month: 'short', day: 'numeric' }) : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="user-search-row">
+            <input
+              type="text"
+              className="user-search-input"
+              placeholder={t('Search by name or email…', '按姓名或邮箱搜索…')}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button className="order-search-clear" onClick={() => setSearch('')}>✕</button>
+            )}
           </div>
+
+          {filtered.length === 0 ? (
+            <p className="user-list-status">{t('No users found.', '未找到用户。')}</p>
+          ) : (
+            <>
+              <div className="user-count">{filtered.length} {t('user(s)', '位用户')}</div>
+              <div className="user-table-wrap">
+                <table className="user-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>{t('Name', '姓名')}</th>
+                      <th>{t('Email', '邮箱')}</th>
+                      <th>{t('Verified', '已验证')}</th>
+                      <th>{t('Joined', '注册时间')}</th>
+                      <th>{t('Orders', '订单')}</th>
+                      <th>{t('Spent', '消费')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((u, i) => {
+                      const stats = userStats(u.id);
+                      const isExpanded = expandedUser === u.id;
+                      const uOrders = userOrders(u.id);
+                      return (
+                        <>
+                          <tr
+                            key={u.id}
+                            className={'user-row-clickable' + (isExpanded ? ' user-row-expanded' : '')}
+                            onClick={() => setExpandedUser(isExpanded ? null : u.id)}
+                          >
+                            <td>{i + 1}</td>
+                            <td>{u.name || '—'}</td>
+                            <td>{u.email}</td>
+                            <td>
+                              {u.email_confirmed
+                                ? <span className="order-status-badge status-pending">{t('Verified', '已验证')}</span>
+                                : <span className="order-status-badge status-cancelled">{t('Unverified', '未验证')}</span>}
+                            </td>
+                            <td>{formatDate(u.created_at)}</td>
+                            <td><strong>{stats.count}</strong></td>
+                            <td><strong>RM {stats.total.toFixed(2)}</strong></td>
+                          </tr>
+                          {isExpanded && (
+                            <tr key={u.id + '-orders'} className="user-orders-row">
+                              <td colSpan={7}>
+                                <div className="user-orders-panel">
+                                  <div className="admin-section-label" style={{ marginBottom: '8px' }}>
+                                    {t('Order history', '历史订单')} — {u.name || u.email}
+                                  </div>
+                                  {uOrders.length === 0 ? (
+                                    <p style={{ fontSize: '13px', color: '#A07070', fontStyle: 'italic' }}>{t('No orders yet.', '暂无订单。')}</p>
+                                  ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                      {uOrders.map(o => {
+                                        const s = statuses[o.order_number] || 'pending';
+                                        return (
+                                          <div key={o.order_number} className="user-order-row">
+                                            <span className="owner-order-num" style={{ fontSize: '12px' }}>{o.order_number}</span>
+                                            <span style={{ fontSize: '12px', color: '#7A4F55' }}>{formatDateTime(o.created_at)}</span>
+                                            <span style={{ fontSize: '12px', color: '#2B0A10', textTransform: 'capitalize' }}>{o.mode}</span>
+                                            <span className={'order-status-badge status-' + s} style={{ fontSize: '10px' }}>
+                                              {t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}
+                                            </span>
+                                            <span style={{ fontSize: '13px', fontWeight: 600, color: '#2B0A10', marginLeft: 'auto' }}>
+                                              RM {Number(o.total || 0).toFixed(2)}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </>
       )}
     </div>

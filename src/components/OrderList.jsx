@@ -1,15 +1,15 @@
 import { useState, useEffect } from 'react';
-import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB } from '../store';
+import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote } from '../store';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
 
 const STATUS_LABELS = {
-  pending:   { en: 'Pending',   zh: '待处理' },
-  confirmed: { en: 'Confirmed', zh: '已确认' },
+  pending:   { en: 'Pending',          zh: '待处理' },
+  confirmed: { en: 'Confirmed',        zh: '已确认' },
   preparing: { en: 'Ready to Deliver', zh: '准备送货' },
   ready:     { en: 'Out for Delivery', zh: '派送中'  },
-  completed: { en: 'Completed', zh: '已完成' },
-  cancelled: { en: 'Cancelled', zh: '已取消' },
+  completed: { en: 'Completed',        zh: '已完成' },
+  cancelled: { en: 'Cancelled',        zh: '已取消' },
 };
 
 export default function OrderList({ lang }) {
@@ -25,13 +25,21 @@ export default function OrderList({ lang }) {
   const [awbs, setAwbs] = useState({});
   const [awbInputs, setAwbInputs] = useState({});
   const [awbSaving, setAwbSaving] = useState(null);
+  const [notes, setNotes] = useState({});
+  const [noteInputs, setNoteInputs] = useState({});
+  const [noteSaving, setNoteSaving] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [bulkStatus, setBulkStatus] = useState('confirmed');
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchAllOrders(), loadOrderStatuses(), loadOrderAWBs()]).then(([ords, stats, awbData]) => {
+    Promise.all([fetchAllOrders(), loadOrderStatuses(), loadOrderAWBs(), loadOrderNotes()]).then(([ords, stats, awbData, notesData]) => {
       setOrders(ords);
       setStatuses(stats);
       setAwbs(awbData);
       setAwbInputs(awbData);
+      setNotes(notesData);
+      setNoteInputs(notesData);
       setLoading(false);
     });
   }, []);
@@ -48,8 +56,19 @@ export default function OrderList({ lang }) {
     }
   }
 
+  async function handleNoteSave(orderNumber) {
+    setNoteSaving(orderNumber);
+    try {
+      const updated = await saveOrderNote(orderNumber, noteInputs[orderNumber] || '');
+      setNotes(updated);
+    } catch (err) {
+      console.error('Failed to save note:', err);
+    } finally {
+      setNoteSaving(null);
+    }
+  }
+
   async function handleStatusChange(orderNumber, newStatus) {
-    // Optimistic update — change UI instantly
     setStatuses(prev => ({ ...prev, [orderNumber]: newStatus }));
     setSaving(orderNumber);
     setSaveError(null);
@@ -58,11 +77,78 @@ export default function OrderList({ lang }) {
     } catch (err) {
       console.error('Failed to save status:', err);
       setSaveError('Save failed: ' + err.message);
-      // Revert on failure
       setStatuses(prev => { const r = { ...prev }; delete r[orderNumber]; return r; });
     } finally {
       setSaving(null);
     }
+  }
+
+  async function handleBulkStatusChange() {
+    if (selected.size === 0) return;
+    setBulkSaving(true);
+    const nums = [...selected];
+    setStatuses(prev => {
+      const next = { ...prev };
+      nums.forEach(n => { next[n] = bulkStatus; });
+      return next;
+    });
+    try {
+      await Promise.all(nums.map(n => saveOrderStatus(n, bulkStatus)));
+      setSelected(new Set());
+    } catch (err) {
+      console.error('Bulk save failed:', err);
+    } finally {
+      setBulkSaving(false);
+    }
+  }
+
+  function toggleSelect(orderNumber, e) {
+    e.stopPropagation();
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(orderNumber) ? next.delete(orderNumber) : next.add(orderNumber);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(o => o.order_number)));
+    }
+  }
+
+  function exportCSV() {
+    const headers = ['Order Number', 'Customer Name', 'WhatsApp', 'Date', 'Mode', 'Address', 'Region', 'Shipping (RM)', 'Items', 'Total (RM)', 'Status', 'AWB', 'Note'];
+    const rows = orders.map(o => {
+      const items = Array.isArray(o.items) ? o.items.map(i => `${i.name} x${i.qty}`).join('; ') : '';
+      return [
+        o.order_number,
+        o.customer_name || '',
+        o.customer_wa || '',
+        o.created_at ? new Date(o.created_at).toLocaleDateString('en-MY') : '',
+        o.mode || '',
+        (o.address || '').replace(/"/g, '""'),
+        o.region || '',
+        o.shipping_fee || 0,
+        items,
+        o.total || 0,
+        statuses[o.order_number] || 'pending',
+        awbs[o.order_number] || '',
+        (notes[o.order_number] || '').replace(/"/g, '""'),
+      ].map(v => `"${v}"`).join(',');
+    });
+    const csv = [headers.map(h => `"${h}"`).join(','), ...rows].join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `bitetime-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   }
 
   const q = searchQuery.trim().toLowerCase();
@@ -85,9 +171,14 @@ export default function OrderList({ lang }) {
   return (
     <div className="order-list-panel">
       <div className="order-list-header">
-        <div className="admin-title" style={{ marginBottom: 0 }}>
-          {t('All Orders', '全部订单')}
-          <span className="order-list-count">{orders.length}</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 0 }}>
+          <div className="admin-title" style={{ marginBottom: 0 }}>
+            {t('All Orders', '全部订单')}
+            <span className="order-list-count">{orders.length}</span>
+          </div>
+          <button className="export-btn" onClick={exportCSV}>
+            ↓ {t('Export CSV', '导出 CSV')}
+          </button>
         </div>
         <div className="order-list-search-row">
           <input
@@ -114,6 +205,45 @@ export default function OrderList({ lang }) {
         </div>
       </div>
 
+      {filtered.length > 0 && (
+        <div className="bulk-action-bar">
+          <label className="bulk-select-all">
+            <input
+              type="checkbox"
+              className="bulk-select-check"
+              checked={selected.size === filtered.length && filtered.length > 0}
+              onChange={toggleSelectAll}
+            />
+            {selected.size > 0
+              ? t(`${selected.size} selected`, `已选 ${selected.size} 单`)
+              : t('Select all', '全选')}
+          </label>
+          {selected.size > 0 && (
+            <>
+              <select
+                className="bulk-status-select"
+                value={bulkStatus}
+                onChange={e => setBulkStatus(e.target.value)}
+              >
+                {STATUS_OPTIONS.map(s => (
+                  <option key={s} value={s}>{t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}</option>
+                ))}
+              </select>
+              <button
+                className="bulk-apply-btn"
+                disabled={bulkSaving}
+                onClick={handleBulkStatusChange}
+              >
+                {bulkSaving ? t('Saving…', '保存中…') : t('Apply', '应用')}
+              </button>
+              <button className="bulk-clear-btn" onClick={() => setSelected(new Set())}>
+                {t('Clear', '清除')}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {filtered.length === 0 && (
         <div className="order-list-status">{t('No orders found.', '暂无订单。')}</div>
       )}
@@ -123,25 +253,37 @@ export default function OrderList({ lang }) {
           const status = statuses[order.order_number] || 'pending';
           const isOpen = expanded !== false && expanded === order.order_number;
           const items = Array.isArray(order.items) ? order.items : [];
+          const isSelected = selected.has(order.order_number);
           return (
-            <div key={order.order_number} className={'owner-order-card' + (isOpen ? ' open' : '')}>
-              <button
-                className="owner-order-header"
-                onClick={() => setExpanded(isOpen ? false : order.order_number)}
-              >
-                <div className="owner-order-left">
-                  <span className="owner-order-num">{order.order_number}</span>
-                  <span className="owner-order-customer">{order.customer_name || '—'}</span>
-                  <span className="owner-order-date">{formatDate(order.created_at)}</span>
-                </div>
-                <div className="owner-order-right">
-                  <span className={'order-status-badge status-' + status}>
-                    {t(STATUS_LABELS[status].en, STATUS_LABELS[status].zh)}
-                  </span>
-                  <span className="owner-order-total">RM {Number(order.total || 0).toFixed(2)}</span>
-                  <span className="order-accordion-chevron">{isOpen ? '▲' : '▼'}</span>
-                </div>
-              </button>
+            <div key={order.order_number} className={'owner-order-card' + (isOpen ? ' open' : '') + (isSelected ? ' selected-card' : '')}>
+              <div className="owner-order-header-wrap">
+                <label className="order-select-label" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    className="bulk-select-check"
+                    checked={isSelected}
+                    onChange={e => toggleSelect(order.order_number, e)}
+                  />
+                </label>
+                <button
+                  className="owner-order-header"
+                  style={{ flex: 1 }}
+                  onClick={() => setExpanded(isOpen ? false : order.order_number)}
+                >
+                  <div className="owner-order-left">
+                    <span className="owner-order-num">{order.order_number}</span>
+                    <span className="owner-order-customer">{order.customer_name || '—'}</span>
+                    <span className="owner-order-date">{formatDate(order.created_at)}</span>
+                  </div>
+                  <div className="owner-order-right">
+                    <span className={'order-status-badge status-' + status}>
+                      {t(STATUS_LABELS[status].en, STATUS_LABELS[status].zh)}
+                    </span>
+                    <span className="owner-order-total">RM {Number(order.total || 0).toFixed(2)}</span>
+                    <span className="order-accordion-chevron">{isOpen ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+              </div>
 
               {isOpen && (
                 <div className="owner-order-body">
@@ -232,6 +374,26 @@ export default function OrderList({ lang }) {
                       )}
                     </div>
                   )}
+
+                  <div className="owner-order-note-row">
+                    <div className="owner-order-detail-label">{t('Internal note', '内部备注')}</div>
+                    <textarea
+                      className="order-note-textarea"
+                      placeholder={t('Add a note (e.g. allergy info, packing instructions…)', '添加备注（如过敏信息、包装说明等…）')}
+                      value={noteInputs[order.order_number] || ''}
+                      onChange={e => setNoteInputs(prev => ({ ...prev, [order.order_number]: e.target.value }))}
+                    />
+                    <button
+                      className="note-save-btn"
+                      disabled={noteSaving === order.order_number}
+                      onClick={() => handleNoteSave(order.order_number)}
+                    >
+                      {noteSaving === order.order_number ? t('Saving…', '保存中…') : t('Save note', '保存备注')}
+                    </button>
+                    {notes[order.order_number] && noteInputs[order.order_number] === notes[order.order_number] && (
+                      <div style={{ fontSize: '12px', color: '#1A7A3A' }}>✓ {t('Note saved', '备注已保存')}</div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

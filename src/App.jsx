@@ -9,16 +9,18 @@ import OrderForm from './components/OrderForm';
 import CustomerSettings from './components/CustomerSettings';
 import VoucherPanel from './components/VoucherPanel';
 import OrderList from './components/OrderList';
+import SalesDashboard from './components/SalesDashboard';
 
 const OWNER_EMAIL = 'bitetimeandco@gmail.com';
 
 const OWNER_NAV = [
-  { key: 'home',     icon: '', label: 'Home',               labelZh: '主页' },
-  { key: 'orders',   icon: '', label: 'Orders',              labelZh: '订单' },
-  { key: 'menu',     icon: '', label: 'Menu & Settings',    labelZh: '菜单与设置' },
-  { key: 'users',    icon: '', label: 'Users',               labelZh: '用户' },
-  { key: 'vouchers', icon: '', label: 'Vouchers',            labelZh: '优惠券' },
-  { key: 'preview',  icon: '', label: 'Customer View',      labelZh: '顾客视图' },
+  { key: 'home',      icon: '', label: 'Home',             labelZh: '主页' },
+  { key: 'analytics', icon: '', label: 'Analytics',        labelZh: '数据分析' },
+  { key: 'orders',    icon: '', label: 'Orders',           labelZh: '订单' },
+  { key: 'menu',      icon: '', label: 'Menu & Settings',  labelZh: '菜单与设置' },
+  { key: 'users',     icon: '', label: 'Users',            labelZh: '用户' },
+  { key: 'vouchers',  icon: '', label: 'Vouchers',         labelZh: '优惠券' },
+  { key: 'preview',   icon: '', label: 'Customer View',    labelZh: '顾客视图' },
 ];
 
 export default function App() {
@@ -234,6 +236,7 @@ export default function App() {
             />
           )}
 
+          {ownerPage === 'analytics' && <SalesDashboard lang={lang} />}
           {ownerPage === 'orders' && <OrderList key={ordersKey} lang={lang} />}
           {ownerPage === 'users' && <UserList lang={lang} />}
           {ownerPage === 'vouchers' && <VoucherPanel lang={lang} />}

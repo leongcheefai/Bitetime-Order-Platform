@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { loadVouchers, createVoucher } from '../store';
+import { loadVouchers, createVoucher, deleteVoucher } from '../store';
 
 function generateCode() {
   return 'BITE-' + Math.random().toString(36).toUpperCase().slice(2, 8);
@@ -14,8 +14,11 @@ export default function VoucherPanel({ lang }) {
   const [discountType, setDiscountType] = useState('fixed');
   const [discountValue, setDiscountValue] = useState('');
   const [targetEmail, setTargetEmail] = useState('');
+  const [expiresAt, setExpiresAt] = useState('');
+  const [minOrder, setMinOrder] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [deleting, setDeleting] = useState(null);
 
   useEffect(() => {
     loadVouchers().then(v => { setVouchers(v); setLoading(false); });
@@ -32,6 +35,8 @@ export default function VoucherPanel({ lang }) {
       type: discountType,
       value: parseFloat(discountValue),
       email: targetEmail.trim().toLowerCase() || null,
+      expiresAt: expiresAt || null,
+      minOrder: minOrder ? parseFloat(minOrder) : null,
       used: false,
       createdAt: new Date().toISOString(),
     };
@@ -40,9 +45,19 @@ export default function VoucherPanel({ lang }) {
     setCode(generateCode());
     setDiscountValue('');
     setTargetEmail('');
+    setExpiresAt('');
+    setMinOrder('');
     setSaving(false);
     setSaveMsg(t('✓ Voucher created!', '✓ 优惠券已创建！'));
     setTimeout(() => setSaveMsg(''), 2500);
+  }
+
+  async function handleDelete(voucherCode) {
+    if (!window.confirm(t(`Delete voucher ${voucherCode}?`, `确定删除优惠券 ${voucherCode}？`))) return;
+    setDeleting(voucherCode);
+    const updated = await deleteVoucher(voucherCode);
+    setVouchers(updated);
+    setDeleting(null);
   }
 
   function formatDiscount(v) {
@@ -53,11 +68,14 @@ export default function VoucherPanel({ lang }) {
     return new Date(iso).toLocaleDateString('en-MY', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
+  function isExpired(v) {
+    return v.expiresAt && new Date(v.expiresAt) < new Date();
+  }
+
   return (
     <div className="admin-panel">
       <div className="admin-title">{t('Vouchers', '优惠券')}</div>
 
-      {/* Create voucher */}
       <div className="admin-section">
         <div className="admin-section-label">{t('Create voucher', '创建优惠券')}</div>
         <div className="voucher-fields">
@@ -90,6 +108,30 @@ export default function VoucherPanel({ lang }) {
           </div>
           <div className="voucher-field">
             <label>
+              {t('Minimum order (RM)', '最低消费 (RM)')}
+              <span>{t('optional', '选填')}</span>
+            </label>
+            <input
+              type="number" min="0" step="1"
+              placeholder={t('e.g. 30', '例如：30')}
+              value={minOrder}
+              onChange={e => setMinOrder(e.target.value)}
+            />
+          </div>
+          <div className="voucher-field">
+            <label>
+              {t('Expiry date', '到期日期')}
+              <span>{t('optional', '选填')}</span>
+            </label>
+            <input
+              type="date"
+              value={expiresAt}
+              min={new Date().toISOString().slice(0, 10)}
+              onChange={e => setExpiresAt(e.target.value)}
+            />
+          </div>
+          <div className="voucher-field">
+            <label>
               {t('Assign to customer email', '指定顾客邮箱')}
               <span>{t('optional — blank = any customer', '选填 — 空白表示任何顾客可用')}</span>
             </label>
@@ -102,7 +144,6 @@ export default function VoucherPanel({ lang }) {
         {saveMsg && <p className="save-msg">{saveMsg}</p>}
       </div>
 
-      {/* Voucher list */}
       <div className="admin-section">
         <div className="admin-section-label">{t('All vouchers', '所有优惠券')}</div>
         {loading ? (
@@ -112,16 +153,30 @@ export default function VoucherPanel({ lang }) {
         ) : (
           <div className="voucher-list">
             {vouchers.map((v, i) => (
-              <div key={i} className={'voucher-row' + (v.used ? ' used' : '')}>
+              <div key={i} className={'voucher-row' + (v.used || isExpired(v) ? ' used' : '')}>
                 <div className="voucher-code">{v.code}</div>
                 <div className="voucher-meta">
                   <span className="voucher-discount">{formatDiscount(v)}</span>
+                  {v.minOrder && <span className="voucher-minorder">min RM {v.minOrder}</span>}
                   {v.email && <span className="voucher-email">→ {v.email}</span>}
+                  {v.expiresAt && (
+                    <span className={isExpired(v) ? 'voucher-expiry expired' : 'voucher-expiry'}>
+                      {isExpired(v) ? t('Expired', '已过期') : t('Exp', '到期')} {formatDate(v.expiresAt)}
+                    </span>
+                  )}
                   <span className="voucher-date">{formatDate(v.createdAt)}</span>
                 </div>
-                <div className={'voucher-status' + (v.used ? ' used' : ' active')}>
-                  {v.used ? t('Used', '已使用') : t('Active', '有效')}
+                <div className={'voucher-status' + (v.used ? ' used' : isExpired(v) ? ' used' : ' active')}>
+                  {v.used ? t('Used', '已使用') : isExpired(v) ? t('Expired', '已过期') : t('Active', '有效')}
                 </div>
+                <button
+                  className="voucher-delete-btn"
+                  disabled={deleting === v.code}
+                  onClick={() => handleDelete(v.code)}
+                  title={t('Delete voucher', '删除优惠券')}
+                >
+                  {deleting === v.code ? '…' : '✕'}
+                </button>
               </div>
             ))}
           </div>

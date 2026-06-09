@@ -222,6 +222,28 @@ export async function markVoucherUsed(code) {
   return updated;
 }
 
+export async function deleteVoucher(code) {
+  const list = await loadVouchers();
+  const updated = list.filter(v => v.code !== code);
+  await saveVouchers(updated);
+  return updated;
+}
+
+export async function loadOrderNotes() {
+  const { data } = await supabase.from('settings').select('value').eq('key', 'order_notes').single();
+  return data?.value ?? {};
+}
+
+export async function saveOrderNote(orderNumber, note) {
+  const current = await loadOrderNotes();
+  const updated = { ...current };
+  if (note) updated[orderNumber] = note;
+  else delete updated[orderNumber];
+  const { error } = await supabase.from('settings').upsert({ key: 'order_notes', value: updated }, { onConflict: 'key' });
+  if (error) throw new Error(error.message);
+  return updated;
+}
+
 export async function loadDeliveryAddress(userId) {
   const local = loadDeliveryAddressLocal(userId);
   if (local) return local;
