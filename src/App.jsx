@@ -4,33 +4,33 @@ import { loadSettings, loadSettingsFromDB, onAuthChange, signOut, loadDeliveryAd
 import LoginView from './components/LoginView';
 import RegisterView from './components/RegisterView';
 import AdminPanel from './components/AdminPanel';
-import UserList from './components/UserList';
+import CustomerList from './components/CustomerList';
 import OrderForm from './components/OrderForm';
 import CustomerSettings from './components/CustomerSettings';
 import VoucherPanel from './components/VoucherPanel';
 import OrderList from './components/OrderList';
 import SalesDashboard from './components/SalesDashboard';
 
-const OWNER_EMAIL = 'bitetimeandco@gmail.com';
+const USER_EMAIL = 'bitetimeandco@gmail.com';
 
-const OWNER_NAV = [
+const USER_NAV = [
   { key: 'home',      icon: '', label: 'Home',             labelZh: '主页' },
   { key: 'analytics', icon: '', label: 'Analytics',        labelZh: '数据分析' },
   { key: 'orders',    icon: '', label: 'Orders',           labelZh: '订单' },
   { key: 'menu',      icon: '', label: 'Menu & Settings',  labelZh: '菜单与设置' },
-  { key: 'users',     icon: '', label: 'Users',            labelZh: '用户' },
+  { key: 'customers', icon: '', label: 'Customers',        labelZh: '顾客' },
   { key: 'vouchers',  icon: '', label: 'Vouchers',         labelZh: '优惠券' },
   { key: 'preview',   icon: '', label: 'Customer View',    labelZh: '顾客视图' },
 ];
 
 export default function App() {
-  const [user, setUser] = useState(undefined);
+  const [account, setAccount] = useState(undefined);
   const [lang, setLang] = useState('en');
   const [settings, setSettings] = useState(loadSettings);
   const [orderDone, setOrderDone] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState('');
   const [view, setView] = useState('login');
-  const [ownerPage, setOwnerPage] = useState('home');
+  const [userPage, setUserPage] = useState('home');
   const [ordersKey, setOrdersKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [accountSection, setAccountSection] = useState(null);
@@ -41,7 +41,7 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthChange(u => {
-      setUser(u);
+      setAccount(u);
       if (u) setSavedAddress(loadDeliveryAddressLocal(u.id));
     });
     return unsubscribe;
@@ -56,14 +56,14 @@ export default function App() {
   function handleLogout() {
     signOut();
     setOrderDone(false);
-    setOwnerPage('home');
+    setUserPage('home');
     setDrawerOpen(false);
   }
 
-  const isOwner = user?.email === OWNER_EMAIL;
-  const userName = user?.user_metadata?.name || user?.email || '';
+  const isUser = account?.email === USER_EMAIL;
+  const accountName = account?.user_metadata?.name || account?.email || '';
 
-  if (user === undefined) {
+  if (account === undefined) {
     return (
       <div className="form-wrap" style={{ textAlign: 'center', paddingTop: '4rem', color: '#aaa' }}>
         Loading…
@@ -71,7 +71,7 @@ export default function App() {
     );
   }
 
-  if (!user) {
+  if (!account) {
     if (view === 'register') return <RegisterView onLogin={() => setView('login')} onShowLogin={() => setView('login')} />;
     return <LoginView onLogin={() => {}} onShowRegister={() => setView('register')} />;
   }
@@ -99,7 +99,7 @@ export default function App() {
         </div>
         <div className="drawer-user">
           <div className="drawer-user-greeting">{t('Welcome back,', '欢迎回来，')}</div>
-          <div className="drawer-user-name">{userName}</div>
+          <div className="drawer-user-name">{accountName}</div>
         </div>
         <nav className="drawer-nav">
           {drawerNavItems.map(({ key, label }) => (
@@ -119,13 +119,13 @@ export default function App() {
     </>
   );
 
-  // ── Owner: Customer View (full-width, sidebar hidden) ──────────────────────
-  if (isOwner && ownerPage === 'preview') {
+  // ── User: Customer View (full-width, sidebar hidden) ──────────────────────
+  if (isUser && userPage === 'preview') {
     return (
       <>
         <div className={`form-wrap${accountSection ? ' form-wrap--wide' : ''}`} style={{ position: 'relative' }}>
-          <div className="preview-back-pill" onClick={() => { setOwnerPage('home'); setDrawerOpen(false); setOrderDone(false); }}>
-            ← {t('Back to Owner View', '返回店主视图')}
+          <div className="preview-back-pill" onClick={() => { setUserPage('home'); setDrawerOpen(false); setOrderDone(false); }}>
+            ← {t('Back to User View', '返回用户视图')}
           </div>
 
           <div className="cust-topbar">
@@ -143,7 +143,7 @@ export default function App() {
               <span className="reset-link" style={{ display: 'inline-block', marginBottom: '1.25rem' }} onClick={() => setAccountSection(null)}>
                 {t('← Back to Order', '← 返回订单')}
               </span>
-              <CustomerSettings user={user} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
+              <CustomerSettings user={account} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
             </>
           ) : (
             <>
@@ -160,7 +160,7 @@ export default function App() {
                   <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
                 </div>
               ) : (
-                <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={user} savedAddress={savedAddress} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
+                <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={account} savedAddress={savedAddress} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
               )}
             </>
           )}
@@ -170,24 +170,24 @@ export default function App() {
     );
   }
 
-  // ── Owner layout ────────────────────────────────────────────────────────────
-  if (isOwner) {
+  // ── User layout ────────────────────────────────────────────────────────────
+  if (isUser) {
     return (
-      <div className="owner-layout">
+      <div className="user-layout">
         {/* SIDEBAR */}
-        <aside className="owner-sidebar">
+        <aside className="user-sidebar">
           <div className="sidebar-brand">
             <div className="sidebar-logo">B&amp;C</div>
             <div className="sidebar-title">Bitetime</div>
-            <div className="sidebar-role">{t('Owner', '店主')}</div>
+            <div className="sidebar-role">{t('User', '用户')}</div>
           </div>
 
           <nav className="sidebar-nav">
-            {OWNER_NAV.map(item => (
+            {USER_NAV.map(item => (
               <button
                 key={item.key}
-                className={'sidebar-nav-item' + (ownerPage === item.key ? ' active' : '')}
-                onClick={() => { setOwnerPage(item.key); setOrderDone(false); if (item.key === 'orders') setOrdersKey(k => k + 1); }}
+                className={'sidebar-nav-item' + (userPage === item.key ? ' active' : '')}
+                onClick={() => { setUserPage(item.key); setOrderDone(false); if (item.key === 'orders') setOrdersKey(k => k + 1); }}
               >
                 <span>{t(item.label, item.labelZh)}</span>
               </button>
@@ -195,20 +195,20 @@ export default function App() {
           </nav>
 
           <div className="sidebar-footer">
-            <div className="sidebar-user-name">{userName}</div>
+            <div className="sidebar-user-name">{accountName}</div>
             <button className="sidebar-signout" onClick={handleLogout}>{t('Sign out', '退出')}</button>
           </div>
         </aside>
 
         {/* MAIN CONTENT */}
-        <main className="owner-main">
+        <main className="user-main">
           {/* Lang switcher */}
           <div className="lang-switcher">
             <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
             <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
           </div>
 
-          {ownerPage === 'home' && (
+          {userPage === 'home' && (
             <>
               <div className="brand">
                 <h1>Bitetime &amp; Co.</h1>
@@ -223,12 +223,12 @@ export default function App() {
                   <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
                 </div>
               ) : (
-                <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} user={user} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
+                <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} user={account} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
               )}
             </>
           )}
 
-          {ownerPage === 'menu' && (
+          {userPage === 'menu' && (
             <AdminPanel
               settings={settings}
               lang={lang}
@@ -236,21 +236,21 @@ export default function App() {
             />
           )}
 
-          {ownerPage === 'analytics' && <SalesDashboard lang={lang} />}
-          {ownerPage === 'orders' && <OrderList key={ordersKey} lang={lang} />}
-          {ownerPage === 'users' && <UserList lang={lang} />}
-          {ownerPage === 'vouchers' && <VoucherPanel lang={lang} />}
+          {userPage === 'analytics' && <SalesDashboard lang={lang} />}
+          {userPage === 'orders' && <OrderList key={ordersKey} lang={lang} />}
+          {userPage === 'customers' && <CustomerList lang={lang} />}
+          {userPage === 'vouchers' && <VoucherPanel lang={lang} />}
         </main>
       </div>
     );
   }
 
-  // ── Regular user layout ─────────────────────────────────────────────────────
+  // ── Customer layout ─────────────────────────────────────────────────────────
   return (
     <>
       <div className={`form-wrap${accountSection ? ' form-wrap--wide' : ''}`}>
         <div className="auth-greeting">
-          Hi, <span>{userName}</span>&nbsp;
+          Hi, <span>{accountName}</span>&nbsp;
           <a onClick={handleLogout}>{t('Sign out', '退出')}</a>
         </div>
 
@@ -269,7 +269,7 @@ export default function App() {
             <span className="reset-link" style={{ display: 'inline-block', marginBottom: '1.25rem' }} onClick={() => setAccountSection(null)}>
               {t('← Back to Order', '← 返回订单')}
             </span>
-            <CustomerSettings user={user} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
+            <CustomerSettings user={account} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
           </>
         ) : (
           <>
@@ -290,7 +290,7 @@ export default function App() {
                 key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)}
                 settings={settings}
                 lang={lang}
-                user={user}
+                user={account}
                 savedAddress={savedAddress}
                 onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }}
               />

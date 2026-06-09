@@ -255,8 +255,8 @@ export default function OrderList({ lang }) {
           const items = Array.isArray(order.items) ? order.items : [];
           const isSelected = selected.has(order.order_number);
           return (
-            <div key={order.order_number} className={'owner-order-card' + (isOpen ? ' open' : '') + (isSelected ? ' selected-card' : '')}>
-              <div className="owner-order-header-wrap">
+            <div key={order.order_number} className={'user-order-card' + (isOpen ? ' open' : '') + (isSelected ? ' selected-card' : '')}>
+              <div className="user-order-header-wrap">
                 <label className="order-select-label" onClick={e => e.stopPropagation()}>
                   <input
                     type="checkbox"
@@ -266,79 +266,79 @@ export default function OrderList({ lang }) {
                   />
                 </label>
                 <button
-                  className="owner-order-header"
+                  className="user-order-header"
                   style={{ flex: 1 }}
                   onClick={() => setExpanded(isOpen ? false : order.order_number)}
                 >
-                  <div className="owner-order-left">
-                    <span className="owner-order-num">{order.order_number}</span>
-                    <span className="owner-order-customer">{order.customer_name || '—'}</span>
-                    <span className="owner-order-date">{formatDate(order.created_at)}</span>
+                  <div className="user-order-left">
+                    <span className="user-order-num">{order.order_number}</span>
+                    <span className="user-order-customer">{order.customer_name || '—'}</span>
+                    <span className="user-order-date">{formatDate(order.created_at)}</span>
                   </div>
-                  <div className="owner-order-right">
+                  <div className="user-order-right">
                     <span className={'order-status-badge status-' + status}>
                       {t(STATUS_LABELS[status].en, STATUS_LABELS[status].zh)}
                     </span>
-                    <span className="owner-order-total">RM {Number(order.total || 0).toFixed(2)}</span>
+                    <span className="user-order-total">RM {Number(order.total || 0).toFixed(2)}</span>
                     <span className="order-accordion-chevron">{isOpen ? '▲' : '▼'}</span>
                   </div>
                 </button>
               </div>
 
               {isOpen && (
-                <div className="owner-order-body">
-                  <div className="owner-order-detail-grid">
+                <div className="user-order-body">
+                  <div className="user-order-detail-grid">
                     <div>
-                      <div className="owner-order-detail-label">{t('WhatsApp', 'WhatsApp')}</div>
-                      <div className="owner-order-detail-val">{order.customer_wa || '—'}</div>
+                      <div className="user-order-detail-label">{t('WhatsApp', 'WhatsApp')}</div>
+                      <div className="user-order-detail-val">{order.customer_wa || '—'}</div>
                     </div>
                     <div>
-                      <div className="owner-order-detail-label">{t('Mode', '取货方式')}</div>
-                      <div className="owner-order-detail-val" style={{ textTransform: 'capitalize' }}>{order.mode || '—'}</div>
+                      <div className="user-order-detail-label">{t('Mode', '取货方式')}</div>
+                      <div className="user-order-detail-val" style={{ textTransform: 'capitalize' }}>{order.mode || '—'}</div>
                     </div>
                     <div>
-                      <div className="owner-order-detail-label">{t('Preferred Date', '期望日期')}</div>
-                      <div className="owner-order-detail-val">{order.preferred_date || '—'}</div>
+                      <div className="user-order-detail-label">{t('Preferred Date', '期望日期')}</div>
+                      <div className="user-order-detail-val">{order.preferred_date || '—'}</div>
                     </div>
                     {order.address && (
                       <div style={{ gridColumn: '1 / -1' }}>
-                        <div className="owner-order-detail-label">{t('Address', '地址')}</div>
-                        <div className="owner-order-detail-val">{order.address}</div>
+                        <div className="user-order-detail-label">{t('Address', '地址')}</div>
+                        <div className="user-order-detail-val">{order.address}</div>
                       </div>
                     )}
                   </div>
 
-                  <div className="owner-order-items">
-                    <div className="owner-order-detail-label" style={{ marginBottom: '6px' }}>{t('Items', '产品')}</div>
+                  <div className="user-order-items">
+                    <div className="user-order-detail-label" style={{ marginBottom: '6px' }}>{t('Items', '产品')}</div>
                     {items.map((item, i) => (
-                      <div key={i} className="owner-order-item-row">
+                      <div key={i} className="user-order-item-row">
                         <span>{item.name}</span>
                         <span>×{item.qty}</span>
                         <span>RM {(item.price * item.qty).toFixed(2)}</span>
                       </div>
                     ))}
                     {order.shipping_fee > 0 && (
-                      <div className="owner-order-item-row shipping">
+                      <div className="user-order-item-row shipping">
                         <span>{t('Delivery', '运费')} ({order.region})</span>
                         <span></span>
                         <span>RM {Number(order.shipping_fee).toFixed(2)}</span>
                       </div>
                     )}
-                    <div className="owner-order-item-row total">
+                    <div className="user-order-item-row total">
                       <span>{t('Total', '总计')}</span>
                       <span></span>
                       <span>RM {Number(order.total || 0).toFixed(2)}</span>
                     </div>
                   </div>
 
-                  <div className="owner-order-status-row">
-                    <span className="owner-order-detail-label">{t('Update Status', '更新状态')}</span>
+                  <div className="user-order-status-row">
+                    <span className="user-order-detail-label">{t('Update Status', '更新状态')}</span>
                     {saveError && <span style={{ fontSize: '12px', color: '#c0392b' }}>{saveError}</span>}
-                    <div className="owner-status-btns">
+                    <div className="user-status-btns">
                       {STATUS_OPTIONS.map(s => (
                         <button
                           key={s}
-                          className={'owner-status-opt' + (status === s ? ' active status-' + s : '')}
+                          className={'user-status-opt' + (status === s ? ' active status-' + s : '')}
                           disabled={saving !== null && saving === order.order_number}
                           onClick={() => handleStatusChange(order.order_number, s)}
                         >
@@ -349,8 +349,8 @@ export default function OrderList({ lang }) {
                   </div>
 
                   {(status === 'ready' || awbs[order.order_number]) && (
-                    <div className="owner-order-awb-row">
-                      <div className="owner-order-detail-label">{t('Tracking / AWB Number', '追踪号码')}</div>
+                    <div className="user-order-awb-row">
+                      <div className="user-order-detail-label">{t('Tracking / AWB Number', '追踪号码')}</div>
                       <div className="awb-input-row">
                         <input
                           type="text"
@@ -375,8 +375,8 @@ export default function OrderList({ lang }) {
                     </div>
                   )}
 
-                  <div className="owner-order-note-row">
-                    <div className="owner-order-detail-label">{t('Internal note', '内部备注')}</div>
+                  <div className="user-order-note-row">
+                    <div className="user-order-detail-label">{t('Internal note', '内部备注')}</div>
                     <textarea
                       className="order-note-textarea"
                       placeholder={t('Add a note (e.g. allergy info, packing instructions…)', '添加备注（如过敏信息、包装说明等…）')}
