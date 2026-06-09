@@ -102,7 +102,15 @@ export default function App() {
           <div className="drawer-user-name">{accountName}</div>
         </div>
         <nav className="drawer-nav">
-          {drawerNavItems.map(({ key, label }) => (
+          {isUser ? USER_NAV.map(({ key, label, labelZh }) => (
+            <button
+              key={key}
+              className={'drawer-nav-btn' + (userPage === key ? ' active' : '')}
+              onClick={() => { setUserPage(key); setDrawerOpen(false); setOrderDone(false); if (key === 'orders') setOrdersKey(k => k + 1); }}
+            >
+              {t(label, labelZh)}
+            </button>
+          )) : drawerNavItems.map(({ key, label }) => (
             <button
               key={key}
               className={'drawer-nav-btn' + (accountSection === key ? ' active' : '')}
@@ -119,17 +127,19 @@ export default function App() {
     </>
   );
 
-  // ── User: Customer View (full-width, sidebar hidden) ──────────────────────
-  if (isUser && userPage === 'preview') {
+  // ── User (owner) layout ────────────────────────────────────────────────────
+  if (isUser) {
     return (
       <>
-        <div className={`form-wrap${accountSection ? ' form-wrap--wide' : ''}`} style={{ position: 'relative' }}>
-          <div className="preview-back-pill" onClick={() => { setUserPage('home'); setDrawerOpen(false); setOrderDone(false); }}>
-            ← {t('Back to User View', '返回用户视图')}
-          </div>
+        <div className="form-wrap form-wrap--wide">
+          {userPage === 'preview' && (
+            <div className="preview-back-pill" onClick={() => { setUserPage('home'); setDrawerOpen(false); setOrderDone(false); }}>
+              ← {t('Back to User View', '返回用户视图')}
+            </div>
+          )}
 
           <div className="cust-topbar">
-            <button className="hamburger-btn" onClick={() => setDrawerOpen(true)} aria-label="My Account">
+            <button className="hamburger-btn" onClick={() => setDrawerOpen(true)} aria-label="Navigation">
               <span /><span /><span />
             </button>
             <div className="lang-switcher">
@@ -138,14 +148,7 @@ export default function App() {
             </div>
           </div>
 
-          {accountSection ? (
-            <>
-              <span className="reset-link" style={{ display: 'inline-block', marginBottom: '1.25rem' }} onClick={() => setAccountSection(null)}>
-                {t('← Back to Order', '← 返回订单')}
-              </span>
-              <CustomerSettings user={account} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
-            </>
-          ) : (
+          {(userPage === 'home' || userPage === 'preview') && (
             <>
               <div className="brand">
                 <h1>Bitetime &amp; Co.</h1>
@@ -164,84 +167,18 @@ export default function App() {
               )}
             </>
           )}
-        </div>
-        {sideDrawer}
-      </>
-    );
-  }
-
-  // ── User layout ────────────────────────────────────────────────────────────
-  if (isUser) {
-    return (
-      <div className="user-layout">
-        {/* SIDEBAR */}
-        <aside className="user-sidebar">
-          <div className="sidebar-brand">
-            <div className="sidebar-logo">B&amp;C</div>
-            <div className="sidebar-title">Bitetime</div>
-            <div className="sidebar-role">{t('User', '用户')}</div>
-          </div>
-
-          <nav className="sidebar-nav">
-            {USER_NAV.map(item => (
-              <button
-                key={item.key}
-                className={'sidebar-nav-item' + (userPage === item.key ? ' active' : '')}
-                onClick={() => { setUserPage(item.key); setOrderDone(false); if (item.key === 'orders') setOrdersKey(k => k + 1); }}
-              >
-                <span>{t(item.label, item.labelZh)}</span>
-              </button>
-            ))}
-          </nav>
-
-          <div className="sidebar-footer">
-            <div className="sidebar-user-name">{accountName}</div>
-            <button className="sidebar-signout" onClick={handleLogout}>{t('Sign out', '退出')}</button>
-          </div>
-        </aside>
-
-        {/* MAIN CONTENT */}
-        <main className="user-main">
-          {/* Lang switcher */}
-          <div className="lang-switcher">
-            <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
-            <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
-          </div>
-
-          {userPage === 'home' && (
-            <>
-              <div className="brand">
-                <h1>Bitetime &amp; Co.</h1>
-                <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
-                <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
-              </div>
-              {orderDone ? (
-                <div className="success-box">
-                  <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
-                  {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
-                  <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
-                  <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
-                </div>
-              ) : (
-                <OrderForm key={JSON.stringify(settings.products)} settings={settings} lang={lang} user={account} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
-              )}
-            </>
-          )}
 
           {userPage === 'menu' && (
-            <AdminPanel
-              settings={settings}
-              lang={lang}
-              onSave={newSettings => setSettings(newSettings)}
-            />
+            <AdminPanel settings={settings} lang={lang} onSave={newSettings => setSettings(newSettings)} />
           )}
 
           {userPage === 'analytics' && <SalesDashboard lang={lang} />}
           {userPage === 'orders' && <OrderList key={ordersKey} lang={lang} />}
           {userPage === 'customers' && <CustomerList lang={lang} />}
           {userPage === 'vouchers' && <VoucherPanel lang={lang} />}
-        </main>
-      </div>
+        </div>
+        {sideDrawer}
+      </>
     );
   }
 
