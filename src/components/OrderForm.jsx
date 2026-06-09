@@ -160,61 +160,60 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     msg += `\n*Total: RM ${total}*`;
 
     try {
-      const res = await fetch(`https://api.telegram.org/bot${settings.tgToken}/sendMessage`, {
+      const items = Object.keys(selected).map(id => {
+        const p = getProduct(id);
+        return { id, name: p.name, qty: qty[id] || 0, price: p.price };
+      });
+      const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
+      const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
+      if (appliedVoucher) await markVoucherUsed(appliedVoucher.code);
+      await saveOrder({
+        order_number: orderNumber,
+        user_id: user?.id ?? null,
+        customer_name: custName,
+        customer_wa: custWa,
+        preferred_date: custDate || null,
+        mode,
+        address: mode === 'delivery' ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ') : null,
+        region,
+        shipping_fee: region ? (settings.shipping[region] || 0) : 0,
+        items,
+        total: computeTotal(),
+      });
+
+      if (user?.email && settings.ejsServiceId && settings.ejsTemplateId && settings.ejsPublicKey) {
+        const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${i.price * i.qty}`).join('\n');
+        const fullAddress = mode === 'delivery'
+          ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')
+          : null;
+        const orderDetails = mode === 'delivery'
+          ? `${orderSummary}\n\nDelivery address: ${fullAddress}`
+          : orderSummary;
+        emailjs.send(
+          settings.ejsServiceId,
+          settings.ejsTemplateId,
+          {
+            to_name: custName,
+            to_email: user.email,
+            order_number: orderNumber,
+            order_summary: orderDetails,
+            order_total: `RM ${computeTotal()}`,
+            order_type: mode === 'delivery' ? 'Delivery' : 'Self-pickup',
+          },
+          settings.ejsPublicKey,
+        ).catch(() => {});
+      }
+
+      // Telegram notify — best-effort, failure does not block order
+      fetch(`https://api.telegram.org/bot${settings.tgToken}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chat_id: settings.tgChatId, text: msg, parse_mode: 'Markdown' }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        const items = Object.keys(selected).map(id => {
-          const p = getProduct(id);
-          return { id, name: p.name, qty: qty[id] || 0, price: p.price };
-        });
-        const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
-        const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
-        if (appliedVoucher) await markVoucherUsed(appliedVoucher.code);
-        await saveOrder({
-          order_number: orderNumber,
-          user_id: user?.id ?? null,
-          customer_name: custName,
-          customer_wa: custWa,
-          preferred_date: custDate || null,
-          mode,
-          address: mode === 'delivery' ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ') : null,
-          region,
-          shipping_fee: region ? (settings.shipping[region] || 0) : 0,
-          items,
-          total: computeTotal(),
-        });
+      }).catch(() => {});
 
-        if (user?.email && settings.ejsServiceId && settings.ejsTemplateId && settings.ejsPublicKey) {
-          const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${i.price * i.qty}`).join('\n');
-          const fullAddress = mode === 'delivery'
-            ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')
-            : null;
-          const orderDetails = mode === 'delivery'
-            ? `${orderSummary}\n\nDelivery address: ${fullAddress}`
-            : orderSummary;
-          emailjs.send(
-            settings.ejsServiceId,
-            settings.ejsTemplateId,
-            {
-              to_name: custName,
-              to_email: user.email,
-              order_number: orderNumber,
-              order_summary: orderDetails,
-              order_total: `RM ${computeTotal()}`,
-              order_type: mode === 'delivery' ? 'Delivery' : 'Self-pickup',
-            },
-            settings.ejsPublicKey,
-          ).catch(() => {});
-        }
-
-        onSuccess(orderNumber);
-      } else { alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。')); }
+      onSuccess(orderNumber);
     } catch {
-      alert(t('Network error. Please check your connection.', '网络错误，请检查您的连接。'));
+      alert(t('Failed to send order. Please try again.', '发送订单失败，请重试。'));
     }
   }
 
