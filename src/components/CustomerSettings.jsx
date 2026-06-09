@@ -154,19 +154,40 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
             <p className="settings-hint">{t('No vouchers yet. Stay tuned for promotions!', '暂无优惠券，敬请期待！')}</p>
           ) : (
             <div className="voucher-list">
-              {myVouchers.map((v, i) => (
-                <div key={i} className={'voucher-row' + (v.used ? ' used' : '')}>
-                  <div className="voucher-code">{v.code}</div>
-                  <div className="voucher-meta">
-                    <span className="voucher-discount">
-                      {v.type === 'percent' ? `${v.value}% off` : `RM ${v.value} off`}
-                    </span>
+              {myVouchers.map((v, i) => {
+                const expired = !v.used && v.expiresAt && new Date(v.expiresAt) < new Date();
+                const statusClass = v.used ? ' used' : expired ? ' used' : ' active';
+                const statusLabel = v.used
+                  ? t('Used', '已使用')
+                  : expired
+                  ? t('Expired', '已过期')
+                  : t('Active', '有效');
+                return (
+                  <div key={i} className={'voucher-row' + (v.used || expired ? ' used' : '')}>
+                    <div className="voucher-code">{v.code}</div>
+                    <div className="voucher-meta">
+                      <span className="voucher-discount">
+                        {v.type === 'percent' ? `${v.value}% off` : `RM ${v.value} off`}
+                      </span>
+                      {v.minOrder && (
+                        <span className="voucher-minorder">
+                          {t(`Min. spend RM ${v.minOrder}`, `最低消费 RM ${v.minOrder}`)}
+                        </span>
+                      )}
+                      {v.expiresAt && (
+                        <span className={'voucher-expiry' + (expired ? ' expired' : '')}>
+                          {expired
+                            ? t(`Expired ${new Date(v.expiresAt).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}`, `已于 ${new Date(v.expiresAt).toLocaleDateString('zh-MY', { day: 'numeric', month: 'short', year: 'numeric' })} 过期`)
+                            : t(`Expires ${new Date(v.expiresAt).toLocaleDateString('en-MY', { day: 'numeric', month: 'short', year: 'numeric' })}`, `有效期至 ${new Date(v.expiresAt).toLocaleDateString('zh-MY', { day: 'numeric', month: 'short', year: 'numeric' })}`)}
+                        </span>
+                      )}
+                    </div>
+                    <div className={'voucher-status' + statusClass}>
+                      {statusLabel}
+                    </div>
                   </div>
-                  <div className={'voucher-status' + (v.used ? ' used' : ' active')}>
-                    {v.used ? t('Used', '已使用') : t('Active', '有效')}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
