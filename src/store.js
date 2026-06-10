@@ -59,6 +59,16 @@ export async function fetchProfileByUserId(userId) {
   return data;
 }
 
+export async function fetchProfileByEmail(email) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, email')
+    .eq('email', email.toLowerCase().trim())
+    .single();
+  if (error) return null;
+  return data;
+}
+
 export async function fetchAllProfiles() {
   const { data, error } = await supabase
     .from('profiles')
@@ -131,7 +141,10 @@ export async function saveSettingsToDB(settings) {
 
 export async function saveOrder(order) {
   const { error } = await supabase.from('orders').insert(order);
-  if (error) console.error('Failed to save order to Supabase:', error.message, error.code, error.details, error.hint);
+  if (error) {
+    console.error('Failed to save order to Supabase:', error.message, error.code, error.details, error.hint);
+    throw new Error(error.message);
+  }
 }
 
 export async function fetchUserOrders(userId) {

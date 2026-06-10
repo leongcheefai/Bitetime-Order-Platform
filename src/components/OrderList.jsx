@@ -1,8 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import emailjs from '@emailjs/browser';
-import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId } from '../store';
+import { DayPicker } from 'react-day-picker';
+import { format } from 'date-fns';
+import 'react-day-picker/dist/style.css';
+import { lookupPostcode } from '../postcodes';
+import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId, saveOrder, getNextOrderNumber, fetchProfileByEmail, fetchAllProfiles } from '../store';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
+const MY_STATES = ['Johor','Kedah','Kelantan','Melaka','Negeri Sembilan','Pahang','Perak','Perlis','Pulau Pinang','Sabah','Sarawak','Selangor','Terengganu','W.P. Kuala Lumpur','W.P. Labuan','W.P. Putrajaya'];
+const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
+
+const BLANK_FORM = { custName: '', custWa: '', custDate: '', mode: 'delivery', addrLine1: '', addrLine2: '', city: '', postcode: '', state: '', qty: {}, initStatus: 'pending' };
 
 const STATUS_LABELS = {
   pending:   { en: 'Pending',          zh: '待处理' },
@@ -32,6 +40,32 @@ export default function OrderList({ lang, settings = {} }) {
   const [selected, setSelected] = useState(new Set());
   const [bulkStatus, setBulkStatus] = useState('confirmed');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState(BLANK_FORM);
+  const [addDateObj, setAddDateObj] = useState(null);
+  const [showAddCal, setShowAddCal] = useState(false);
+  const addCalRef = useRef(null);
+  const [addSaving, setAddSaving] = useState(false);
+  const [addError, setAddError] = useState('');
+  const [linkedEmail, setLinkedEmail] = useState('');
+  const [linkedProfile, setLinkedProfile] = useState(null);
+  const [linkLooking, setLinkLooking] = useState(false);
+  const [linkMsg, setLinkMsg] = useState('');
+  const [allProfiles, setAllProfiles] = useState([]);
+  const [showEmailDrop, setShowEmailDrop] = useState(false);
+  const emailDropRef = useRef(null);
+
+  useEffect(() => {
+    const handler = (e) => { if (emailDropRef.current && !emailDropRef.current.contains(e.target)) setShowEmailDrop(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => { if (addCalRef.current && !addCalRef.current.contains(e.target)) setShowAddCal(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   useEffect(() => {
     Promise.all([fetchAllOrders(), loadOrderStatuses(), loadOrderAWBs(), loadOrderNotes()]).then(([ords, stats, awbData, notesData]) => {
@@ -44,6 +78,79 @@ export default function OrderList({ lang, settings = {} }) {
       setLoading(false);
     });
   }, []);
+
+  const products = settings.products ?? [];
+
+  function addFormTotal() {
+    let total = 0;
+    products.forEach(p => { total += p.price * (addForm.qty[p.id] || 0); });
+    if (addForm.mode === 'delivery' && addForm.state) {
+      const region = EM_STATES.includes(addForm.state) ? 'EM' : 'WM';
+      total += settings.shipping?.[region] || 0;
+    }
+    return parseFloat(total.toFixed(2));
+  }
+
+  async function handleLookupEmail() {
+    if (!linkedEmail.trim()) return;
+    setLinkLooking(true);
+    setLinkMsg('');
+    setLinkedProfile(null);
+    const profile = await fetchProfileByEmail(linkedEmail);
+    if (profile) {
+      setLinkedProfile(profile);
+      setLinkMsg('');
+    } else {
+      setLinkMsg(t('No account found for this email.', '找不到此邮箱的账户。'));
+    }
+    setLinkLooking(false);
+  }
+
+  async function handleAddOrder(e) {
+    e.preventDefault();
+    const hasItems = products.some(p => (addForm.qty[p.id] || 0) > 0);
+    if (!addForm.custName.trim() || !addForm.custWa.trim()) { setAddError(t('Name and WhatsApp are required.', '姓名和WhatsApp为必填项。')); return; }
+    if (!hasItems) { setAddError(t('Add at least one item.', '请至少添加一件产品。')); return; }
+    if (addForm.mode === 'delivery' && (!addForm.addrLine1.trim() || !addForm.city.trim() || !addForm.postcode.trim() || !addForm.state)) {
+      setAddError(t('Fill in all delivery address fields.', '请填写所有送货地址字段。')); return;
+    }
+    setAddSaving(true);
+    setAddError('');
+    try {
+      const orderNumber = await getNextOrderNumber();
+      const items = products
+        .filter(p => (addForm.qty[p.id] || 0) > 0)
+        .map(p => ({ id: p.id, name: p.name, qty: addForm.qty[p.id], price: p.price }));
+      const region = addForm.mode === 'delivery' ? (EM_STATES.includes(addForm.state) ? 'EM' : 'WM') : null;
+      const shippingFee = region ? (settings.shipping?.[region] || 0) : 0;
+      const address = addForm.mode === 'delivery'
+        ? [addForm.addrLine1, addForm.addrLine2, addForm.city, addForm.postcode, addForm.state].filter(Boolean).join(', ')
+        : null;
+      const order = {
+        order_number: orderNumber,
+        user_id: linkedProfile?.id ?? null,
+        customer_name: addForm.custName.trim(),
+        customer_wa: addForm.custWa.trim(),
+        preferred_date: addForm.custDate || null,
+        mode: addForm.mode,
+        address,
+        region,
+        shipping_fee: shippingFee,
+        items,
+        total: addFormTotal(),
+      };
+      await saveOrder(order);
+      if (addForm.initStatus !== 'pending') await saveOrderStatus(orderNumber, addForm.initStatus);
+      setOrders(prev => [{ ...order, created_at: new Date().toISOString() }, ...prev]);
+      setStatuses(prev => ({ ...prev, [orderNumber]: addForm.initStatus }));
+      setShowAddModal(false);
+      setAddForm(BLANK_FORM);
+    } catch (err) {
+      setAddError(t('Failed to save order: ', '保存订单失败：') + err.message);
+    } finally {
+      setAddSaving(false);
+    }
+  }
 
   async function handleAwbSave(orderNumber) {
     setAwbSaving(orderNumber);
@@ -201,9 +308,14 @@ export default function OrderList({ lang, settings = {} }) {
             {t('All Orders', '全部订单')}
             <span className="order-list-count">{orders.length}</span>
           </div>
-          <button className="export-btn" onClick={exportCSV}>
-            ↓ {t('Export CSV', '导出 CSV')}
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="add-order-btn" onClick={() => { setAddForm(BLANK_FORM); setAddDateObj(null); setAddError(''); setLinkedEmail(''); setLinkedProfile(null); setLinkMsg(''); setShowEmailDrop(false); setShowAddModal(true); fetchAllProfiles().then(setAllProfiles).catch(() => {}); }}>
+              + {t('Add Order', '新增订单')}
+            </button>
+            <button className="export-btn" onClick={exportCSV}>
+              ↓ {t('Export CSV', '导出 CSV')}
+            </button>
+          </div>
         </div>
         <div className="order-list-search-row">
           <input
@@ -271,6 +383,176 @@ export default function OrderList({ lang, settings = {} }) {
 
       {filtered.length === 0 && (
         <div className="order-list-status">{t('No orders found.', '暂无订单。')}</div>
+      )}
+
+      {showAddModal && (
+        <div className="add-order-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="add-order-modal" onClick={e => e.stopPropagation()}>
+            <div className="add-order-modal-header">
+              <span>{t('Add Order Manually', '手动新增订单')}</span>
+              <button className="add-order-close" onClick={() => setShowAddModal(false)}>✕</button>
+            </div>
+            <form className="add-order-form" onSubmit={handleAddOrder}>
+              <div className="add-order-section-label">{t('Link to Customer Account', '关联客户账户')} <span style={{ fontWeight: 400, textTransform: 'none', fontSize: 11, color: '#A07070' }}>{t('(optional)', '（可选）')}</span></div>
+              <div className="add-order-link-row" ref={emailDropRef} style={{ position: 'relative' }}>
+                <input
+                  className="add-order-link-input"
+                  type="email"
+                  placeholder={t('Customer email address', '客户邮箱地址')}
+                  value={linkedEmail}
+                  onChange={e => { setLinkedEmail(e.target.value); setLinkedProfile(null); setLinkMsg(''); setShowEmailDrop(true); }}
+                  onFocus={() => setShowEmailDrop(true)}
+                  onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleLookupEmail())}
+                />
+                <button type="button" className="add-order-link-btn" disabled={linkLooking || !linkedEmail.trim()} onClick={handleLookupEmail}>
+                  {linkLooking ? '…' : t('Look up', '查找')}
+                </button>
+                {showEmailDrop && linkedEmail.trim() && (() => {
+                  const q = linkedEmail.toLowerCase();
+                  const matches = allProfiles.filter(p => p.email?.toLowerCase().includes(q) || p.name?.toLowerCase().includes(q)).slice(0, 6);
+                  if (!matches.length) return null;
+                  return (
+                    <div className="email-drop">
+                      {matches.map(p => (
+                        <button key={p.id} type="button" className="email-drop-item" onMouseDown={e => {
+                          e.preventDefault();
+                          setLinkedEmail(p.email);
+                          setLinkedProfile(p);
+                          setLinkMsg('');
+                          setShowEmailDrop(false);
+                        }}>
+                          <span className="email-drop-name">{p.name || '—'}</span>
+                          <span className="email-drop-email">{p.email}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+              {linkedProfile && (
+                <div className="add-order-link-found">
+                  ✓ {linkedProfile.name || linkedProfile.email} — {t('order will appear in their history', '订单将显示在其历史记录中')}
+                  <button type="button" className="add-order-link-clear" onClick={() => { setLinkedProfile(null); setLinkedEmail(''); }}>✕</button>
+                </div>
+              )}
+              {linkMsg && <div style={{ fontSize: 12, color: '#C0392B' }}>{linkMsg}</div>}
+
+              <div className="add-order-section-label">{t('Customer Info', '客户资料')}</div>
+              <div className="add-order-row">
+                <div className="add-order-field">
+                  <label>{t('Name', '姓名')} *</label>
+                  <input value={addForm.custName} onChange={e => setAddForm(f => ({ ...f, custName: e.target.value }))} placeholder={t('Customer name', '客户姓名')} />
+                </div>
+                <div className="add-order-field">
+                  <label>{t('WhatsApp', 'WhatsApp')} *</label>
+                  <input value={addForm.custWa} onChange={e => setAddForm(f => ({ ...f, custWa: e.target.value }))} placeholder="e.g. 0123456789" />
+                </div>
+              </div>
+              <div className="add-order-row">
+                <div className="add-order-field" ref={addCalRef} style={{ position: 'relative' }}>
+                  <label>{t('Preferred Date', '期望日期')}</label>
+                  <button type="button" className="date-picker-btn" onClick={() => setShowAddCal(v => !v)}>
+                    <span>{addDateObj ? format(addDateObj, 'dd MMM yyyy') : t('Select a date', '选择日期')}</span>
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2" width="14" height="13" rx="2" stroke="currentColor" strokeWidth="1.4"/><path d="M1 6h14" stroke="currentColor" strokeWidth="1.4"/><path d="M5 1v2M11 1v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>
+                  </button>
+                  {showAddCal && (
+                    <div className="date-picker-popup">
+                      <DayPicker
+                        mode="single"
+                        selected={addDateObj}
+                        onSelect={d => { setAddDateObj(d); setAddForm(f => ({ ...f, custDate: d ? format(d, 'yyyy-MM-dd') : '' })); setShowAddCal(false); }}
+                        disabled={d => { const min = new Date(); min.setHours(0,0,0,0); min.setDate(min.getDate() + (settings.leadDays ?? 3)); const allowed = settings.availableDays ?? [1,2,3,4,5,6]; const blocked = settings.blockedDates ?? []; return d < min || !allowed.includes(d.getDay()) || blocked.includes(format(d, 'yyyy-MM-dd')); }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="add-order-field">
+                  <label>{t('Mode', '取货方式')}</label>
+                  <select value={addForm.mode} onChange={e => setAddForm(f => ({ ...f, mode: e.target.value }))}>
+                    <option value="delivery">{t('Delivery', '送货')}</option>
+                    <option value="pickup">{t('Self-pickup', '自取')}</option>
+                  </select>
+                </div>
+              </div>
+
+              {addForm.mode === 'delivery' && (
+                <>
+                  <div className="add-order-section-label">{t('Delivery Address', '送货地址')}</div>
+                  <div className="add-order-field">
+                    <label>{t('Address Line 1', '地址第1行')} *</label>
+                    <input value={addForm.addrLine1} onChange={e => setAddForm(f => ({ ...f, addrLine1: e.target.value }))} placeholder={t('Street, unit no.', '街道、单位号')} />
+                  </div>
+                  <div className="add-order-field">
+                    <label>{t('Address Line 2', '地址第2行')}</label>
+                    <input value={addForm.addrLine2} onChange={e => setAddForm(f => ({ ...f, addrLine2: e.target.value }))} placeholder={t('Area, neighbourhood (optional)', '区域（可选）')} />
+                  </div>
+                  <div className="add-order-row">
+                    <div className="add-order-field">
+                      <label>{t('Postcode', '邮编')} *</label>
+                      <input value={addForm.postcode} onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setAddForm(f => {
+                          const next = { ...f, postcode: val };
+                          if (val.length === 5) {
+                            const result = lookupPostcode(val);
+                            if (result) { next.city = result.city; next.state = result.state; }
+                          }
+                          return next;
+                        });
+                      }} placeholder="e.g. 53000" maxLength={5} />
+                    </div>
+                    <div className="add-order-field">
+                      <label>{t('City', '城市')} *</label>
+                      <input value={addForm.city} onChange={e => setAddForm(f => ({ ...f, city: e.target.value }))} placeholder={t('City', '城市')} />
+                    </div>
+                  </div>
+                  <div className="add-order-field">
+                    <label>{t('State', '州属')} *</label>
+                    <select value={addForm.state} onChange={e => setAddForm(f => ({ ...f, state: e.target.value }))}>
+                      <option value="">{t('Select state…', '选择州属…')}</option>
+                      {MY_STATES.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              <div className="add-order-section-label">{t('Items', '产品')}</div>
+              {products.length === 0 && <div style={{ fontSize: 13, color: '#A07070' }}>{t('No products configured.', '未配置产品。')}</div>}
+              {products.map(p => (
+                <div key={p.id} className="add-order-item-row">
+                  <span className="add-order-item-name">{p.name} <span className="add-order-item-price">RM {p.price}</span></span>
+                  <div className="add-order-qty-ctrl">
+                    <button type="button" onClick={() => setAddForm(f => ({ ...f, qty: { ...f.qty, [p.id]: Math.max(0, (f.qty[p.id] || 0) - 1) } }))}>−</button>
+                    <span>{addForm.qty[p.id] || 0}</span>
+                    <button type="button" onClick={() => setAddForm(f => ({ ...f, qty: { ...f.qty, [p.id]: (f.qty[p.id] || 0) + 1 } }))}>+</button>
+                  </div>
+                </div>
+              ))}
+
+              <div className="add-order-section-label">{t('Order Status', '订单状态')}</div>
+              <div className="add-order-field">
+                <select value={addForm.initStatus} onChange={e => setAddForm(f => ({ ...f, initStatus: e.target.value }))}>
+                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}</option>)}
+                </select>
+              </div>
+
+              <div className="add-order-total">
+                {t('Total', '总计')}: RM {addFormTotal().toFixed(2)}
+                {addForm.mode === 'delivery' && addForm.state && (
+                  <span className="add-order-shipping-note"> ({t('incl. delivery', '含运费')})</span>
+                )}
+              </div>
+
+              {addError && <div className="add-order-error">{addError}</div>}
+              <div className="add-order-actions">
+                <button type="button" className="add-order-cancel" onClick={() => setShowAddModal(false)}>{t('Cancel', '取消')}</button>
+                <button type="submit" className="add-order-submit" disabled={addSaving}>
+                  {addSaving ? t('Saving…', '保存中…') : t('Save Order', '保存订单')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       <div className="order-list">

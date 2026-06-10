@@ -507,4 +507,51 @@ body:has(.user-layout) { padding: 1.25rem; }
 .voucher-expiry.expired { background: #F8D7DA; color: #721C24; }
 .voucher-delete-btn { background: none; border: 1px solid #C9A0A8; border-radius: 8px; color: #A07070; font-size: 12px; padding: 3px 9px; cursor: pointer; flex-shrink: 0; transition: all 0.15s; margin-left: auto; }
 .voucher-delete-btn:hover:not(:disabled) { background: #F8D7DA; color: #721C24; border-color: #721C24; }
+
+/* ── Add Order button ────────────────────────────────────────────────────── */
+.add-order-btn { padding: 6px 14px; border: 1.5px solid #7A1028; border-radius: 20px; background: #7A1028; color: #F2EAE0; font-size: 12px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; white-space: nowrap; font-weight: 500; }
+.add-order-btn:hover { background: #550A1A; border-color: #550A1A; }
+
+/* ── Add Order modal ─────────────────────────────────────────────────────── */
+.add-order-overlay { position: fixed; inset: 0; background: rgba(43,10,16,0.40); backdrop-filter: blur(2px); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.add-order-modal { background: #FBF6F0; border-radius: 18px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 48px rgba(43,10,16,0.25); display: flex; flex-direction: column; }
+.add-order-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 12px; border-bottom: 1px solid #E8D8D0; font-family: 'Lora', serif; font-size: 16px; font-weight: 600; color: #7A1028; }
+.add-order-close { background: none; border: none; font-size: 16px; color: #7A4F55; cursor: pointer; padding: 4px 8px; border-radius: 8px; }
+.add-order-close:hover { background: #EDE4D8; }
+.add-order-form { padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+.add-order-section-label { font-size: 11px; font-weight: 600; color: #7A4F55; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 4px; }
+.add-order-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.add-order-field { display: flex; flex-direction: column; gap: 4px; }
+.add-order-field label { font-size: 12px; color: #7A4F55; font-weight: 500; }
+.add-order-field input, .add-order-field select { padding: 8px 10px; border: 1.5px solid #C9A090; border-radius: 10px; font-size: 13px; font-family: 'DM Sans', sans-serif; background: #fff; color: #2B0A10; outline: none; transition: border-color 0.15s; }
+.add-order-field input:focus, .add-order-field select:focus { border-color: #7A1028; box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
+.add-order-item-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; background: #fff; border: 1px solid #E8D8D0; border-radius: 10px; }
+.add-order-item-name { font-size: 13px; color: #2B0A10; flex: 1; }
+.add-order-item-price { font-size: 12px; color: #7A4F55; margin-left: 6px; }
+.add-order-qty-ctrl { display: flex; align-items: center; gap: 8px; }
+.add-order-qty-ctrl button { width: 28px; height: 28px; border: 1.5px solid #C9A090; border-radius: 8px; background: #F2EAE0; color: #7A1028; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1; font-weight: 500; }
+.add-order-qty-ctrl button:hover { background: #EDE4D8; }
+.add-order-qty-ctrl span { font-size: 14px; font-weight: 600; color: #2B0A10; min-width: 20px; text-align: center; }
+.add-order-total { font-size: 15px; font-weight: 600; color: #7A1028; padding: 10px 0 2px; border-top: 1px solid #E8D8D0; margin-top: 4px; }
+.add-order-shipping-note { font-size: 12px; font-weight: 400; color: #7A4F55; }
+.add-order-error { font-size: 13px; color: #C0392B; background: #FDE8E8; border-radius: 8px; padding: 8px 12px; }
+.add-order-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.add-order-cancel { padding: 8px 18px; border: 1.5px solid #C9A090; border-radius: 20px; background: #FBF6F0; color: #7A4F55; font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+.add-order-cancel:hover { background: #EDE4D8; }
+.add-order-submit { padding: 8px 20px; background: #7A1028; color: #F2EAE0; border: none; border-radius: 20px; font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; cursor: pointer; transition: background 0.15s; }
+.add-order-submit:hover:not(:disabled) { background: #550A1A; }
+.add-order-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+.add-order-link-row { display: flex; gap: 8px; }
+.add-order-link-input { flex: 1; padding: 8px 10px; border: 1.5px solid #C9A090; border-radius: 10px; font-size: 13px; font-family: 'DM Sans', sans-serif; background: #fff; color: #2B0A10; outline: none; }
+.add-order-link-input:focus { border-color: #7A1028; box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
+.add-order-link-btn { padding: 8px 14px; background: #F2EAE0; border: 1.5px solid #C9A090; border-radius: 10px; font-size: 13px; font-family: 'DM Sans', sans-serif; color: #7A1028; cursor: pointer; white-space: nowrap; font-weight: 500; }
+.add-order-link-btn:hover:not(:disabled) { background: #EDE4D8; }
+.add-order-link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.add-order-link-found { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #1A7A3A; background: #DFF5E8; border: 1px solid #A8D8B5; border-radius: 10px; padding: 8px 12px; }
+.add-order-link-clear { background: none; border: none; color: #7A4F55; cursor: pointer; font-size: 14px; margin-left: auto; padding: 0 2px; }
+.email-drop { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: #fff; border: 1.5px solid #C9A090; border-radius: 12px; box-shadow: 0 6px 24px rgba(43,10,16,0.12); z-index: 400; overflow: hidden; }
+.email-drop-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: none; border: none; cursor: pointer; text-align: left; transition: background 0.1s; }
+.email-drop-item:hover { background: #F5E6E8; }
+.email-drop-name { font-size: 13px; font-weight: 500; color: #2B0A10; min-width: 80px; }
+.email-drop-email { font-size: 12px; color: #7A4F55; }
 .voucher-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
