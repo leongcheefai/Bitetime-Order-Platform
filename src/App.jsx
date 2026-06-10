@@ -226,7 +226,7 @@ export default function App() {
           )}
 
           {userPage === 'analytics' && <SalesDashboard lang={lang} />}
-          {userPage === 'orders' && <OrderList key={ordersKey} lang={lang} settings={settings} />}
+          {userPage === 'orders' && <OrderList key={ordersKey} lang={lang} settings={settings} user={account} />}
           {userPage === 'customers' && <CustomerList lang={lang} />}
           {userPage === 'vouchers' && <VoucherPanel lang={lang} />}
         </div>

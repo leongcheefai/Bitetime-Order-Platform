@@ -21,7 +21,7 @@ const STATUS_LABELS = {
   cancelled: { en: 'Cancelled',        zh: '已取消' },
 };
 
-export default function OrderList({ lang, settings = {} }) {
+export default function OrderList({ lang, settings = {}, user }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
   const [orders, setOrders] = useState([]);
   const [statuses, setStatuses] = useState({});
@@ -128,7 +128,7 @@ export default function OrderList({ lang, settings = {} }) {
         : null;
       const order = {
         order_number: orderNumber,
-        user_id: linkedProfile?.id ?? null,
+        user_id: linkedProfile?.id ?? user?.id ?? null,
         customer_name: addForm.custName.trim(),
         customer_wa: addForm.custWa.trim(),
         preferred_date: addForm.custDate || null,
