@@ -4,7 +4,7 @@ import { DayPicker } from 'react-day-picker';
 import { format } from 'date-fns';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
-import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId, saveOrder, getNextOrderNumber, fetchProfileByEmail, fetchAllProfiles } from '../store';
+import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId, saveOrder, getNextOrderNumber, fetchProfileByEmail, fetchAllProfiles, fetchProductSales } from '../store';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
 const MY_STATES = ['Johor','Kedah','Kelantan','Melaka','Negeri Sembilan','Pahang','Perak','Perlis','Pulau Pinang','Sabah','Sarawak','Selangor','Terengganu','W.P. Kuala Lumpur','W.P. Labuan','W.P. Putrajaya'];
@@ -81,9 +81,26 @@ export default function OrderList({ lang, settings = {}, user }) {
 
   const products = settings.products ?? [];
 
+  // ── Limited-quantity launch promo (mirrors OrderForm) ───────────────────────
+  const [sales, setSales] = useState([]);
+  useEffect(() => { fetchProductSales().then(setSales).catch(() => {}); }, []);
+  // Pieces sold of this product on/after its promo start date (past sales excluded)
+  function promoSold(p) {
+    // No explicit start → count from the start of today (past sales excluded)
+    const startMs = new Date((p.promoStart || new Date().toISOString().slice(0, 10)) + 'T00:00:00').getTime();
+    return sales.reduce((n, s) => (s.id === p.id && new Date(s.at).getTime() >= startMs ? n + s.qty : n), 0);
+  }
+  function promoLeft(p) { return Math.max(0, (p.promoLimit || 0) - promoSold(p)); }
+  function hasLimit(p) { return (p.promoLimit || 0) > 0; }
+  function hasEnd(p) { return !!p.promoEnd; }
+  function limitOk(p) { return !hasLimit(p) || promoLeft(p) > 0; }
+  function dateOk(p) { return !hasEnd(p) || new Date() <= new Date(p.promoEnd + 'T23:59:59'); }
+  function promoActive(p) { return (p.promoPrice || 0) > 0 && (hasLimit(p) || hasEnd(p)) && limitOk(p) && dateOk(p); }
+  function effPrice(p) { return promoActive(p) ? p.promoPrice : p.price; }
+
   function addFormTotal() {
     let total = 0;
-    products.forEach(p => { total += p.price * (addForm.qty[p.id] || 0); });
+    products.forEach(p => { total += effPrice(p) * (addForm.qty[p.id] || 0); });
     if (addForm.mode === 'delivery' && addForm.state) {
       const region = EM_STATES.includes(addForm.state) ? 'EM' : 'WM';
       total += settings.shipping?.[region] || 0;
@@ -120,7 +137,7 @@ export default function OrderList({ lang, settings = {}, user }) {
       const orderNumber = await getNextOrderNumber();
       const items = products
         .filter(p => (addForm.qty[p.id] || 0) > 0)
-        .map(p => ({ id: p.id, name: p.name, qty: addForm.qty[p.id], price: p.price }));
+        .map(p => ({ id: p.id, name: p.name, qty: addForm.qty[p.id], price: effPrice(p) }));
       const region = addForm.mode === 'delivery' ? (EM_STATES.includes(addForm.state) ? 'EM' : 'WM') : null;
       const shippingFee = region ? (settings.shipping?.[region] || 0) : 0;
       const address = addForm.mode === 'delivery'
@@ -520,7 +537,16 @@ export default function OrderList({ lang, settings = {}, user }) {
               {products.length === 0 && <div style={{ fontSize: 13, color: '#A07070' }}>{t('No products configured.', '未配置产品。')}</div>}
               {products.map(p => (
                 <div key={p.id} className="add-order-item-row">
-                  <span className="add-order-item-name">{p.name} <span className="add-order-item-price">RM {p.price}</span></span>
+                  <span className="add-order-item-name">{p.name}{' '}
+                    {promoActive(p) ? (
+                      <span className="add-order-item-price">
+                        <span style={{ textDecoration: 'line-through', color: '#A07070' }}>RM {p.price}</span>{' '}
+                        <span style={{ color: '#d6336c', fontWeight: 700 }}>RM {p.promoPrice}</span>
+                      </span>
+                    ) : (
+                      <span className="add-order-item-price">RM {p.price}</span>
+                    )}
+                  </span>
                   <div className="add-order-qty-ctrl">
                     <button type="button" onClick={() => setAddForm(f => ({ ...f, qty: { ...f.qty, [p.id]: Math.max(0, (f.qty[p.id] || 0) - 1) } }))}>−</button>
                     <span>{addForm.qty[p.id] || 0}</span>
