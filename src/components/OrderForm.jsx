@@ -381,8 +381,12 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         <div className="how-to-title">{t('How to place your order 🍪', '如何下单 🍪')}</div>
         <div className="how-to-steps">
           <div className="how-to-step"><span className="step-num">1</span><span>{t('Pick the cookies you want and set the quantity for each item.', '选择您想要的饼干，并设置每种产品的数量。')}</span></div>
-          <div className="how-to-step"><span className="step-num">2</span><span dangerouslySetInnerHTML={{ __html: t('Choose <strong>Self-pickup</strong> or <strong>Delivery</strong> — if delivery, fill in your delivery address.', '选择<strong>自取</strong>或<strong>送货</strong> — 若选送货，请填写您的送货地址。') }} /></div>
-          <div className="how-to-step"><span className="step-num">3</span><span>{t('Fill in your name, WhatsApp number, and preferred date.', '填写您的姓名、WhatsApp 号码和预计日期。')}</span></div>
+          <div className="how-to-step"><span className="step-num">2</span><span dangerouslySetInnerHTML={{ __html: samedayConfigured
+            ? t('Choose <strong>Self-pickup</strong>, <strong>Delivery</strong> or <strong>Same-day delivery</strong> — fill in your address for delivery.', '选择<strong>自取</strong>、<strong>送货</strong>或<strong>当天配送</strong> — 若需配送，请填写您的地址。')
+            : t('Choose <strong>Self-pickup</strong> or <strong>Delivery</strong> — if delivery, fill in your delivery address.', '选择<strong>自取</strong>或<strong>送货</strong> — 若选送货，请填写您的送货地址。') }} /></div>
+          <div className="how-to-step"><span className="step-num">3</span><span>{samedayConfigured
+            ? t('Fill in your name, WhatsApp number, and preferred date (or a time slot for same-day delivery).', '填写您的姓名、WhatsApp 号码和预计日期（当天配送则选择送达时段）。')
+            : t('Fill in your name, WhatsApp number, and preferred date.', '填写您的姓名、WhatsApp 号码和预计日期。')}</span></div>
           <div className="how-to-step"><span className="step-num">4</span><span dangerouslySetInnerHTML={{ __html: t('Tap <strong>Submit order</strong> — your order is sent to us instantly and we\'ll confirm shortly!', '点击<strong>提交订单</strong> — 您的订单将立即发送给我们，我们会尽快确认！') }} /></div>
         </div>
       </div>
