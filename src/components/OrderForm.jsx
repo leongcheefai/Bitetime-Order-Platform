@@ -31,6 +31,15 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   }, []);
   const sameday = settings.sameday;
   const samedayAvailable = !!(sameday?.enabled && sameday.originLat != null && sameday.originLng != null);
+  const sdEligible = (p) => p.sameday !== false;
+  // Same-day mode: drop ineligible products from the cart
+  useEffect(() => {
+    if (mode !== 'sameday') return;
+    const ineligible = Object.keys(selected).filter(id => { const p = getProduct(id); return p && !sdEligible(p); });
+    if (!ineligible.length) return;
+    setSelected(prev => { const n = { ...prev }; ineligible.forEach(id => delete n[id]); return n; });
+    setQty(prev => { const n = { ...prev }; ineligible.forEach(id => { n[id] = 0; }); return n; });
+  }, [mode, selected]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sdQuote, setSdQuote] = useState({ status: 'idle' });
   useEffect(() => {
     if (mode !== 'sameday' || postcode.length !== 5) { setSdQuote({ status: 'idle' }); return; }
@@ -147,6 +156,13 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     if (!Object.keys(selected).length) { alert(t('Please select at least one item!', '请至少选择一种产品！')); return; }
     if (!custName.trim() || !custWa.trim()) { alert(t('Please fill in your name and WhatsApp number.', '请填写您的姓名和 WhatsApp 号码。')); return; }
     if (needsAddress && (!addrLine1.trim() || !city.trim() || !postcode.trim() || !state)) { alert(t('Please fill in all required delivery fields.', '请填写所有必填的送货资料。')); return; }
+    if (mode === 'sameday') {
+      const bad = Object.keys(selected).map(getProduct).filter(p => p && !sdEligible(p));
+      if (bad.length) {
+        alert(t(`These items are not available for same-day delivery: ${bad.map(p => p.name).join(', ')}`, `以下产品不可当天配送：${bad.map(p => p.name).join('、')}`));
+        return;
+      }
+    }
     if (mode === 'sameday' && sdQuote.status !== 'ok') {
       alert(sdQuote.status === 'range'
         ? t('Sorry, your address is outside our same-day delivery range. Please choose regular delivery.', '抱歉，您的地址超出当天配送范围，请选择普通送货。')
@@ -269,12 +285,15 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       <div className="section">
         <div className="section-label">{t('Choose your cookies', '选择您的饼干')}</div>
         <div className="cookie-grid">
-          {settings.products.map(p => (
-            <div key={p.id} className={'cookie-card' + (selected[p.id] ? ' selected' : '')} onClick={() => toggleCookie(p.id)}>
+          {settings.products.map(p => {
+            const blocked = mode === 'sameday' && !sdEligible(p);
+            return (
+            <div key={p.id} className={'cookie-card' + (selected[p.id] ? ' selected' : '')} style={blocked ? { opacity: 0.45, pointerEvents: 'none' } : undefined} onClick={() => toggleCookie(p.id)}>
               <div className="cookie-check-badge">{selected[p.id] ? '✓' : ''}</div>
               <div className="cookie-name">{p.name}</div>
               <div className="cookie-desc">{p.desc}</div>
               <div className="cookie-price">RM {p.price} / {p.unit}</div>
+              {blocked && <div style={{ fontSize: '11px', color: '#b00020', fontWeight: 600 }}>{t('Not available for same-day delivery', '不可当天配送')}</div>}
               <div className="qty-row">
                 <label>{t('Qty', '数量')} ({p.unit}s)</label>
                 <div className="qty-ctrl">
@@ -284,7 +303,8 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

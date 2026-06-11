@@ -37,7 +37,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   }
 
   function addProduct() {
-    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc' }]);
+    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc', sameday: true }]);
   }
 
   function deleteProduct(i) {
@@ -125,11 +125,15 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
       {tab === 'menu' && (
         <div className="admin-section">
           <div className="admin-section-label">{t('Products', '产品')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>
+            {t('⚡ = available for same-day delivery. Untick products that need more lead time.', '⚡ = 可当天配送。需要更长准备时间的产品请取消勾选。')}
+          </p>
           <div className="product-row-header">
             <span>{t('Name', '名称')}</span>
             <span className="desc-head">{t('Description', '描述')}</span>
             <span>{t('Unit', '单位')}</span>
             <span>{t('Price (RM)', '价格 (RM)')}</span>
+            <span title={t('Available for same-day delivery', '可当天配送')}>⚡</span>
             <span></span>
           </div>
           <div className="product-list">
@@ -139,6 +143,9 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
                 <input type="text" className="desc-input" value={p.desc} placeholder="Description" onChange={e => updateProduct(i, 'desc', e.target.value)} />
                 <input type="text" className="unit-input" value={p.unit} placeholder="pc" onChange={e => updateProduct(i, 'unit', e.target.value)} />
                 <input type="number" className="price-input" value={p.price} min="0" step="0.50" onChange={e => updateProduct(i, 'price', parseFloat(e.target.value) || 0)} />
+                <span className="sameday-toggle" title={t('Available for same-day delivery', '可当天配送')}>
+                  <input type="checkbox" checked={p.sameday !== false} onChange={e => updateProduct(i, 'sameday', e.target.checked)} />
+                </span>
                 <button className="del-btn" onClick={() => deleteProduct(i)} title="Remove">×</button>
               </div>
             ))}
