@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { signUp } from '../store';
 
-export default function RegisterView({ onLogin, onShowLogin }) {
+export default function RegisterView({ onShowLogin }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

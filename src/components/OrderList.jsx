@@ -601,7 +601,7 @@ export default function OrderList({ lang, settings = {}, user }) {
                     </div>
                     <div>
                       <div className="user-order-detail-label">{t('Mode', '取货方式')}</div>
-                      <div className="user-order-detail-val" style={{ textTransform: 'capitalize' }}>{order.mode === 'sameday' ? t('Same-day delivery ⚡', '当天配送 ⚡') : order.mode || '—'}</div>
+                      <div className="user-order-detail-val" style={{ textTransform: 'capitalize' }}>{order.mode === 'sameday' ? t('Same-day delivery', '当天配送') : order.mode || '—'}</div>
                     </div>
                     <div>
                       <div className="user-order-detail-label">{t('Preferred Date', '期望日期')}</div>

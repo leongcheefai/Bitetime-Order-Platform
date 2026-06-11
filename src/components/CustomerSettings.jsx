@@ -60,7 +60,7 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
         setAddrWa(addr.wa || '');
       }
     });
-  }, [user.id, refreshKey]);
+  }, [user.id, user.email, refreshKey]);
 
   async function handleSave() {
     setSaving(true);
@@ -247,7 +247,7 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
                           <div className="summary-detail-grid">
                             {order.customer_name && <div className="summary-detail-cell"><span className="detail-label">{t('Name', '姓名')}</span><span className="detail-value">{order.customer_name}</span></div>}
                             {order.customer_wa && <div className="summary-detail-cell"><span className="detail-label">{t('Phone', '电话')}</span><span className="detail-value">{order.customer_wa}</span></div>}
-                            <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{order.mode === 'delivery' ? t('Delivery', '送货') : order.mode === 'sameday' ? t('Same-day delivery ⚡', '当天配送 ⚡') : t('Self-pickup', '自取')}</span></div>
+                            <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{order.mode === 'delivery' ? t('Delivery', '送货') : order.mode === 'sameday' ? t('Same-day delivery', '当天配送') : t('Self-pickup', '自取')}</span></div>
                             {order.preferred_date && <div className="summary-detail-cell"><span className="detail-label">{t('Preferred date', '预计日期')}</span><span className="detail-value">{order.preferred_date}</span></div>}
                             {order.address && (
                               <div className="summary-detail-cell" style={{ gridColumn: '1 / -1' }}>

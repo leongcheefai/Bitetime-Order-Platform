@@ -25,6 +25,10 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const [sdBase, setSdBase] = useState(sd.base ?? 7);
   const [sdPerKm, setSdPerKm] = useState(sd.perKm ?? 1.5);
   const [sdMaxKm, setSdMaxKm] = useState(sd.maxKm ?? 20);
+  const [sdCutoff, setSdCutoff] = useState(sd.cutoffHour ?? 14);
+  const [pickupAddress, setPickupAddress] = useState(settings.pickup?.address ?? '');
+  const [pickupHours, setPickupHours] = useState(settings.pickup?.hours ?? '');
+  const [paymentNote, setPaymentNote] = useState(settings.paymentNote ?? '');
   // address the current coords were geocoded from — re-geocode on save if it changed
   const [sdGeocodedFor, setSdGeocodedFor] = useState(sd.origin ?? '');
   const [saving, setSaving] = useState(false);
@@ -91,7 +95,10 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
           base: parseFloat(sdBase) || 0,
           perKm: parseFloat(sdPerKm) || 0,
           maxKm: parseFloat(sdMaxKm) || 0,
+          cutoffHour: parseInt(sdCutoff) || 14,
         },
+        pickup: { address: pickupAddress.trim(), hours: pickupHours.trim() },
+        paymentNote: paymentNote.trim(),
         tgToken: tgToken.trim() || DEFAULTS.tgToken,
         tgChatId: tgChatId.trim() || DEFAULTS.tgChatId,
         ejsServiceId: ejsServiceId.trim(),
@@ -204,7 +211,47 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
               <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Max distance — km (0 = no limit)', '最远距离 — 公里（0 = 无限制）')}</label>
               <input type="number" min="0" step="1" value={sdMaxKm} onChange={e => setSdMaxKm(e.target.value)} />
             </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Order cutoff hour (24h) — same-day hidden after this time', '截单时间（24小时制）— 过后隐藏当天配送选项')}</label>
+              <input type="number" min="0" max="23" step="1" value={sdCutoff} onChange={e => setSdCutoff(e.target.value)} />
+              <p style={{ fontSize: '11px', color: '#aaa', marginTop: '4px' }}>{t('e.g. 14 = orders after 2:00 PM cannot choose same-day delivery.', '例如 14 = 下午 2 点后下单无法选择当天配送。')}</p>
+            </div>
           </div>
+        </div>
+      )}
+
+      {tab === 'delivery' && (
+        <div className="admin-section" style={{ marginTop: '18px' }}>
+          <div className="admin-section-label">{t('Self-pickup info', '自取信息')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t('Shown to customers who choose self-pickup, and on the order success page.', '选择自取的顾客会看到这些信息，下单成功页也会显示。')}
+          </p>
+          <div className="admin-fields">
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Pickup address', '取货地址')}</label>
+              <input type="text" placeholder={t('e.g. 12 Jalan Example, 47301 Petaling Jaya', '例如：12 Jalan Example, 47301 Petaling Jaya')} value={pickupAddress} onChange={e => setPickupAddress(e.target.value)} />
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Pickup hours', '取货时间')}</label>
+              <input type="text" placeholder={t('e.g. Mon–Sat 10am–6pm', '例如：周一至周六 10am–6pm')} value={pickupHours} onChange={e => setPickupHours(e.target.value)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'delivery' && (
+        <div className="admin-section" style={{ marginTop: '18px' }}>
+          <div className="admin-section-label">{t('Payment instructions', '付款说明')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t('Shown on the order success page, e.g. bank transfer / TNG details. Leave empty to hide.', '显示在下单成功页，例如银行转账 / TNG 资料。留空则不显示。')}
+          </p>
+          <textarea
+            rows={3}
+            placeholder={t('e.g. Please transfer to Maybank 1234567890 (Bitetime & Co.) and send the receipt via WhatsApp.', '例如：请转账至 Maybank 1234567890 (Bitetime & Co.)，并通过 WhatsApp 发送收据。')}
+            value={paymentNote}
+            onChange={e => setPaymentNote(e.target.value)}
+            style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: '13px', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd' }}
+          />
         </div>
       )}
 

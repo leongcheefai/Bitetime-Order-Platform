@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import './App.css';
-import { loadSettings, loadSettingsFromDB, onAuthChange, signOut, loadDeliveryAddressLocal } from './store';
+import { loadSettings, loadSettingsFromDB, onAuthChange, signOut, loadDeliveryAddress } from './store';
 import LoginView from './components/LoginView';
 import RegisterView from './components/RegisterView';
 import AdminPanel from './components/AdminPanel';
@@ -29,6 +29,7 @@ export default function App() {
   const [settings, setSettings] = useState(loadSettings);
   const [orderDone, setOrderDone] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState('');
+  const [lastOrder, setLastOrder] = useState(null);
   const [view, setView] = useState('login');
   const [userPage, setUserPage] = useState('home');
   const [ordersKey, setOrdersKey] = useState(0);
@@ -44,7 +45,8 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = onAuthChange(u => {
       setAccount(u);
-      if (u) setSavedAddress(loadDeliveryAddressLocal(u.id));
+      // Local cache first (sync inside loadDeliveryAddress), falls back to DB so a new device still gets the saved address
+      if (u) loadDeliveryAddress(u.id).then(addr => { if (addr) setSavedAddress(addr); });
     });
     return unsubscribe;
   }, []);
@@ -74,8 +76,8 @@ export default function App() {
   }
 
   if (!account) {
-    if (view === 'register') return <RegisterView onLogin={() => setView('login')} onShowLogin={() => setView('login')} />;
-    return <LoginView onLogin={() => {}} onShowRegister={() => setView('register')} />;
+    if (view === 'register') return <RegisterView onShowLogin={() => setView('login')} />;
+    return <LoginView onShowRegister={() => setView('register')} />;
   }
 
   const drawerNavItems = [
@@ -87,6 +89,44 @@ export default function App() {
   function openSection(key) {
     setAccountSection(key);
     setDrawerOpen(false);
+  }
+
+  function renderSuccessBox(onViewHistory) {
+    return (
+      <div className="success-box">
+        <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
+        {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
+        {lastOrder && lastOrder.items?.length > 0 && (
+          <div className="success-summary">
+            {lastOrder.items.map((it, i) => (
+              <div key={i} className="summary-row"><span>{it.name} × {it.qty}</span><span>RM {it.price * it.qty}</span></div>
+            ))}
+            {lastOrder.shippingFee > 0 && (
+              <div className="summary-row"><span>{lastOrder.mode === 'sameday' ? t('Same-day delivery', '当天配送') : t('Delivery', '送货')}</span><span>RM {lastOrder.shippingFee}</span></div>
+            )}
+            <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {lastOrder.total}</span></div>
+          </div>
+        )}
+        {lastOrder?.mode === 'pickup' && (settings.pickup?.address || settings.pickup?.hours) && (
+          <div className="success-info-box">
+            <div className="success-info-title">📍 {t('Pickup location', '取货地点')}</div>
+            {settings.pickup.address && <div>{settings.pickup.address}</div>}
+            {settings.pickup.hours && <div>🕐 {settings.pickup.hours}</div>}
+          </div>
+        )}
+        {settings.paymentNote && (
+          <div className="success-info-box">
+            <div className="success-info-title">💳 {t('Payment', '付款方式')}</div>
+            <div style={{ whiteSpace: 'pre-line' }}>{settings.paymentNote}</div>
+          </div>
+        )}
+        <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
+          <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
+          {onViewHistory && <span className="reset-link" onClick={onViewHistory}>{t('View order history →', '查看历史订单 →')}</span>}
+        </div>
+      </div>
+    );
   }
 
   const sideDrawer = (
@@ -207,14 +247,11 @@ export default function App() {
                     <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
                   </div>
                   {orderDone ? (
-                    <div className="success-box">
-                      <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
-                      {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
-                      <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
-                      <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
-                    </div>
+                    renderSuccessBox(userPage === 'preview'
+                      ? () => { setOrderDone(false); setAccountSection('history'); }
+                      : () => { setOrderDone(false); setUserPage('orders'); setOrdersKey(k => k + 1); })
                   ) : (
-                    <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={account} savedAddress={savedAddress} onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }} />
+                    <OrderForm key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)} settings={settings} lang={lang} user={account} savedAddress={savedAddress} onSuccess={(num, info) => { setLastOrderNumber(num); setLastOrder(info); setOrderDone(true); setOrderCount(c => c + 1); }} />
                   )}
                 </>
               )}
@@ -269,12 +306,7 @@ export default function App() {
               <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
             </div>
             {orderDone ? (
-              <div className="success-box">
-                <h2>{t('Order placed! 🍪', '订单已提交！🍪')}</h2>
-                {lastOrderNumber && <p className="order-number-display">{t('Order No.', '订单号码')} <strong>{lastOrderNumber}</strong></p>}
-                <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
-                <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
-              </div>
+              renderSuccessBox(() => { setOrderDone(false); setAccountSection('history'); })
             ) : (
               <OrderForm
                 key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)}
@@ -282,7 +314,7 @@ export default function App() {
                 lang={lang}
                 user={account}
                 savedAddress={savedAddress}
-                onSuccess={(num) => { setLastOrderNumber(num); setOrderDone(true); setOrderCount(c => c + 1); }}
+                onSuccess={(num, info) => { setLastOrderNumber(num); setLastOrder(info); setOrderDone(true); setOrderCount(c => c + 1); }}
               />
             )}
           </>

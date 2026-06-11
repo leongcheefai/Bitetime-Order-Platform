@@ -556,3 +556,23 @@ body:has(.user-layout) { padding: 1.25rem; }
 .email-drop-name { font-size: 13px; font-weight: 500; color: #2B0A10; min-width: 80px; }
 .email-drop-email { font-size: 12px; color: #7A4F55; }
 .voucher-delete-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Order form: inline validation, pickup info, sticky total bar ── */
+.field-err { font-size: 12px; color: #C0392B; margin: 4px 0 6px; font-weight: 500; }
+.submit-btn:disabled, .sticky-submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.pickup-info-box { margin-top: 10px; padding: 10px 14px; background: #FBF6F0; border: 1.5px solid #D9C8BC; border-radius: 10px; }
+.pickup-info-title { font-size: 13px; font-weight: 600; color: #7A1028; margin-bottom: 4px; }
+.pickup-info-line { font-size: 13px; color: #5A3A40; line-height: 1.5; }
+
+.sticky-total-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 90; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: #FBF6F0; border-top: 1px solid #D9C8BC; box-shadow: 0 -4px 20px rgba(43,10,16,0.10); }
+.sticky-total-amount { display: flex; flex-direction: column; line-height: 1.2; }
+.sticky-total-label { font-size: 11px; color: #7A4F55; }
+.sticky-total-value { font-size: 17px; font-weight: 700; color: #7A1028; }
+.sticky-submit-btn { padding: 11px 22px; background: #7A1028; color: #F2EAE0; border: none; border-radius: 10px; font-size: 14px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+.sticky-submit-btn:hover { background: #550A1A; }
+body:has(.sticky-total-bar) .form-wrap { padding-bottom: 80px; }
+
+.success-summary { max-width: 360px; margin: 0 auto 1.25rem; text-align: left; padding: 12px 16px; background: #FBF6F0; border: 1.5px solid #D9C8BC; border-radius: 10px; }
+.success-info-box { max-width: 360px; margin: 0 auto 1rem; text-align: left; padding: 10px 14px; background: #FBF6F0; border: 1.5px solid #D9C8BC; border-radius: 10px; font-size: 13px; color: #5A3A40; line-height: 1.5; }
+.success-info-title { font-weight: 600; color: #7A1028; margin-bottom: 4px; }
