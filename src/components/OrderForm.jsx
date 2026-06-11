@@ -35,7 +35,10 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   const nowHour = new Date().getHours();
   const slotOpen = (s) => nowHour < (s.cutoff ?? 24);
   const sdAvailableSlots = sdSlots.filter(slotOpen);
-  const samedayAvailable = !!(sameday?.enabled && sameday.originLat != null && sameday.originLng != null && sdAvailableSlots.length > 0);
+  const samedayConfigured = !!(sameday?.enabled && sameday.originLat != null && sameday.originLng != null);
+  const samedayAvailable = samedayConfigured && sdAvailableSlots.length > 0;
+  // Latest slot cutoff — same-day ordering stays open until the last slot closes
+  const lastCutoff = Math.max(...sdSlots.map(s => s.cutoff ?? 0));
   const [sdSlotRaw, setSdSlotRaw] = useState('');
   // Deselect a slot whose cutoff has passed while the page was open
   const sdSlot = sdAvailableSlots.some(s => s.label === sdSlotRaw) ? sdSlotRaw : '';
@@ -431,10 +434,22 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         <div className="radio-row">
           <div className={'radio-opt' + (mode === 'pickup' ? ' active' : '')} onClick={() => chooseMode('pickup')}>{t('Self-pickup', '自取')}</div>
           <div className={'radio-opt' + (mode === 'delivery' ? ' active' : '')} onClick={() => chooseMode('delivery')}>{t('Delivery', '送货')}</div>
-          {samedayAvailable && (
+          {samedayAvailable ? (
             <div className={'radio-opt' + (mode === 'sameday' ? ' active' : '')} onClick={() => chooseMode('sameday')}>{t('Same-day delivery', '当天配送')}</div>
+          ) : samedayConfigured && (
+            <div className="radio-opt" style={{ opacity: 0.45, cursor: 'not-allowed' }} title={t('Ordering for today has closed', '今日下单已截止')}>
+              {t('Same-day delivery', '当天配送')}
+            </div>
           )}
         </div>
+        {samedayConfigured && !samedayAvailable && (
+          <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
+            {t(
+              `Same-day delivery has closed for today — come back tomorrow before ${lastCutoff <= 12 ? lastCutoff : lastCutoff - 12}:00 ${lastCutoff < 12 ? 'AM' : 'PM'} to order for same-day delivery.`,
+              `今日当天配送已截单 — 明天${lastCutoff < 12 ? '上午' : '下午'} ${lastCutoff <= 12 ? lastCutoff : lastCutoff - 12} 点前下单即可当天送达。`
+            )}
+          </p>
+        )}
         {mode === 'sameday' && (
           <>
             <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
