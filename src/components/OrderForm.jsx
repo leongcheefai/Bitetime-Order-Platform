@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import emailjs from '@emailjs/browser';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
-import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber } from '../store';
+import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber, DEFAULTS } from '../store';
 import { quoteSameday } from '../geo';
 
 export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
@@ -30,9 +30,14 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     return () => document.removeEventListener('mousedown', handler);
   }, []);
   const sameday = settings.sameday;
-  const sdCutoffHour = sameday?.cutoffHour ?? 14;
-  const beforeCutoff = new Date().getHours() < sdCutoffHour;
-  const samedayAvailable = !!(sameday?.enabled && sameday.originLat != null && sameday.originLng != null && beforeCutoff);
+  const sdSlots = sameday?.slots?.length ? sameday.slots : DEFAULTS.sameday.slots;
+  const nowHour = new Date().getHours();
+  const slotOpen = (s) => nowHour < (s.cutoff ?? 24);
+  const sdAvailableSlots = sdSlots.filter(slotOpen);
+  const samedayAvailable = !!(sameday?.enabled && sameday.originLat != null && sameday.originLng != null && sdAvailableSlots.length > 0);
+  const [sdSlotRaw, setSdSlotRaw] = useState('');
+  // Deselect a slot whose cutoff has passed while the page was open
+  const sdSlot = sdAvailableSlots.some(s => s.label === sdSlotRaw) ? sdSlotRaw : '';
   // If same-day becomes unavailable (e.g. past cutoff) while selected, fall back to pickup
   const mode = modeRaw === 'sameday' && !samedayAvailable ? 'pickup' : modeRaw;
   const sdEligible = (p) => p.sameday !== false;
@@ -74,6 +79,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
   const itemsRef = useRef(null);
+  const modeRef = useRef(null);
   const addrRef = useRef(null);
   const detailsRef = useRef(null);
   const voucherRef = useRef(null);
@@ -196,6 +202,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       if (bad.length) {
         errs.items = t(`These items are not available for same-day delivery: ${bad.map(p => p.name).join(', ')}`, `以下产品不可当天配送：${bad.map(p => p.name).join('、')}`);
       }
+      if (!sdSlot) errs.slot = t('Please choose a delivery time slot.', '请选择送达时段。');
       if (!errs.address && sdQuote.status !== 'ok') {
         errs.address = sdQuote.status === 'range'
           ? t('Sorry, your address is outside our same-day delivery range. Please choose regular delivery.', '抱歉，您的地址超出当天配送范围，请选择普通送货。')
@@ -220,6 +227,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     setErrors(errs);
     if (Object.keys(errs).length) {
       const target = errs.items ? itemsRef.current
+        : errs.slot ? modeRef.current
         : errs.address ? addrRef.current
         : (errs.name || errs.wa || errs.date) ? detailsRef.current
         : voucherRef.current;
@@ -261,7 +269,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       const fee = sdQuote.fee;
       total += fee;
       const fullAddress = [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ');
-      msg += `\n*Same-day delivery (Lalamove/Grab, ~${sdQuote.km} km):* RM ${fee}\n*Address:* ${fullAddress}\n`;
+      msg += `\n*Same-day delivery (Lalamove/Grab, ~${sdQuote.km} km):* RM ${fee}\n*Time slot:* ${sdSlot}\n*Address:* ${fullAddress}\n`;
     } else {
       msg += `\n*Order type:* Self-pickup\n`;
     }
@@ -287,7 +295,10 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         customer_wa: custWa,
         preferred_date: effectiveDate || null,
         mode,
-        address: needsAddress ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ') : null,
+        // No delivery_slot column in the orders table, so the slot rides along in the address
+        address: needsAddress
+          ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ') + (mode === 'sameday' && sdSlot ? ` — ${sdSlot}` : '')
+          : null,
         region,
         shipping_fee: currentShippingFee(),
         items,
@@ -314,7 +325,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             order_number: orderNumber,
             order_summary: orderDetails,
             order_total: `RM ${computeTotal()}`,
-            order_type: mode === 'delivery' ? 'Delivery' : mode === 'sameday' ? 'Same-day delivery' : 'Self-pickup',
+            order_type: mode === 'delivery' ? 'Delivery' : mode === 'sameday' ? `Same-day delivery (${sdSlot})` : 'Self-pickup',
           },
           settings.ejsPublicKey,
         ).catch(() => {});
@@ -327,7 +338,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         body: JSON.stringify({ chat_id: settings.tgChatId, text: msg, parse_mode: 'Markdown' }),
       }).catch(() => {});
 
-      onSuccess(orderNumber, { items, total: computeTotal(), mode, shippingFee: currentShippingFee(), voucher: appliedVoucher ? appliedVoucher.code : null });
+      onSuccess(orderNumber, { items, total: computeTotal(), mode, slot: mode === 'sameday' ? sdSlot : null, shippingFee: currentShippingFee(), voucher: appliedVoucher ? appliedVoucher.code : null });
     } catch {
       alert(t('Failed to send order. Please try again. Your voucher has NOT been used.', '发送订单失败，请重试。您的优惠券尚未被使用。'));
     }
@@ -378,7 +389,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       </div>
 
       {/* DELIVERY MODE */}
-      <div className="section">
+      <div className="section" ref={modeRef}>
         <div className="section-label">{t('Delivery or self-pickup?', '送货或自取？')}</div>
         <div className="radio-row">
           <div className={'radio-opt' + (mode === 'pickup' ? ' active' : '')} onClick={() => chooseMode('pickup')}>{t('Self-pickup', '自取')}</div>
@@ -388,9 +399,28 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
           )}
         </div>
         {mode === 'sameday' && (
-          <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
-            {t('Delivered today via Lalamove / Grab Express. Fee is estimated by distance from our kitchen to your address.', '今天通过 Lalamove / Grab Express 配送。运费按从我们厨房到您地址的距离估算。')}
-          </p>
+          <>
+            <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
+              {t('Delivered today via Lalamove / Grab Express. Fee is estimated by distance from our kitchen to your address.', '今天通过 Lalamove / Grab Express 配送。运费按从我们厨房到您地址的距离估算。')}
+            </p>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: '#7a2828', margin: '10px 0 6px' }}>{t('Choose a delivery time slot', '选择送达时段')} *</div>
+            <div className="radio-row">
+              {sdSlots.map(s => {
+                const open = slotOpen(s);
+                return (
+                  <div
+                    key={s.label}
+                    className={'radio-opt' + (sdSlot === s.label ? ' active' : '')}
+                    style={!open ? { opacity: 0.45, pointerEvents: 'none' } : undefined}
+                    onClick={() => setSdSlotRaw(s.label)}
+                  >
+                    {s.label}{!open && ` (${t('closed', '已截单')})`}
+                  </div>
+                );
+              })}
+            </div>
+            {errors.slot && <p className="field-err">{errors.slot}</p>}
+          </>
         )}
         {mode === 'pickup' && (settings.pickup?.address || settings.pickup?.hours) && (
           <div className="pickup-info-box">
@@ -552,6 +582,9 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             {mode === 'sameday'
               ? <div className="summary-detail-cell"><span className="detail-label">{t('Delivery date', '配送日期')}</span><span className="detail-value">{t('Today', '今天')} ({format(new Date(), 'dd MMM')})</span></div>
               : custDate && <div className="summary-detail-cell"><span className="detail-label">{t('Preferred date', '预计日期')}</span><span className="detail-value">{custDate}</span></div>}
+            {mode === 'sameday' && sdSlot && (
+              <div className="summary-detail-cell"><span className="detail-label">{t('Time slot', '送达时段')}</span><span className="detail-value">{sdSlot}</span></div>
+            )}
             {needsAddress && (addrLine1 || city || postcode || state) && (
               <div className="summary-detail-cell" style={{ gridColumn: '1 / -1' }}>
                 <span className="detail-label">{t('Delivery address', '送货地址')}</span>

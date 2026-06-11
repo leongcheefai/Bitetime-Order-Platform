@@ -25,7 +25,10 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const [sdBase, setSdBase] = useState(sd.base ?? 7);
   const [sdPerKm, setSdPerKm] = useState(sd.perKm ?? 1.5);
   const [sdMaxKm, setSdMaxKm] = useState(sd.maxKm ?? 20);
-  const [sdCutoff, setSdCutoff] = useState(sd.cutoffHour ?? 14);
+  const [sdSlots, setSdSlots] = useState(() => (sd.slots?.length ? sd.slots : DEFAULTS.sameday.slots).map(s => ({ ...s })));
+  function updateSlot(i, field, value) {
+    setSdSlots(prev => prev.map((s, idx) => idx === i ? { ...s, [field]: value } : s));
+  }
   const [pickupAddress, setPickupAddress] = useState(settings.pickup?.address ?? '');
   const [pickupHours, setPickupHours] = useState(settings.pickup?.hours ?? '');
   const [paymentNote, setPaymentNote] = useState(settings.paymentNote ?? '');
@@ -95,7 +98,9 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
           base: parseFloat(sdBase) || 0,
           perKm: parseFloat(sdPerKm) || 0,
           maxKm: parseFloat(sdMaxKm) || 0,
-          cutoffHour: parseInt(sdCutoff) || 14,
+          slots: sdSlots
+            .map(s => ({ label: (s.label || '').trim(), cutoff: Math.min(23, Math.max(0, parseInt(s.cutoff) || 0)) }))
+            .filter(s => s.label),
         },
         pickup: { address: pickupAddress.trim(), hours: pickupHours.trim() },
         paymentNote: paymentNote.trim(),
@@ -212,9 +217,17 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
               <input type="number" min="0" step="1" value={sdMaxKm} onChange={e => setSdMaxKm(e.target.value)} />
             </div>
             <div className="admin-field full">
-              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Order cutoff hour (24h) — same-day hidden after this time', '截单时间（24小时制）— 过后隐藏当天配送选项')}</label>
-              <input type="number" min="0" max="23" step="1" value={sdCutoff} onChange={e => setSdCutoff(e.target.value)} />
-              <p style={{ fontSize: '11px', color: '#aaa', marginTop: '4px' }}>{t('e.g. 14 = orders after 2:00 PM cannot choose same-day delivery.', '例如 14 = 下午 2 点后下单无法选择当天配送。')}</p>
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Delivery time slots — customer picks one', '送达时段 — 顾客选择其一')}</label>
+              {sdSlots.map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <input type="text" placeholder={t('e.g. 10:00 AM – 12:00 PM', '例如 10:00 AM – 12:00 PM')} value={s.label} onChange={e => updateSlot(i, 'label', e.target.value)} style={{ flex: 1 }} />
+                  <span style={{ fontSize: '12px', color: '#888', whiteSpace: 'nowrap' }}>{t('cutoff', '截单')}</span>
+                  <input type="number" min="0" max="23" step="1" value={s.cutoff} onChange={e => updateSlot(i, 'cutoff', e.target.value)} style={{ width: '70px' }} />
+                </div>
+              ))}
+              <p style={{ fontSize: '11px', color: '#aaa', marginTop: '4px' }}>
+                {t('Each slot disappears after its cutoff hour (24h). e.g. cutoff 10 = slot no longer selectable from 10:00 AM. Customers can order any time before that — even early morning.', '每个时段过了截单时间（24小时制）就不可选。例如截单 10 = 早上 10 点起该时段不可选。顾客可以在截单前任何时间下单，包括清晨。')}
+              </p>
             </div>
           </div>
         </div>

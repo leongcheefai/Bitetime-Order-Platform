@@ -8,7 +8,15 @@ export const DEFAULTS = {
     { id: 'box',     name: 'Cookie box / gift set',  desc: 'Beautifully packed assortment',       price: 45, unit: 'box' },
   ],
   shipping: { WM: 8, EM: 18 },
-  sameday: { enabled: false, origin: '', originLat: null, originLng: null, base: 7, perKm: 1.5, maxKm: 20, cutoffHour: 14 },
+  sameday: {
+    enabled: false, origin: '', originLat: null, originLng: null, base: 7, perKm: 1.5, maxKm: 20,
+    // Each slot stays selectable until its cutoff hour (24h) passes
+    slots: [
+      { label: '10:00 AM – 12:00 PM', cutoff: 10 },
+      { label: '1:00 PM – 3:00 PM', cutoff: 13 },
+      { label: '4:00 PM – 6:00 PM', cutoff: 16 },
+    ],
+  },
   pickup: { address: '', hours: '' },
   paymentNote: '',
   availableDays: [1, 2, 3, 4, 5, 6],

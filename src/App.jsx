@@ -102,7 +102,7 @@ export default function App() {
               <div key={i} className="summary-row"><span>{it.name} × {it.qty}</span><span>RM {it.price * it.qty}</span></div>
             ))}
             {lastOrder.shippingFee > 0 && (
-              <div className="summary-row"><span>{lastOrder.mode === 'sameday' ? t('Same-day delivery', '当天配送') : t('Delivery', '送货')}</span><span>RM {lastOrder.shippingFee}</span></div>
+              <div className="summary-row"><span>{lastOrder.mode === 'sameday' ? `${t('Same-day delivery', '当天配送')}${lastOrder.slot ? ` (${lastOrder.slot})` : ''}` : t('Delivery', '送货')}</span><span>RM {lastOrder.shippingFee}</span></div>
             )}
             <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {lastOrder.total}</span></div>
           </div>
