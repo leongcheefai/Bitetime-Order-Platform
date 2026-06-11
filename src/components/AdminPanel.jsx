@@ -129,7 +129,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
     <div className="admin-panel">
       <div className="admin-title">
         <span>✏️</span>{' '}
-        {{ menu: t('Menu', '菜单'), delivery: t('Delivery', '送货费'), bot: t('Bot Settings', '机器人设置'), email: t('Email Settings', '邮件设置') }[tab]}
+        {{ menu: t('Menu', '菜单'), shipping: t('Delivery & Shipping', '送货费用'), pickup: t('Pickup & Payment', '自取与付款'), schedule: t('Order Schedule', '下单日期'), bot: t('Bot Settings', '机器人设置'), email: t('Email Settings', '邮件设置') }[tab]}
       </div>
 
       <div className="admin-tab-content">
@@ -166,7 +166,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         </div>
       )}
 
-      {tab === 'delivery' && (
+      {tab === 'shipping' && (
         <div className="admin-section">
           <div className="admin-section-label">{t('Delivery fees', '送货费')}</div>
           <div className="admin-fields">
@@ -182,7 +182,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         </div>
       )}
 
-      {tab === 'delivery' && (
+      {tab === 'shipping' && (
         <div className="admin-section" style={{ marginTop: '18px' }}>
           <div className="admin-section-label">{t('Same-day delivery (Lalamove / Grab Express)', '当天配送（Lalamove / Grab Express）')}</div>
           <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
@@ -233,8 +233,8 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         </div>
       )}
 
-      {tab === 'delivery' && (
-        <div className="admin-section" style={{ marginTop: '18px' }}>
+      {tab === 'pickup' && (
+        <div className="admin-section">
           <div className="admin-section-label">{t('Self-pickup info', '自取信息')}</div>
           <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
             {t('Shown to customers who choose self-pickup, and on the order success page.', '选择自取的顾客会看到这些信息，下单成功页也会显示。')}
@@ -252,7 +252,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         </div>
       )}
 
-      {tab === 'delivery' && (
+      {tab === 'pickup' && (
         <div className="admin-section" style={{ marginTop: '18px' }}>
           <div className="admin-section-label">{t('Payment instructions', '付款说明')}</div>
           <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
@@ -268,8 +268,8 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         </div>
       )}
 
-      {tab === 'delivery' && (
-        <div className="admin-section" style={{ marginTop: '18px' }}>
+      {tab === 'schedule' && (
+        <div className="admin-section">
           <div className="admin-section-label">{t('Available order days', '可下单日期')}</div>
           <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
             {t('Customers can only pick dates on the selected days.', '顾客只能选择已勾选的日期。')}
@@ -310,7 +310,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         </div>
       )}
 
-      {tab === 'delivery' && (
+      {tab === 'schedule' && (
         <div className="admin-section" style={{ marginTop: '18px' }}>
           <div className="admin-section-label">{t('Minimum lead time (days)', '最少提前天数')}</div>
           <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
@@ -327,8 +327,8 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         </div>
       )}
 
-      {tab === 'delivery' && (
-        <div className="admin-section" style={{ marginTop: '18px' }}>
+      {tab === 'schedule' && (
+        <div className="admin-section">
           <div className="admin-section-label">{t('Blocked dates', '封锁日期')}</div>
           <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
             {t('These specific dates will be unavailable (e.g. public holidays).', '这些日期将无法选择（例如公共假日）。')}

@@ -163,10 +163,22 @@ export default function App() {
                       {t('Menu', '菜单')}
                     </button>
                     <button
-                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'delivery' ? ' active' : '')}
-                      onClick={() => { setUserPage('menu'); setMenuTab('delivery'); setDrawerOpen(false); setOrderDone(false); }}
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'shipping' ? ' active' : '')}
+                      onClick={() => { setUserPage('menu'); setMenuTab('shipping'); setDrawerOpen(false); setOrderDone(false); }}
                     >
-                      {t('Delivery', '送货费')}
+                      {t('Delivery & Shipping', '送货费用')}
+                    </button>
+                    <button
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'pickup' ? ' active' : '')}
+                      onClick={() => { setUserPage('menu'); setMenuTab('pickup'); setDrawerOpen(false); setOrderDone(false); }}
+                    >
+                      {t('Pickup & Payment', '自取与付款')}
+                    </button>
+                    <button
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'schedule' ? ' active' : '')}
+                      onClick={() => { setUserPage('menu'); setMenuTab('schedule'); setDrawerOpen(false); setOrderDone(false); }}
+                    >
+                      {t('Order Schedule', '下单日期')}
                     </button>
                     <button
                       className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'bot' ? ' active' : '')}
