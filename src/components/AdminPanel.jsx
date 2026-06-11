@@ -44,7 +44,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   }
 
   function addProduct() {
-    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc', sameday: true }]);
+    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc', sameday: true, promoLabel: '', promoPrice: 0, promoLimit: 0, promoEnd: '' }]);
   }
 
   function deleteProduct(i) {
@@ -159,6 +159,18 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
                   <input type="checkbox" checked={p.sameday !== false} onChange={e => updateProduct(i, 'sameday', e.target.checked)} />
                 </span>
                 <button className="del-btn" onClick={() => deleteProduct(i)} title="Remove">×</button>
+                <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', color: '#A07070', paddingTop: '4px' }}>
+                  <span>🎉 {t('Promo', '优惠')}:</span>
+                  <input type="text" style={{ width: '120px' }} placeholder={t('name e.g. Launch', '名称 如 开张优惠')} value={p.promoLabel || ''} onChange={e => updateProduct(i, 'promoLabel', e.target.value)} />
+                  <span>{t('price RM', '优惠价 RM')}</span>
+                  <input type="number" min="0" step="0.50" style={{ width: '80px' }} value={p.promoPrice ?? 0} onChange={e => updateProduct(i, 'promoPrice', parseFloat(e.target.value) || 0)} />
+                  <span>{t('for first', '限量前')}</span>
+                  <input type="number" min="0" step="1" style={{ width: '70px' }} value={p.promoLimit ?? 0} onChange={e => updateProduct(i, 'promoLimit', parseInt(e.target.value) || 0)} />
+                  <span>{t('pcs', '个')}</span>
+                  <span>{t('or until', '或截止')}</span>
+                  <input type="date" style={{ width: '140px' }} value={p.promoEnd || ''} onChange={e => updateProduct(i, 'promoEnd', e.target.value)} />
+                  <span>{t('(limit 0 & no date = off)', '(限量 0 且无日期 = 关闭)')}</span>
+                </div>
               </div>
             ))}
           </div>

@@ -177,6 +177,19 @@ export async function fetchAllOrders() {
   return data ?? [];
 }
 
+// Total pieces sold per product id, summed across every order.
+// Used to drive limited-quantity launch promos ("first 100 pcs at promo price").
+export async function fetchProductSoldCounts() {
+  const orders = await fetchAllOrders();
+  const counts = {};
+  for (const o of orders) {
+    for (const item of (o.items || [])) {
+      if (item.id) counts[item.id] = (counts[item.id] || 0) + (item.qty || 0);
+    }
+  }
+  return counts;
+}
+
 export async function loadOrderStatuses() {
   const { data } = await supabase.from('settings').select('value').eq('key', 'order_statuses').single();
   return data?.value ?? {};

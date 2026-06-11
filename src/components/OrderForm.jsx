@@ -4,11 +4,12 @@ import { format } from 'date-fns';
 import emailjs from '@emailjs/browser';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
-import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber, DEFAULTS } from '../store';
+import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber, fetchProductSoldCounts, DEFAULTS } from '../store';
 import { quoteSameday } from '../geo';
 
 export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
+  const money = (n) => Number(n || 0).toFixed(2);
 
   const [selected, setSelected] = useState({});
   const [qty, setQty] = useState({});
@@ -118,6 +119,23 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
 
   function getProduct(id) { return settings.products.find(p => p.id === id); }
 
+  // ── Limited-quantity launch promo ───────────────────────────────────────────
+  const [soldCounts, setSoldCounts] = useState({});
+  useEffect(() => { fetchProductSoldCounts().then(setSoldCounts).catch(() => {}); }, []);
+  function promoLeft(p) { return Math.max(0, (p.promoLimit || 0) - (soldCounts[p.id] || 0)); }
+  function hasLimit(p) { return (p.promoLimit || 0) > 0; }
+  function hasEnd(p) { return !!p.promoEnd; }
+  function limitOk(p) { return !hasLimit(p) || promoLeft(p) > 0; }
+  function dateOk(p) { return !hasEnd(p) || new Date() <= new Date(p.promoEnd + 'T23:59:59'); }
+  function promoActive(p) { return (p.promoPrice || 0) > 0 && (hasLimit(p) || hasEnd(p)) && limitOk(p) && dateOk(p); }
+  function effPrice(p) { return promoActive(p) ? p.promoPrice : p.price; }
+  function promoTag(p) {
+    const parts = [];
+    if (hasLimit(p)) parts.push(t(`only ${promoLeft(p)}/${p.promoLimit} left`, `仅剩 ${promoLeft(p)}/${p.promoLimit} 个`));
+    if (hasEnd(p)) parts.push(t(`until ${p.promoEnd}`, `截止 ${p.promoEnd}`));
+    return parts.join(t(' · ', ' · '));
+  }
+
   const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
   const needsAddress = mode === 'delivery' || mode === 'sameday';
   function currentShippingFee() {
@@ -144,7 +162,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       errMsg = t('❌ This voucher has expired.', '❌ 此优惠券已过期。');
     } else if (v.minOrder) {
       let subtotal = 0;
-      Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) subtotal += p.price * (qty[id] || 0); });
+      Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) subtotal += effPrice(p) * (qty[id] || 0); });
       subtotal += currentShippingFee();
       if (subtotal < v.minOrder) {
         errMsg = t(`❌ Minimum order of RM ${v.minOrder} required.`, `❌ 需要最低消费 RM ${v.minOrder}。`);
@@ -178,7 +196,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     let total = 0;
     Object.keys(selected).forEach(id => {
       const p = getProduct(id); if (!p) return;
-      total += p.price * (qty[id] || 0);
+      total += effPrice(p) * (qty[id] || 0);
     });
     total += currentShippingFee();
     const discount = computeDiscount(total);
@@ -254,9 +272,9 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     let total = 0;
     Object.keys(selected).forEach(id => {
       const p = getProduct(id); if (!p) return;
-      const q = qty[id] || 0, sub = p.price * q;
+      const q = qty[id] || 0, sub = effPrice(p) * q;
       total += sub;
-      msg += `• ${p.name} × ${q} — RM ${sub}\n`;
+      msg += `• ${p.name} × ${q} — RM ${money(sub)}\n`;
     });
 
     if (mode === 'delivery') {
@@ -264,12 +282,12 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       const fee = settings.shipping[region] || 0;
       total += fee;
       const fullAddress = [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ');
-      msg += `\n*Delivery (${region}):* RM ${fee}\n*Address:* ${fullAddress}\n`;
+      msg += `\n*Delivery (${region}):* RM ${money(fee)}\n*Address:* ${fullAddress}\n`;
     } else if (mode === 'sameday') {
       const fee = sdQuote.fee;
       total += fee;
       const fullAddress = [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ');
-      msg += `\n*Same-day delivery (Lalamove/Grab, ~${sdQuote.km} km):* RM ${fee}\n*Time slot:* ${sdSlot}\n*Address:* ${fullAddress}\n`;
+      msg += `\n*Same-day delivery (Lalamove/Grab, ~${sdQuote.km} km):* RM ${money(fee)}\n*Time slot:* ${sdSlot}\n*Address:* ${fullAddress}\n`;
     } else {
       msg += `\n*Order type:* Self-pickup\n`;
     }
@@ -277,15 +295,15 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       const discountAmt = appliedVoucher.type === 'percent'
         ? parseFloat(((total * appliedVoucher.value) / 100).toFixed(2))
         : Math.min(appliedVoucher.value, total);
-      msg += `\n*Voucher (${appliedVoucher.code}):* −RM ${discountAmt}`;
+      msg += `\n*Voucher (${appliedVoucher.code}):* −RM ${money(discountAmt)}`;
       total = parseFloat((total - discountAmt).toFixed(2));
     }
-    msg += `\n*Total: RM ${total}*`;
+    msg += `\n*Total: RM ${money(total)}*`;
 
     try {
       const items = Object.keys(selected).map(id => {
         const p = getProduct(id);
-        return { id, name: p.name, qty: qty[id] || 0, price: p.price };
+        return { id, name: p.name, qty: qty[id] || 0, price: effPrice(p) };
       });
       const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
       await saveOrder({
@@ -309,7 +327,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       if (appliedVoucher) await markVoucherUsed(appliedVoucher.code).catch(() => {});
 
       if (user?.email && settings.ejsServiceId && settings.ejsTemplateId && settings.ejsPublicKey) {
-        const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${i.price * i.qty}`).join('\n');
+        const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${money(i.price * i.qty)}`).join('\n');
         const fullAddress = needsAddress
           ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')
           : null;
@@ -324,7 +342,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             to_email: user.email,
             order_number: orderNumber,
             order_summary: orderDetails,
-            order_total: `RM ${computeTotal()}`,
+            order_total: `RM ${money(computeTotal())}`,
             order_type: mode === 'delivery' ? 'Delivery' : mode === 'sameday' ? `Same-day delivery (${sdSlot})` : 'Self-pickup',
           },
           settings.ejsPublicKey,
@@ -372,7 +390,19 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
               <div className="cookie-check-badge">{selected[p.id] ? '✓' : ''}</div>
               <div className="cookie-name">{p.name}</div>
               <div className="cookie-desc">{p.desc}</div>
-              <div className="cookie-price">RM {p.price} / {p.unit}</div>
+              {promoActive(p) ? (
+                <>
+                  <div className="cookie-price">
+                    <span style={{ textDecoration: 'line-through', color: '#bbb', fontWeight: 400, marginRight: '6px' }}>RM {money(p.price)}</span>
+                    <span style={{ color: '#d6336c', fontWeight: 700 }}>RM {money(p.promoPrice)}</span> / {p.unit}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#d6336c', fontWeight: 600 }}>
+                    🎉 {p.promoLabel?.trim() || t('Promo', '特价')}{promoTag(p) ? ` — ${promoTag(p)}` : ''}
+                  </div>
+                </>
+              ) : (
+                <div className="cookie-price">RM {money(p.price)} / {p.unit}</div>
+              )}
               {blocked && <div style={{ fontSize: '11px', color: '#b00020', fontWeight: 600 }}>{t('Not available for same-day delivery', '不可当天配送')}</div>}
               <div className="qty-row">
                 <label>{t('Qty', '数量')} ({p.unit}s)</label>
@@ -477,7 +507,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             {mode === 'sameday' && postcode.length === 5 && (
               <p style={{ fontSize: '13px', margin: 0, color: sdQuote.status === 'ok' ? '#2e7d32' : sdQuote.status === 'loading' ? '#888' : '#b00020' }}>
                 {sdQuote.status === 'loading' && t('Calculating delivery fee…', '正在计算运费…')}
-                {sdQuote.status === 'ok' && t(`Estimated same-day delivery: RM ${sdQuote.fee} (~${sdQuote.km} km)`, `当天配送估价：RM ${sdQuote.fee}（约 ${sdQuote.km} 公里）`)}
+                {sdQuote.status === 'ok' && t(`Estimated same-day delivery: RM ${money(sdQuote.fee)} (~${sdQuote.km} km)`, `当天配送估价：RM ${money(sdQuote.fee)}（约 ${sdQuote.km} 公里）`)}
                 {sdQuote.status === 'range' && t(`Sorry, your address (~${sdQuote.km} km) is outside our same-day range. Please choose regular delivery.`, `抱歉，您的地址（约 ${sdQuote.km} 公里）超出当天配送范围，请选择普通送货。`)}
                 {sdQuote.status === 'failed' && t('Could not locate this postcode. Please double-check it.', '无法定位此邮政编码，请再检查一次。')}
               </p>
@@ -603,31 +633,31 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             {selectedIds.map(id => {
               const p = getProduct(id); if (!p) return null;
               const q = qty[id] || 0;
-              return <div key={id} className="summary-row"><span>{p.name} × {q} {p.unit}</span><span>RM {p.price * q}</span></div>;
+              return <div key={id} className="summary-row"><span>{p.name} × {q} {p.unit}</span><span>RM {money(effPrice(p) * q)}</span></div>;
             })}
             {mode === 'delivery' && state && (() => {
               const region = EM_STATES.includes(state) ? 'EM' : 'WM';
-              return <div className="summary-row"><span>{t('Delivery', '送货')} ({region})</span><span>RM {settings.shipping[region] || 0}</span></div>;
+              return <div className="summary-row"><span>{t('Delivery', '送货')} ({region})</span><span>RM {money(settings.shipping[region])}</span></div>;
             })()}
             {mode === 'sameday' && (
               <div className="summary-row">
                 <span>{t('Same-day delivery', '当天配送')}{sdQuote.status === 'ok' ? ` (~${sdQuote.km} km)` : ''}</span>
-                <span>{sdQuote.status === 'ok' ? `RM ${sdQuote.fee}` : sdQuote.status === 'loading' ? '…' : t('TBD', '待定')}</span>
+                <span>{sdQuote.status === 'ok' ? `RM ${money(sdQuote.fee)}` : sdQuote.status === 'loading' ? '…' : t('TBD', '待定')}</span>
               </div>
             )}
             {appliedVoucher && (() => {
               let sub = 0;
-              Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) sub += p.price * (qty[id] || 0); });
+              Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) sub += effPrice(p) * (qty[id] || 0); });
               sub += currentShippingFee();
               const disc = computeDiscount(sub);
               return (
                 <div className="summary-row discount">
                   <span>{appliedVoucher.code}</span>
-                  <span>− RM {disc}</span>
+                  <span>− RM {money(disc)}</span>
                 </div>
               );
             })()}
-            <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {computeTotal()}</span></div>
+            <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {money(computeTotal())}</span></div>
           </div>
         )}
       </div>
@@ -642,7 +672,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         <div className="sticky-total-bar">
           <div className="sticky-total-amount">
             <span className="sticky-total-label">{t('Total', '总计')}</span>
-            <span className="sticky-total-value">RM {computeTotal()}</span>
+            <span className="sticky-total-value">RM {money(computeTotal())}</span>
           </div>
           <button className="sticky-submit-btn" onClick={submitOrder} disabled={submitting}>
             {submitting ? t('Submitting…', '提交中…') : t('Submit order →', '提交订单 →')}

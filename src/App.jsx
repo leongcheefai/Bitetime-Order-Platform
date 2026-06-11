@@ -41,6 +41,7 @@ export default function App() {
   const [orderCount, setOrderCount] = useState(0);
 
   const t = (en, zh) => lang === 'zh' ? zh : en;
+  const money = (n) => Number(n || 0).toFixed(2);
 
   useEffect(() => {
     const unsubscribe = onAuthChange(u => {
@@ -99,12 +100,12 @@ export default function App() {
         {lastOrder && lastOrder.items?.length > 0 && (
           <div className="success-summary">
             {lastOrder.items.map((it, i) => (
-              <div key={i} className="summary-row"><span>{it.name} × {it.qty}</span><span>RM {it.price * it.qty}</span></div>
+              <div key={i} className="summary-row"><span>{it.name} × {it.qty}</span><span>RM {money(it.price * it.qty)}</span></div>
             ))}
             {lastOrder.shippingFee > 0 && (
-              <div className="summary-row"><span>{lastOrder.mode === 'sameday' ? `${t('Same-day delivery', '当天配送')}${lastOrder.slot ? ` (${lastOrder.slot})` : ''}` : t('Delivery', '送货')}</span><span>RM {lastOrder.shippingFee}</span></div>
+              <div className="summary-row"><span>{lastOrder.mode === 'sameday' ? `${t('Same-day delivery', '当天配送')}${lastOrder.slot ? ` (${lastOrder.slot})` : ''}` : t('Delivery', '送货')}</span><span>RM {money(lastOrder.shippingFee)}</span></div>
             )}
-            <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {lastOrder.total}</span></div>
+            <div className="summary-row total"><span>{t('Total', '总计')}</span><span>RM {money(lastOrder.total)}</span></div>
           </div>
         )}
         {lastOrder?.mode === 'pickup' && (settings.pickup?.address || settings.pickup?.hours) && (
