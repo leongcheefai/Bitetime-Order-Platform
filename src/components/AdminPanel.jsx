@@ -32,6 +32,8 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const [pickupAddress, setPickupAddress] = useState(settings.pickup?.address ?? '');
   const [pickupHours, setPickupHours] = useState(settings.pickup?.hours ?? '');
   const [paymentNote, setPaymentNote] = useState(settings.paymentNote ?? '');
+  const [igUrl, setIgUrl] = useState(settings.igUrl ?? '');
+  const [waNumber, setWaNumber] = useState(settings.waNumber ?? '');
   // address the current coords were geocoded from — re-geocode on save if it changed
   const [sdGeocodedFor, setSdGeocodedFor] = useState(sd.origin ?? '');
   const [saving, setSaving] = useState(false);
@@ -44,7 +46,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   }
 
   function addProduct() {
-    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc', sameday: true, promoLabel: '', promoPrice: 0, promoLimit: 0, promoStart: new Date().toISOString().slice(0, 10), promoEnd: '' }]);
+    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc', sameday: true, img: '', promoLabel: '', promoPrice: 0, promoLimit: 0, promoStart: new Date().toISOString().slice(0, 10), promoEnd: '' }]);
   }
 
   function deleteProduct(i) {
@@ -104,6 +106,8 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         },
         pickup: { address: pickupAddress.trim(), hours: pickupHours.trim() },
         paymentNote: paymentNote.trim(),
+        igUrl: igUrl.trim(),
+        waNumber: waNumber.trim().replace(/[^\d]/g, ''),
         tgToken: tgToken.trim() || DEFAULTS.tgToken,
         tgChatId: tgChatId.trim() || DEFAULTS.tgChatId,
         ejsServiceId: ejsServiceId.trim(),
@@ -159,6 +163,11 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
                   <input type="checkbox" checked={p.sameday !== false} onChange={e => updateProduct(i, 'sameday', e.target.checked)} />
                 </span>
                 <button className="del-btn" onClick={() => deleteProduct(i)} title="Remove">×</button>
+                <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', color: '#A07070', paddingTop: '4px' }}>
+                  <span>🖼️ {t('Photo URL', '图片链接')}:</span>
+                  <input type="text" style={{ flex: 1, minWidth: '200px' }} placeholder={t('https://… (leave empty for no photo)', 'https://…（留空则不显示图片）')} value={p.img || ''} onChange={e => updateProduct(i, 'img', e.target.value.trim())} />
+                  {p.img && <img src={p.img} alt="" style={{ width: '36px', height: '36px', objectFit: 'cover', borderRadius: '6px' }} />}
+                </div>
                 <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', color: '#A07070', paddingTop: '4px' }}>
                   <span>🎉 {t('Promo', '优惠')}:</span>
                   <input type="text" style={{ width: '120px' }} placeholder={t('name e.g. Launch', '名称 如 开张优惠')} value={p.promoLabel || ''} onChange={e => updateProduct(i, 'promoLabel', e.target.value)} />
@@ -279,6 +288,25 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
             onChange={e => setPaymentNote(e.target.value)}
             style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: '13px', padding: '8px 10px', borderRadius: '8px', border: '1.5px solid #ddd' }}
           />
+        </div>
+      )}
+
+      {tab === 'pickup' && (
+        <div className="admin-section" style={{ marginTop: '18px' }}>
+          <div className="admin-section-label">{t('Social & contact', '社交与联系')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t('Instagram link shows on the order success page. WhatsApp number adds a contact button for customers.', 'Instagram 链接显示在下单成功页。WhatsApp 号码会显示顾客联系按钮。')}
+          </p>
+          <div className="admin-fields">
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Instagram URL', 'Instagram 链接')}</label>
+              <input type="text" placeholder="https://instagram.com/bitetimeandco" value={igUrl} onChange={e => setIgUrl(e.target.value)} />
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('WhatsApp number (with country code)', 'WhatsApp 号码（含国码）')}</label>
+              <input type="text" placeholder="60123456789" value={waNumber} onChange={e => setWaNumber(e.target.value)} />
+            </div>
+          </div>
         </div>
       )}
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import './App.css';
-import { loadSettings, loadSettingsFromDB, onAuthChange, signOut, loadDeliveryAddress } from './store';
+import { loadSettings, loadSettingsFromDB, onAuthChange, signOut, loadDeliveryAddress, updatePassword } from './store';
 import LoginView from './components/LoginView';
 import RegisterView from './components/RegisterView';
 import AdminPanel from './components/AdminPanel';
@@ -30,7 +30,10 @@ export default function App() {
   const [orderDone, setOrderDone] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState('');
   const [lastOrder, setLastOrder] = useState(null);
-  const [view, setView] = useState('login');
+  const [view, setView] = useState('order'); // guests land on the menu; 'login'/'register' show auth pages
+  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [newPw, setNewPw] = useState('');
+  const [pwMsg, setPwMsg] = useState('');
   const [userPage, setUserPage] = useState('home');
   const [ordersKey, setOrdersKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -44,8 +47,10 @@ export default function App() {
   const money = (n) => Number(n || 0).toFixed(2);
 
   useEffect(() => {
-    const unsubscribe = onAuthChange(u => {
+    const unsubscribe = onAuthChange((u, event) => {
       setAccount(u);
+      if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
+      if (event === 'SIGNED_IN') setView('order');
       // Local cache first (sync inside loadDeliveryAddress), falls back to DB so a new device still gets the saved address
       if (u) loadDeliveryAddress(u.id).then(addr => { if (addr) setSavedAddress(addr); });
     });
@@ -63,6 +68,9 @@ export default function App() {
     setOrderDone(false);
     setUserPage('home');
     setDrawerOpen(false);
+    setAccountSection(null);
+    setSavedAddress(null);
+    setView('order');
   }
 
   const isUser = account?.email === USER_EMAIL;
@@ -76,9 +84,41 @@ export default function App() {
     );
   }
 
+  // Password recovery: user arrived from a reset-password email link
+  if (recoveryMode && account) {
+    return (
+      <div className="auth-wrap">
+        <div className="brand" style={{ marginBottom: '1.75rem' }}>
+          <h1>Bitetime &amp; Co.</h1>
+        </div>
+        <div className="auth-card">
+          <div className="auth-title">{t('Set a new password', '设置新密码')}</div>
+          {pwMsg && <div className="auth-error">{pwMsg}</div>}
+          <div className="auth-fields">
+            <div className="field">
+              <label>{t('New password', '新密码')}</label>
+              <input type="password" placeholder={t('At least 6 characters', '至少 6 个字符')} value={newPw} onChange={e => { setNewPw(e.target.value); setPwMsg(''); }} />
+            </div>
+          </div>
+          <button className="auth-btn" onClick={async () => {
+            if (newPw.length < 6) { setPwMsg(t('Password must be at least 6 characters.', '密码至少需要 6 个字符。')); return; }
+            try {
+              await updatePassword(newPw);
+              setRecoveryMode(false);
+              setNewPw('');
+            } catch (err) {
+              setPwMsg(err.message);
+            }
+          }}>{t('Save password', '保存密码')}</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Guests can browse and order; auth pages only when explicitly requested
   if (!account) {
-    if (view === 'register') return <RegisterView onShowLogin={() => setView('login')} />;
-    return <LoginView onShowRegister={() => setView('register')} />;
+    if (view === 'register') return <RegisterView onShowLogin={() => setView('login')} onBack={() => setView('order')} lang={lang} setLang={setLang} />;
+    if (view === 'login') return <LoginView onShowRegister={() => setView('register')} onBack={() => setView('order')} lang={lang} setLang={setLang} />;
   }
 
   const drawerNavItems = [
@@ -122,6 +162,35 @@ export default function App() {
           </div>
         )}
         <p>{t("Thank you! Your order has been sent to us. We'll reach out to you shortly to confirm.", '谢谢！您的订单已发送给我们，我们将尽快与您确认。')}</p>
+        {settings.igUrl && (
+          <p>
+            <a href={settings.igUrl} target="_blank" rel="noreferrer" style={{ color: '#d6336c', fontWeight: 600, textDecoration: 'none' }}>
+              📸 {t('Follow us on Instagram for new flavours & promos →', '关注我们的 Instagram，获取新口味和优惠 →')}
+            </a>
+          </p>
+        )}
+        {!account && (
+          <div className="success-info-box" style={{ textAlign: 'left' }}>
+            <div className="success-info-title">⭐ {t('Create a member account?', '注册会员账户？')}</div>
+            <ul style={{ margin: '6px 0 10px', paddingLeft: '18px', fontSize: '13px', lineHeight: 1.7 }}>
+              <li>{t('Exclusive member vouchers & discounts', '专属会员优惠券和折扣')}</li>
+              <li>{t('Order history — track all your orders', '历史订单 — 随时查看订单状态')}</li>
+              <li>{t('Saved delivery address — faster checkout next time', '地址记忆 — 下次下单更快')}</li>
+              <li>{t('Order confirmation sent to your email', '订单确认发送到您的邮箱')}</li>
+            </ul>
+            <p style={{ fontSize: '12px', color: '#888', margin: '0 0 10px' }}>
+              {t('A valid email is required — we’ll send a confirmation link to activate your account.', '需要有效的邮箱 — 我们会发送确认链接激活您的账户。')}
+            </p>
+            <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+              <button className="auth-btn" style={{ width: 'auto', padding: '8px 18px' }} onClick={() => setView('register')}>
+                {t('Create account', '注册账户')}
+              </button>
+              <span className="reset-link" style={{ alignSelf: 'center' }} onClick={() => setOrderDone(false)}>
+                {t('No thanks, continue as guest', '不用了，继续访客身份')}
+              </span>
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
           <span className="reset-link" onClick={() => setOrderDone(false)}>{t('← Place another order', '← 再下一单')}</span>
           {onViewHistory && <span className="reset-link" onClick={onViewHistory}>{t('View order history →', '查看历史订单 →')}</span>}
@@ -141,8 +210,14 @@ export default function App() {
           <button className="drawer-close" onClick={() => setDrawerOpen(false)}>✕</button>
         </div>
         <div className="drawer-user">
-          <div className="drawer-user-greeting">{t('Welcome back,', '欢迎回来，')}</div>
-          <div className="drawer-user-name">{accountName}</div>
+          {account ? (
+            <>
+              <div className="drawer-user-greeting">{t('Welcome back,', '欢迎回来，')}</div>
+              <div className="drawer-user-name">{accountName}</div>
+            </>
+          ) : (
+            <div className="drawer-user-greeting">{t('Ordering as guest', '访客下单中')}</div>
+          )}
         </div>
         <nav className="drawer-nav">
           {isUser && userPage !== 'preview' ? USER_NAV.map(({ key, label, labelZh }) => (
@@ -205,7 +280,7 @@ export default function App() {
               {t(label, labelZh)}
             </button>
             )
-          )) : drawerNavItems.map(({ key, label }) => (
+          )) : account ? drawerNavItems.map(({ key, label }) => (
             <button
               key={key}
               className={'drawer-nav-btn' + (accountSection === key ? ' active' : '')}
@@ -213,10 +288,19 @@ export default function App() {
             >
               {label}
             </button>
-          ))}
+          )) : (
+            <>
+              <button className="drawer-nav-btn" onClick={() => { setView('login'); setDrawerOpen(false); }}>{t('Sign in', '登录')}</button>
+              <button className="drawer-nav-btn" onClick={() => { setView('register'); setDrawerOpen(false); }}>{t('Create account', '注册账户')}</button>
+            </>
+          )}
         </nav>
         <div className="drawer-footer">
-          <button className="drawer-signout" onClick={handleLogout}>{t('Sign out', '退出登录')}</button>
+          {account ? (
+            <button className="drawer-signout" onClick={handleLogout}>{t('Sign out', '退出登录')}</button>
+          ) : (
+            <button className="drawer-signout" onClick={() => { setView('login'); setDrawerOpen(false); }}>{t('Member sign in', '会员登录')}</button>
+          )}
         </div>
       </div>
     </>
@@ -257,7 +341,7 @@ export default function App() {
                   <div className="brand">
                     <h1>Bitetime &amp; Co.</h1>
                     <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
-                    <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
+                    {!orderDone && <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>}
                   </div>
                   {orderDone ? (
                     renderSuccessBox(userPage === 'preview'
@@ -290,8 +374,14 @@ export default function App() {
     <>
       <div className={`form-wrap${accountSection ? ' form-wrap--wide' : ''}`}>
         <div className="auth-greeting">
-          Hi, <span>{accountName}</span>&nbsp;
-          <a onClick={handleLogout}>{t('Sign out', '退出')}</a>
+          {account ? (
+            <>
+              Hi, <span>{accountName}</span>&nbsp;
+              <a onClick={handleLogout}>{t('Sign out', '退出')}</a>
+            </>
+          ) : (
+            <a onClick={() => setView('login')}>{t('Member sign in / register', '会员登录 / 注册')}</a>
+          )}
         </div>
 
         <div className="cust-topbar">
@@ -316,10 +406,10 @@ export default function App() {
             <div className="brand">
               <h1>Bitetime &amp; Co.</h1>
               <div className="tagline">{t('Gift the Story, Keep the Feeling.', '送出故事，留住感动。')}</div>
-              <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>
+              {!orderDone && <div className="subtitle">{t("Place your order below — we'll confirm via WhatsApp!", '请在下方下单 — 我们将通过 WhatsApp 确认您的订单！')}</div>}
             </div>
             {orderDone ? (
-              renderSuccessBox(() => { setOrderDone(false); setAccountSection('history'); })
+              renderSuccessBox(account ? () => { setOrderDone(false); setAccountSection('history'); } : null)
             ) : (
               <OrderForm
                 key={JSON.stringify(settings.products) + JSON.stringify(savedAddress)}
@@ -331,6 +421,20 @@ export default function App() {
               />
             )}
           </>
+        )}
+        {(settings.waNumber || settings.igUrl) && (
+          <div style={{ textAlign: 'center', marginTop: '2rem', paddingBottom: '1rem', display: 'flex', justifyContent: 'center', gap: '16px', flexWrap: 'wrap', fontSize: '14px' }}>
+            {settings.waNumber && (
+              <a href={`https://wa.me/${settings.waNumber}`} target="_blank" rel="noreferrer" style={{ color: '#1da851', fontWeight: 600, textDecoration: 'none' }}>
+                💬 {t('WhatsApp us', 'WhatsApp 联系我们')}
+              </a>
+            )}
+            {settings.igUrl && (
+              <a href={settings.igUrl} target="_blank" rel="noreferrer" style={{ color: '#d6336c', fontWeight: 600, textDecoration: 'none' }}>
+                📸 Instagram
+              </a>
+            )}
+          </div>
         )}
       </div>
       {sideDrawer}

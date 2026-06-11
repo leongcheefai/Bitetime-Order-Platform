@@ -394,6 +394,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             return (
             <div key={p.id} className={'cookie-card' + (selected[p.id] ? ' selected' : '')} style={blocked ? { opacity: 0.45, pointerEvents: 'none' } : undefined} onClick={() => toggleCookie(p.id)}>
               <div className="cookie-check-badge">{selected[p.id] ? '✓' : ''}</div>
+              {p.img && <img className="cookie-img" src={p.img} alt={p.name} loading="lazy" style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '10px', marginBottom: '8px' }} />}
               <div className="cookie-name">{p.name}</div>
               <div className="cookie-desc">{p.desc}</div>
               {promoActive(p) ? (

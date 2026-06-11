@@ -93,6 +93,16 @@ export async function signOut() {
   await supabase.auth.signOut();
 }
 
+export async function resetPassword(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  if (error) throw error;
+}
+
+export async function updatePassword(newPassword) {
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+}
+
 export async function getCurrentUser() {
   const { data } = await supabase.auth.getUser();
   return data?.user ?? null;
@@ -113,7 +123,7 @@ export function onAuthChange(callback) {
         created_at: user.created_at,
       }, { onConflict: 'id' });
     }
-    callback(user);
+    callback(user, event);
   });
   return () => subscription.unsubscribe();
 }
@@ -180,7 +190,14 @@ export async function fetchAllOrders() {
 // Flat list of every line item sold, with the order timestamp.
 // Lets a promo count only sales made on/after its start date, so the
 // quantity limit starts from 0 when the promo begins (ignores past sales).
+// Uses the product_sales() RPC (security definer) so guests can count promo
+// sales without read access to the orders table; falls back to a direct
+// query for sessions that can read orders (owner).
 export async function fetchProductSales() {
+  const { data, error } = await supabase.rpc('product_sales');
+  if (!error && Array.isArray(data)) {
+    return data.filter(r => r.id).map(r => ({ id: r.id, qty: Number(r.qty) || 0, at: r.at }));
+  }
   const orders = await fetchAllOrders();
   const sales = [];
   for (const o of orders) {
