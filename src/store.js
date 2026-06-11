@@ -177,17 +177,18 @@ export async function fetchAllOrders() {
   return data ?? [];
 }
 
-// Total pieces sold per product id, summed across every order.
-// Used to drive limited-quantity launch promos ("first 100 pcs at promo price").
-export async function fetchProductSoldCounts() {
+// Flat list of every line item sold, with the order timestamp.
+// Lets a promo count only sales made on/after its start date, so the
+// quantity limit starts from 0 when the promo begins (ignores past sales).
+export async function fetchProductSales() {
   const orders = await fetchAllOrders();
-  const counts = {};
+  const sales = [];
   for (const o of orders) {
     for (const item of (o.items || [])) {
-      if (item.id) counts[item.id] = (counts[item.id] || 0) + (item.qty || 0);
+      if (item.id) sales.push({ id: item.id, qty: item.qty || 0, at: o.created_at });
     }
   }
-  return counts;
+  return sales;
 }
 
 export async function loadOrderStatuses() {

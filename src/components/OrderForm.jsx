@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import emailjs from '@emailjs/browser';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
-import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber, fetchProductSoldCounts, DEFAULTS } from '../store';
+import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber, fetchProductSales, DEFAULTS } from '../store';
 import { quoteSameday } from '../geo';
 
 export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
@@ -120,9 +120,15 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   function getProduct(id) { return settings.products.find(p => p.id === id); }
 
   // ── Limited-quantity launch promo ───────────────────────────────────────────
-  const [soldCounts, setSoldCounts] = useState({});
-  useEffect(() => { fetchProductSoldCounts().then(setSoldCounts).catch(() => {}); }, []);
-  function promoLeft(p) { return Math.max(0, (p.promoLimit || 0) - (soldCounts[p.id] || 0)); }
+  const [sales, setSales] = useState([]);
+  useEffect(() => { fetchProductSales().then(setSales).catch(() => {}); }, []);
+  // Pieces sold of this product on/after its promo start date (past sales excluded)
+  function promoSold(p) {
+    // No explicit start → count from the start of today (past sales excluded)
+    const startMs = new Date((p.promoStart || new Date().toISOString().slice(0, 10)) + 'T00:00:00').getTime();
+    return sales.reduce((n, s) => (s.id === p.id && new Date(s.at).getTime() >= startMs ? n + s.qty : n), 0);
+  }
+  function promoLeft(p) { return Math.max(0, (p.promoLimit || 0) - promoSold(p)); }
   function hasLimit(p) { return (p.promoLimit || 0) > 0; }
   function hasEnd(p) { return !!p.promoEnd; }
   function limitOk(p) { return !hasLimit(p) || promoLeft(p) > 0; }

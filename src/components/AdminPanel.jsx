@@ -44,7 +44,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   }
 
   function addProduct() {
-    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc', sameday: true, promoLabel: '', promoPrice: 0, promoLimit: 0, promoEnd: '' }]);
+    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc', sameday: true, promoLabel: '', promoPrice: 0, promoLimit: 0, promoStart: new Date().toISOString().slice(0, 10), promoEnd: '' }]);
   }
 
   function deleteProduct(i) {
@@ -164,6 +164,8 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
                   <input type="text" style={{ width: '120px' }} placeholder={t('name e.g. Launch', '名称 如 开张优惠')} value={p.promoLabel || ''} onChange={e => updateProduct(i, 'promoLabel', e.target.value)} />
                   <span>{t('price RM', '优惠价 RM')}</span>
                   <input type="number" min="0" step="0.50" style={{ width: '80px' }} value={p.promoPrice ?? 0} onChange={e => updateProduct(i, 'promoPrice', parseFloat(e.target.value) || 0)} />
+                  <span>{t('from', '从')}</span>
+                  <input type="date" style={{ width: '140px' }} value={p.promoStart || ''} onChange={e => updateProduct(i, 'promoStart', e.target.value)} />
                   <span>{t('for first', '限量前')}</span>
                   <input type="number" min="0" step="1" style={{ width: '70px' }} value={p.promoLimit ?? 0} onChange={e => updateProduct(i, 'promoLimit', parseInt(e.target.value) || 0)} />
                   <span>{t('pcs', '个')}</span>
