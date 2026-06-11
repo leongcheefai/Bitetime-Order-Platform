@@ -17,7 +17,7 @@ const USER_NAV = [
   { key: 'home',      icon: '', label: 'Home',             labelZh: '主页' },
   { key: 'analytics', icon: '', label: 'Analytics',        labelZh: '数据分析' },
   { key: 'orders',    icon: '', label: 'Orders',           labelZh: '订单' },
-  { key: 'menu',      icon: '', label: 'Menu & Settings',  labelZh: '菜单与设置' },
+  { key: 'menu',      icon: '', label: 'Settings',  labelZh: '设置' },
   { key: 'customers', icon: '', label: 'Customers',        labelZh: '顾客' },
   { key: 'vouchers',  icon: '', label: 'Vouchers',         labelZh: '优惠券' },
   { key: 'preview',   icon: '', label: 'Customer View',    labelZh: '顾客视图' },
