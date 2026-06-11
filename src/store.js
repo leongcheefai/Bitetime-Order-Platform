@@ -8,6 +8,7 @@ export const DEFAULTS = {
     { id: 'box',     name: 'Cookie box / gift set',  desc: 'Beautifully packed assortment',       price: 45, unit: 'box' },
   ],
   shipping: { WM: 8, EM: 18 },
+  sameday: { enabled: false, origin: '', originLat: null, originLng: null, base: 7, perKm: 1.5, maxKm: 20 },
   availableDays: [1, 2, 3, 4, 5, 6],
   leadDays: 3,
   blockedDates: [],

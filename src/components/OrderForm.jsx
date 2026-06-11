@@ -5,6 +5,7 @@ import emailjs from '@emailjs/browser';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
 import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber } from '../store';
+import { quoteSameday } from '../geo';
 
 export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
@@ -28,6 +29,22 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
+  const sameday = settings.sameday;
+  const samedayAvailable = !!(sameday?.enabled && sameday.originLat != null && sameday.originLng != null);
+  const [sdQuote, setSdQuote] = useState({ status: 'idle' });
+  useEffect(() => {
+    if (mode !== 'sameday' || postcode.length !== 5) { setSdQuote({ status: 'idle' }); return; }
+    let cancelled = false;
+    setSdQuote({ status: 'loading' });
+    const timer = setTimeout(async () => {
+      const q = await quoteSameday(postcode, sameday);
+      if (cancelled) return;
+      if (q.error) setSdQuote({ status: q.error === 'range' ? 'range' : 'failed', km: q.km });
+      else setSdQuote({ status: 'ok', km: q.km, fee: q.fee });
+    }, 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [mode, postcode, sameday]);
+
   const [voucherInput, setVoucherInput] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState(null);
   const [voucherMsg, setVoucherMsg] = useState('');
@@ -59,6 +76,14 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
 
   function getProduct(id) { return settings.products.find(p => p.id === id); }
 
+  const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
+  const needsAddress = mode === 'delivery' || mode === 'sameday';
+  function currentShippingFee() {
+    if (mode === 'delivery' && state) return settings.shipping[EM_STATES.includes(state) ? 'EM' : 'WM'] || 0;
+    if (mode === 'sameday' && sdQuote.status === 'ok') return sdQuote.fee;
+    return 0;
+  }
+
   async function applyVoucher() {
     const code = voucherInput.trim().toUpperCase();
     if (!code) return;
@@ -78,9 +103,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     } else if (v.minOrder) {
       let subtotal = 0;
       Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) subtotal += p.price * (qty[id] || 0); });
-      if (mode === 'delivery' && state) {
-        subtotal += settings.shipping[['Sabah', 'Sarawak', 'W.P. Labuan'].includes(state) ? 'EM' : 'WM'] || 0;
-      }
+      subtotal += currentShippingFee();
       if (subtotal < v.minOrder) {
         errMsg = t(`❌ Minimum order of RM ${v.minOrder} required.`, `❌ 需要最低消费 RM ${v.minOrder}。`);
       }
@@ -115,8 +138,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       const p = getProduct(id); if (!p) return;
       total += p.price * (qty[id] || 0);
     });
-    const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
-    if (mode === 'delivery' && state) total += settings.shipping[EM_STATES.includes(state) ? 'EM' : 'WM'] || 0;
+    total += currentShippingFee();
     const discount = computeDiscount(total);
     return parseFloat((total - discount).toFixed(2));
   }
@@ -124,12 +146,19 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   async function submitOrder() {
     if (!Object.keys(selected).length) { alert(t('Please select at least one item!', '请至少选择一种产品！')); return; }
     if (!custName.trim() || !custWa.trim()) { alert(t('Please fill in your name and WhatsApp number.', '请填写您的姓名和 WhatsApp 号码。')); return; }
-    if (mode === 'delivery' && (!addrLine1.trim() || !city.trim() || !postcode.trim() || !state)) { alert(t('Please fill in all required delivery fields.', '请填写所有必填的送货资料。')); return; }
+    if (needsAddress && (!addrLine1.trim() || !city.trim() || !postcode.trim() || !state)) { alert(t('Please fill in all required delivery fields.', '请填写所有必填的送货资料。')); return; }
+    if (mode === 'sameday' && sdQuote.status !== 'ok') {
+      alert(sdQuote.status === 'range'
+        ? t('Sorry, your address is outside our same-day delivery range. Please choose regular delivery.', '抱歉，您的地址超出当天配送范围，请选择普通送货。')
+        : t('Same-day delivery fee is still being calculated. Please wait a moment or check your postcode.', '当天配送费仍在计算中，请稍候或检查邮政编码。'));
+      return;
+    }
 
+    const effectiveDate = mode === 'sameday' ? format(new Date(), 'yyyy-MM-dd') : custDate;
     const orderNumber = await getNextOrderNumber();
     let msg = `🍪 *New Order from Bitetime & Co.*\n\n*Order No.:* ${orderNumber}\n`;
     msg += `*Name:* ${custName}\n*WhatsApp:* ${custWa}\n`;
-    if (custDate) msg += `*Preferred date:* ${custDate}\n`;
+    if (effectiveDate) msg += `*Preferred date:* ${effectiveDate}\n`;
     msg += `\n*Items:*\n`;
 
     let total = 0;
@@ -141,12 +170,16 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     });
 
     if (mode === 'delivery') {
-      const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
       const region = EM_STATES.includes(state) ? 'EM' : 'WM';
       const fee = settings.shipping[region] || 0;
       total += fee;
       const fullAddress = [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ');
       msg += `\n*Delivery (${region}):* RM ${fee}\n*Address:* ${fullAddress}\n`;
+    } else if (mode === 'sameday') {
+      const fee = sdQuote.fee;
+      total += fee;
+      const fullAddress = [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ');
+      msg += `\n*Same-day delivery (Lalamove/Grab, ~${sdQuote.km} km):* RM ${fee}\n*Address:* ${fullAddress}\n`;
     } else {
       msg += `\n*Order type:* Self-pickup\n`;
     }
@@ -164,7 +197,6 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         const p = getProduct(id);
         return { id, name: p.name, qty: qty[id] || 0, price: p.price };
       });
-      const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
       const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
       if (appliedVoucher) await markVoucherUsed(appliedVoucher.code);
       await saveOrder({
@@ -172,21 +204,21 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         user_id: user?.id ?? null,
         customer_name: custName,
         customer_wa: custWa,
-        preferred_date: custDate || null,
+        preferred_date: effectiveDate || null,
         mode,
-        address: mode === 'delivery' ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ') : null,
+        address: needsAddress ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ') : null,
         region,
-        shipping_fee: region ? (settings.shipping[region] || 0) : 0,
+        shipping_fee: currentShippingFee(),
         items,
         total: computeTotal(),
       });
 
       if (user?.email && settings.ejsServiceId && settings.ejsTemplateId && settings.ejsPublicKey) {
         const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${i.price * i.qty}`).join('\n');
-        const fullAddress = mode === 'delivery'
+        const fullAddress = needsAddress
           ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')
           : null;
-        const orderDetails = mode === 'delivery'
+        const orderDetails = needsAddress
           ? `${orderSummary}\n\nDelivery address: ${fullAddress}`
           : orderSummary;
         emailjs.send(
@@ -198,7 +230,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             order_number: orderNumber,
             order_summary: orderDetails,
             order_total: `RM ${computeTotal()}`,
-            order_type: mode === 'delivery' ? 'Delivery' : 'Self-pickup',
+            order_type: mode === 'delivery' ? 'Delivery' : mode === 'sameday' ? 'Same-day delivery' : 'Self-pickup',
           },
           settings.ejsPublicKey,
         ).catch(() => {});
@@ -262,11 +294,19 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         <div className="radio-row">
           <div className={'radio-opt' + (mode === 'pickup' ? ' active' : '')} onClick={() => setMode('pickup')}>{t('Self-pickup', '自取')}</div>
           <div className={'radio-opt' + (mode === 'delivery' ? ' active' : '')} onClick={() => setMode('delivery')}>{t('Delivery', '送货')}</div>
+          {samedayAvailable && (
+            <div className={'radio-opt' + (mode === 'sameday' ? ' active' : '')} onClick={() => setMode('sameday')}>{t('Same-day delivery ⚡', '当天配送 ⚡')}</div>
+          )}
         </div>
+        {mode === 'sameday' && (
+          <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
+            {t('Delivered today via Lalamove / Grab Express. Fee is estimated by distance from our kitchen to your address.', '今天通过 Lalamove / Grab Express 配送。运费按从我们厨房到您地址的距离估算。')}
+          </p>
+        )}
       </div>
 
       {/* DELIVERY FIELDS */}
-      {mode === 'delivery' && (
+      {needsAddress && (
         <div className="section">
           <div className="section-label">{t('Delivery details', '送货详情')}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -307,6 +347,14 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
                 ))}
               </select>
             </div>
+            {mode === 'sameday' && postcode.length === 5 && (
+              <p style={{ fontSize: '13px', margin: 0, color: sdQuote.status === 'ok' ? '#2e7d32' : sdQuote.status === 'loading' ? '#888' : '#b00020' }}>
+                {sdQuote.status === 'loading' && t('Calculating delivery fee…', '正在计算运费…')}
+                {sdQuote.status === 'ok' && t(`Estimated same-day delivery: RM ${sdQuote.fee} (~${sdQuote.km} km)`, `当天配送估价：RM ${sdQuote.fee}（约 ${sdQuote.km} 公里）`)}
+                {sdQuote.status === 'range' && t(`Sorry, your address (~${sdQuote.km} km) is outside our same-day range. Please choose regular delivery.`, `抱歉，您的地址（约 ${sdQuote.km} 公里）超出当天配送范围，请选择普通送货。`)}
+                {sdQuote.status === 'failed' && t('Could not locate this postcode. Please double-check it.', '无法定位此邮政编码，请再检查一次。')}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -325,6 +373,14 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
               <input type="tel" placeholder="e.g. 011-2345678" value={custWa} onChange={e => setCustWa(e.target.value)} />
             </div>
           </div>
+          {mode === 'sameday' ? (
+            <div className="field">
+              <label>{t('Delivery date', '配送日期')}</label>
+              <p style={{ fontSize: '13px', margin: '4px 0 0', color: '#7a2828', fontWeight: 600 }}>
+                ⚡ {t(`Today — ${format(new Date(), 'dd MMM yyyy')}`, `今天 — ${format(new Date(), 'dd MMM yyyy')}`)}
+              </p>
+            </div>
+          ) : (
           <div className="field" ref={calRef} style={{position:'relative'}}>
             <label>{t('Preferred date', '预计日期')}</label>
             <button type="button" className="date-picker-btn" onClick={() => setShowCal(v => !v)}>
@@ -342,6 +398,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
 
@@ -388,9 +445,11 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
           <div className="summary-detail-grid">
             {custName && <div className="summary-detail-cell"><span className="detail-label">{t('Name', '姓名')}</span><span className="detail-value">{custName}</span></div>}
             {custWa && <div className="summary-detail-cell"><span className="detail-label">{t('Phone', '电话')}</span><span className="detail-value">{custWa}</span></div>}
-            <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{mode === 'delivery' ? t('Delivery', '送货') : t('Self-pickup', '自取')}</span></div>
-            {custDate && <div className="summary-detail-cell"><span className="detail-label">{t('Preferred date', '预计日期')}</span><span className="detail-value">{custDate}</span></div>}
-            {mode === 'delivery' && (addrLine1 || city || postcode || state) && (
+            <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{mode === 'delivery' ? t('Delivery', '送货') : mode === 'sameday' ? t('Same-day delivery ⚡', '当天配送 ⚡') : t('Self-pickup', '自取')}</span></div>
+            {mode === 'sameday'
+              ? <div className="summary-detail-cell"><span className="detail-label">{t('Delivery date', '配送日期')}</span><span className="detail-value">{t('Today', '今天')} ({format(new Date(), 'dd MMM')})</span></div>
+              : custDate && <div className="summary-detail-cell"><span className="detail-label">{t('Preferred date', '预计日期')}</span><span className="detail-value">{custDate}</span></div>}
+            {needsAddress && (addrLine1 || city || postcode || state) && (
               <div className="summary-detail-cell" style={{ gridColumn: '1 / -1' }}>
                 <span className="detail-label">{t('Delivery address', '送货地址')}</span>
                 <span className="detail-value">{[addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')}</span>
@@ -411,13 +470,19 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
               return <div key={id} className="summary-row"><span>{p.name} × {q} {p.unit}</span><span>RM {p.price * q}</span></div>;
             })}
             {mode === 'delivery' && state && (() => {
-              const region = ['Sabah','Sarawak','W.P. Labuan'].includes(state) ? 'EM' : 'WM';
+              const region = EM_STATES.includes(state) ? 'EM' : 'WM';
               return <div className="summary-row"><span>{t('Delivery', '送货')} ({region})</span><span>RM {settings.shipping[region] || 0}</span></div>;
             })()}
+            {mode === 'sameday' && (
+              <div className="summary-row">
+                <span>{t('Same-day delivery', '当天配送')}{sdQuote.status === 'ok' ? ` (~${sdQuote.km} km)` : ''}</span>
+                <span>{sdQuote.status === 'ok' ? `RM ${sdQuote.fee}` : sdQuote.status === 'loading' ? '…' : t('TBD', '待定')}</span>
+              </div>
+            )}
             {appliedVoucher && (() => {
               let sub = 0;
               Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) sub += p.price * (qty[id] || 0); });
-              if (mode === 'delivery' && state) sub += settings.shipping[(['Sabah','Sarawak','W.P. Labuan'].includes(state) ? 'EM' : 'WM')] || 0;
+              sub += currentShippingFee();
               const disc = computeDiscount(sub);
               return (
                 <div className="summary-row discount">

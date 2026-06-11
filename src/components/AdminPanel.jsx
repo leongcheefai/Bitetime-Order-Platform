@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DEFAULTS, saveSettingsToDB } from '../store';
+import { geocodeAddress } from '../geo';
 
 export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
@@ -16,6 +17,17 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const [leadDays, setLeadDays] = useState(settings.leadDays ?? 3);
   const [blockedDates, setBlockedDates] = useState(settings.blockedDates ?? []);
   const [blockedDateInput, setBlockedDateInput] = useState('');
+  const sd = settings.sameday ?? DEFAULTS.sameday;
+  const [sdEnabled, setSdEnabled] = useState(sd.enabled ?? false);
+  const [sdOrigin, setSdOrigin] = useState(sd.origin ?? '');
+  const [sdOriginLat, setSdOriginLat] = useState(sd.originLat ?? null);
+  const [sdOriginLng, setSdOriginLng] = useState(sd.originLng ?? null);
+  const [sdBase, setSdBase] = useState(sd.base ?? 7);
+  const [sdPerKm, setSdPerKm] = useState(sd.perKm ?? 1.5);
+  const [sdMaxKm, setSdMaxKm] = useState(sd.maxKm ?? 20);
+  // address the current coords were geocoded from — re-geocode on save if it changed
+  const [sdGeocodedFor, setSdGeocodedFor] = useState(sd.origin ?? '');
+  const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
 
   function updateProduct(i, field, value) {
@@ -33,7 +45,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
     setProducts(products.filter((_, idx) => idx !== i));
   }
 
-  function handleSave() {
+  async function handleSave() {
     console.log('[AdminPanel] handleSave clicked, products:', JSON.stringify(products));
     try {
       for (const p of products) {
@@ -43,9 +55,43 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
           return;
         }
       }
+      // Same-day delivery: geocode the store address automatically when needed
+      let lat = sdOriginLat, lng = sdOriginLng;
+      const origin = sdOrigin.trim();
+      if (sdEnabled) {
+        if (!origin) {
+          setSaveMsg(t('⚠ Same-day delivery: please fill in your store address.', '⚠ 当天配送：请填写您的店铺地址。'));
+          return;
+        }
+        if (lat == null || lng == null || origin !== sdGeocodedFor) {
+          setSaving(true);
+          setSaveMsg(t('📍 Locating your store address… (takes a few seconds)', '📍 正在定位店铺地址…（需要几秒钟）'));
+          const coords = await geocodeAddress(origin);
+          setSaving(false);
+          if (!coords) {
+            setSdOriginLat(null);
+            setSdOriginLng(null);
+            setSaveMsg(t('⚠ Address not found. Try a simpler address or just your postcode + city.', '⚠ 找不到地址。请尝试更简单的地址或只填邮编 + 城市。'));
+            return;
+          }
+          lat = coords.lat; lng = coords.lng;
+          setSdOriginLat(lat);
+          setSdOriginLng(lng);
+          setSdGeocodedFor(origin);
+        }
+      }
       const newSettings = {
         products,
         shipping: { WM: parseFloat(wmFee) || 0, EM: parseFloat(emFee) || 0 },
+        sameday: {
+          enabled: sdEnabled,
+          origin,
+          originLat: lat,
+          originLng: lng,
+          base: parseFloat(sdBase) || 0,
+          perKm: parseFloat(sdPerKm) || 0,
+          maxKm: parseFloat(sdMaxKm) || 0,
+        },
         tgToken: tgToken.trim() || DEFAULTS.tgToken,
         tgChatId: tgChatId.trim() || DEFAULTS.tgChatId,
         ejsServiceId: ejsServiceId.trim(),
@@ -112,6 +158,44 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
             <div className="admin-field full">
               <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('East Malaysia / Sabah / Sarawak (EM) — RM', '东马来西亚 / 沙巴 / 砂拉越 (EM) — RM')}</label>
               <input type="number" min="0" value={emFee} onChange={e => setEmFee(e.target.value)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'delivery' && (
+        <div className="admin-section" style={{ marginTop: '18px' }}>
+          <div className="admin-section-label">{t('Same-day delivery (Lalamove / Grab Express)', '当天配送（Lalamove / Grab Express）')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t(
+              'Customers within range get a same-day option. Fee is estimated by driving distance: base fee + rate × km.',
+              '范围内的顾客可选择当天配送。运费按行车距离估算：基础费 + 每公里费率 × 公里。'
+            )}
+          </p>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 600, color: '#7a2828', marginBottom: '12px', cursor: 'pointer' }}>
+            <input type="checkbox" checked={sdEnabled} onChange={e => setSdEnabled(e.target.checked)} />
+            {t('Enable same-day delivery', '启用当天配送')}
+          </label>
+          <div className="admin-fields">
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Store / pickup address (where the rider collects)', '店铺 / 取货地址（骑手取货地点）')}</label>
+              <input type="text" placeholder={t('e.g. 12 Jalan Example, 47301 Petaling Jaya, Selangor', '例如：12 Jalan Example, 47301 Petaling Jaya, Selangor')} value={sdOrigin} onChange={e => setSdOrigin(e.target.value)} />
+              <p style={{ fontSize: '11px', color: '#aaa', marginTop: '4px' }}>
+                {t('Located automatically when you save.', '保存时会自动定位。')}
+                {sdOriginLat != null && sdOrigin.trim() === sdGeocodedFor && <span style={{ color: '#2e7d32' }}> ✓ {sdOriginLat.toFixed(5)}, {sdOriginLng.toFixed(5)}</span>}
+              </p>
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Base fee — RM', '基础费 — RM')}</label>
+              <input type="number" min="0" step="0.5" value={sdBase} onChange={e => setSdBase(e.target.value)} />
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Rate per km — RM', '每公里费率 — RM')}</label>
+              <input type="number" min="0" step="0.1" value={sdPerKm} onChange={e => setSdPerKm(e.target.value)} />
+            </div>
+            <div className="admin-field full">
+              <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Max distance — km (0 = no limit)', '最远距离 — 公里（0 = 无限制）')}</label>
+              <input type="number" min="0" step="1" value={sdMaxKm} onChange={e => setSdMaxKm(e.target.value)} />
             </div>
           </div>
         </div>
@@ -274,7 +358,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
 
       </div>{/* admin-tab-content */}
 
-      <button className="save-btn" onClick={handleSave}>{t('💾 Save changes', '💾 保存更改')}</button>
+      <button className="save-btn" onClick={handleSave} disabled={saving}>{saving ? t('📍 Locating…', '📍 定位中…') : t('💾 Save changes', '💾 保存更改')}</button>
       <p className="save-msg">{saveMsg}</p>
     </div>
   );

@@ -601,7 +601,7 @@ export default function OrderList({ lang, settings = {}, user }) {
                     </div>
                     <div>
                       <div className="user-order-detail-label">{t('Mode', '取货方式')}</div>
-                      <div className="user-order-detail-val" style={{ textTransform: 'capitalize' }}>{order.mode || '—'}</div>
+                      <div className="user-order-detail-val" style={{ textTransform: 'capitalize' }}>{order.mode === 'sameday' ? t('Same-day delivery ⚡', '当天配送 ⚡') : order.mode || '—'}</div>
                     </div>
                     <div>
                       <div className="user-order-detail-label">{t('Preferred Date', '期望日期')}</div>
@@ -626,7 +626,7 @@ export default function OrderList({ lang, settings = {}, user }) {
                     ))}
                     {order.shipping_fee > 0 && (
                       <div className="user-order-item-row shipping">
-                        <span>{t('Delivery', '运费')} ({order.region})</span>
+                        <span>{t('Delivery', '运费')}{order.region ? ` (${order.region})` : order.mode === 'sameday' ? ` (${t('same-day', '当天')})` : ''}</span>
                         <span></span>
                         <span>RM {Number(order.shipping_fee).toFixed(2)}</span>
                       </div>

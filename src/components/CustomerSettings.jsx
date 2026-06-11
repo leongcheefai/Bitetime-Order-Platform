@@ -247,7 +247,7 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
                           <div className="summary-detail-grid">
                             {order.customer_name && <div className="summary-detail-cell"><span className="detail-label">{t('Name', '姓名')}</span><span className="detail-value">{order.customer_name}</span></div>}
                             {order.customer_wa && <div className="summary-detail-cell"><span className="detail-label">{t('Phone', '电话')}</span><span className="detail-value">{order.customer_wa}</span></div>}
-                            <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{order.mode === 'delivery' ? t('Delivery', '送货') : t('Self-pickup', '自取')}</span></div>
+                            <div className="summary-detail-cell"><span className="detail-label">{t('Order type', '订单类型')}</span><span className="detail-value">{order.mode === 'delivery' ? t('Delivery', '送货') : order.mode === 'sameday' ? t('Same-day delivery ⚡', '当天配送 ⚡') : t('Self-pickup', '自取')}</span></div>
                             {order.preferred_date && <div className="summary-detail-cell"><span className="detail-label">{t('Preferred date', '预计日期')}</span><span className="detail-value">{order.preferred_date}</span></div>}
                             {order.address && (
                               <div className="summary-detail-cell" style={{ gridColumn: '1 / -1' }}>
@@ -267,9 +267,9 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
                                 <span>RM {item.price * item.qty}</span>
                               </div>
                             ))}
-                            {order.mode === 'delivery' && order.shipping_fee > 0 && (
+                            {(order.mode === 'delivery' || order.mode === 'sameday') && order.shipping_fee > 0 && (
                               <div className="summary-row">
-                                <span>{t('Delivery', '送货')} {order.region ? `(${order.region})` : ''}</span>
+                                <span>{order.mode === 'sameday' ? t('Same-day delivery', '当天配送') : <>{t('Delivery', '送货')} {order.region ? `(${order.region})` : ''}</>}</span>
                                 <span>RM {order.shipping_fee}</span>
                               </div>
                             )}
