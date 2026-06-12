@@ -480,15 +480,15 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
           </label>
           {refEnabled && (
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <div className="admin-field">
-                <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Referrer gift product', '推荐人赠品')}</label>
+              <div className="admin-field admin-field--stack">
+                <label style={{ fontSize: '12px', color: '#A07070' }}>{t('Referrer gift product', '推荐人赠品')}</label>
                 <select value={refGiftId} onChange={e => setRefGiftId(e.target.value)}>
                   <option value="">{t('— Choose product —', '— 选择产品 —')}</option>
                   {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
-              <div className="admin-field">
-                <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('New customer discount (RM)', '新客立减 (RM)')}</label>
+              <div className="admin-field admin-field--stack" style={{ minWidth: 120 }}>
+                <label style={{ fontSize: '12px', color: '#A07070' }}>{t('New customer discount (RM)', '新客立减 (RM)')}</label>
                 <input type="number" min="0" step="0.50" value={refDiscount} onChange={e => setRefDiscount(e.target.value)} style={{ width: 100 }} />
               </div>
             </div>

@@ -15,11 +15,12 @@ const USER_EMAIL = 'bitetimeandco@gmail.com';
 
 const USER_NAV = [
   { key: 'home',      icon: '', label: 'Home',             labelZh: '主页' },
-  { key: 'analytics', icon: '', label: 'Analytics',        labelZh: '数据分析' },
   { key: 'orders',    icon: '', label: 'Orders',           labelZh: '订单' },
-  { key: 'menu',      icon: '', label: 'Settings',  labelZh: '设置' },
+  { key: 'analytics', icon: '', label: 'Analytics',        labelZh: '数据分析' },
+  { key: 'menupage',  icon: '', label: 'Menu',             labelZh: '菜单' },
   { key: 'customers', icon: '', label: 'Customers',        labelZh: '顾客' },
   { key: 'events',    icon: '', label: 'Promos & Events',  labelZh: '活动专区' },
+  { key: 'menu',      icon: '', label: 'Settings',  labelZh: '设置' },
   { key: 'preview',   icon: '', label: 'Customer View',    labelZh: '顾客视图' },
 ];
 
@@ -225,7 +226,7 @@ export default function App() {
             key === 'menu' ? (
               <div key="menu">
                 <button
-                  className={'drawer-nav-btn drawer-nav-btn--expand' + (userPage === 'menu' ? ' active' : '')}
+                  className={'drawer-nav-btn drawer-nav-btn--expand' + (userPage === 'menu' && menuTab !== 'menu' ? ' active' : '')}
                   onClick={() => setMenuExpanded(e => !e)}
                 >
                   <span>{t(label, labelZh)}</span>
@@ -233,12 +234,6 @@ export default function App() {
                 </button>
                 {menuExpanded && (
                   <>
-                    <button
-                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'menu' ? ' active' : '')}
-                      onClick={() => { setUserPage('menu'); setMenuTab('menu'); setDrawerOpen(false); setOrderDone(false); }}
-                    >
-                      {t('Menu', '菜单')}
-                    </button>
                     <button
                       className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'menu' && menuTab === 'shipping' ? ' active' : '')}
                       onClick={() => { setUserPage('menu'); setMenuTab('shipping'); setDrawerOpen(false); setOrderDone(false); }}
@@ -298,6 +293,14 @@ export default function App() {
                   </>
                 )}
               </div>
+            ) : key === 'menupage' ? (
+              <button
+                key={key}
+                className={'drawer-nav-btn' + (userPage === 'menu' && menuTab === 'menu' ? ' active' : '')}
+                onClick={() => { setUserPage('menu'); setMenuTab('menu'); setDrawerOpen(false); setOrderDone(false); }}
+              >
+                {t(label, labelZh)}
+              </button>
             ) : (
             <button
               key={key}
