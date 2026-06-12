@@ -109,19 +109,25 @@ export async function getCurrentUser() {
 }
 
 export function onAuthChange(callback) {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
     const user = session?.user ?? null;
     if (user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
       // Ensure profile exists and email_confirmed is up to date.
       // This handles the case where email confirmation was required at signUp
       // and the profile insert was blocked by RLS (no session at that point).
-      await supabase.from('profiles').upsert({
-        id: user.id,
-        name: user.user_metadata?.name || user.email?.split('@')[0] || '',
-        email: user.email,
-        email_confirmed: !!user.email_confirmed_at,
-        created_at: user.created_at,
-      }, { onConflict: 'id' });
+      // Deferred via setTimeout: awaiting a Supabase call inside onAuthStateChange
+      // deadlocks the client's internal auth lock and hangs all later requests.
+      setTimeout(() => {
+        supabase.from('profiles').upsert({
+          id: user.id,
+          name: user.user_metadata?.name || user.email?.split('@')[0] || '',
+          email: user.email,
+          email_confirmed: !!user.email_confirmed_at,
+          created_at: user.created_at,
+        }, { onConflict: 'id' }).then(({ error }) => {
+          if (error) console.error('Profile upsert failed:', error.message);
+        });
+      }, 0);
     }
     callback(user, event);
   });
@@ -166,6 +172,21 @@ export async function saveOrder(order) {
     console.error('Failed to save order to Supabase:', error.message, error.code, error.details, error.hint);
     throw new Error(error.message);
   }
+}
+
+// Re-link an order to a customer account (or null to unlink).
+// Returns the updated row; throws if RLS blocks the update (0 rows returned).
+export async function updateOrderUser(orderNumber, userId) {
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ user_id: userId })
+    .eq('order_number', orderNumber)
+    .select('order_number');
+  if (error) {
+    console.error('Failed to update order user:', error.message, error.code, error.details, error.hint);
+    throw new Error(error.message);
+  }
+  if (!data?.length) throw new Error('Update blocked by database policy (orders RLS)');
 }
 
 export async function fetchUserOrders(userId) {

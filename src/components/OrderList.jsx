@@ -4,7 +4,7 @@ import { DayPicker } from 'react-day-picker';
 import { format } from 'date-fns';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
-import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId, saveOrder, getNextOrderNumber, fetchProfileByEmail, fetchAllProfiles, fetchProductSales } from '../store';
+import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId, saveOrder, getNextOrderNumber, fetchProfileByEmail, fetchAllProfiles, fetchProductSales, updateOrderUser } from '../store';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
 const MY_STATES = ['Johor','Kedah','Kelantan','Melaka','Negeri Sembilan','Pahang','Perak','Perlis','Pulau Pinang','Sabah','Sarawak','Selangor','Terengganu','W.P. Kuala Lumpur','W.P. Labuan','W.P. Putrajaya'];
@@ -21,7 +21,7 @@ const STATUS_LABELS = {
   cancelled: { en: 'Cancelled',        zh: '已取消' },
 };
 
-export default function OrderList({ lang, settings = {}, user }) {
+export default function OrderList({ lang, settings = {} }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
   const [orders, setOrders] = useState([]);
   const [statuses, setStatuses] = useState({});
@@ -52,6 +52,8 @@ export default function OrderList({ lang, settings = {}, user }) {
   const [linkLooking, setLinkLooking] = useState(false);
   const [linkMsg, setLinkMsg] = useState('');
   const [allProfiles, setAllProfiles] = useState([]);
+  const [orderLinkSaving, setOrderLinkSaving] = useState(null);
+  const [orderLinkError, setOrderLinkError] = useState(null);
   const [showEmailDrop, setShowEmailDrop] = useState(false);
   const emailDropRef = useRef(null);
 
@@ -77,6 +79,7 @@ export default function OrderList({ lang, settings = {}, user }) {
       setNoteInputs(notesData);
       setLoading(false);
     });
+    fetchAllProfiles().then(setAllProfiles).catch(() => {});
   }, []);
 
   const products = settings.products ?? [];
@@ -108,6 +111,18 @@ export default function OrderList({ lang, settings = {}, user }) {
     return parseFloat(total.toFixed(2));
   }
 
+  async function handleOrderLinkChange(orderNumber, userId) {
+    setOrderLinkSaving(orderNumber);
+    setOrderLinkError(null);
+    try {
+      await updateOrderUser(orderNumber, userId);
+      setOrders(prev => prev.map(o => o.order_number === orderNumber ? { ...o, user_id: userId } : o));
+    } catch (err) {
+      setOrderLinkError({ orderNumber, message: err.message });
+    }
+    setOrderLinkSaving(null);
+  }
+
   async function handleLookupEmail() {
     if (!linkedEmail.trim()) return;
     setLinkLooking(true);
@@ -134,6 +149,16 @@ export default function OrderList({ lang, settings = {}, user }) {
     setAddSaving(true);
     setAddError('');
     try {
+      // If an email was typed but never looked up, resolve it now so the order links correctly
+      let profile = linkedProfile;
+      if (!profile && linkedEmail.trim()) {
+        profile = await fetchProfileByEmail(linkedEmail);
+        if (!profile) {
+          setAddError(t('No account found for this email — clear it or fix it before saving.', '找不到此邮箱的账户 — 请清空或更正后再保存。'));
+          setAddSaving(false);
+          return;
+        }
+      }
       const orderNumber = await getNextOrderNumber();
       const items = products
         .filter(p => (addForm.qty[p.id] || 0) > 0)
@@ -145,7 +170,7 @@ export default function OrderList({ lang, settings = {}, user }) {
         : null;
       const order = {
         order_number: orderNumber,
-        user_id: linkedProfile?.id ?? user?.id ?? null,
+        user_id: profile?.id ?? null,
         customer_name: addForm.custName.trim(),
         customer_wa: addForm.custWa.trim(),
         preferred_date: addForm.custDate || null,
@@ -662,6 +687,30 @@ export default function OrderList({ lang, settings = {}, user }) {
                       <span></span>
                       <span>RM {Number(order.total || 0).toFixed(2)}</span>
                     </div>
+                  </div>
+
+                  <div className="user-order-note-row">
+                    <div className="user-order-detail-label">{t('Linked Customer Account', '关联客户账户')}</div>
+                    <select
+                      value={order.user_id || ''}
+                      disabled={!order.order_number || (orderLinkSaving !== null && orderLinkSaving === order.order_number)}
+                      onChange={e => handleOrderLinkChange(order.order_number, e.target.value || null)}
+                      style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #E8C9C9', fontSize: 13, background: '#fff', color: '#2B0A10', maxWidth: 320 }}
+                    >
+                      <option value="">{t('Not linked (guest)', '未关联（散客）')}</option>
+                      {allProfiles.map(p => (
+                        <option key={p.id} value={p.id}>{p.name ? `${p.name} — ${p.email}` : p.email}</option>
+                      ))}
+                    </select>
+                    {orderLinkSaving !== null && orderLinkSaving === order.order_number && (
+                      <div style={{ fontSize: '12px', color: '#A07070', marginTop: '4px' }}>{t('Saving…', '保存中…')}</div>
+                    )}
+                    {orderLinkError != null && orderLinkError.orderNumber === order.order_number && (
+                      <div style={{ fontSize: '12px', color: '#c0392b', marginTop: '4px' }}>{orderLinkError.message}</div>
+                    )}
+                    {!order.order_number && (
+                      <div style={{ fontSize: '12px', color: '#A07070', marginTop: '4px' }}>{t('This order has no order number — backfill it first.', '此订单没有订单号 — 请先补订单号。')}</div>
+                    )}
                   </div>
 
                   <div className="user-order-status-row">
