@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { fetchUserOrders, saveDeliveryAddress, loadDeliveryAddress, loadVouchers, loadOrderStatuses, loadOrderAWBs } from '../store';
+import { fetchUserOrders, saveDeliveryAddress, loadDeliveryAddress, loadVouchers, loadOrderStatuses, loadOrderAWBs, loadReferralRewards, referralCodeOf } from '../store';
 import { lookupPostcode } from '../postcodes';
 
 const CUST_STATUS = {
@@ -11,7 +11,7 @@ const CUST_STATUS = {
   cancelled: { en: 'Cancelled',        zh: '已取消',       cls: 'cust-status-cancelled' },
 };
 
-export default function CustomerSettings({ user, lang, onAddressSaved, refreshKey, section = 'details' }) {
+export default function CustomerSettings({ user, lang, settings = {}, onAddressSaved, refreshKey, section = 'details' }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
 
   const [orders, setOrders] = useState([]);
@@ -22,6 +22,8 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
   const toggleOrder = (key) => setExpandedOrders(prev => ({ ...prev, [key]: !prev[key] }));
   const [myVouchers, setMyVouchers] = useState([]);
   const [vouchersLoading, setVouchersLoading] = useState(true);
+  const [myRewards, setMyRewards] = useState([]);
+  const [copyMsg, setCopyMsg] = useState('');
 
   const [addrLine1, setAddrLine1] = useState('');
   const [addrLine2, setAddrLine2] = useState('');
@@ -44,6 +46,9 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
         setExpandedOrders({ [latestKey]: true });
       }
     });
+    if (settings.referral?.enabled) {
+      loadReferralRewards().then(all => setMyRewards(all.filter(r => r.referrerUserId === user.id))).catch(() => {});
+    }
     loadVouchers().then(all => {
       const email = user.email?.toLowerCase() ?? '';
       setMyVouchers(all.filter(v => !v.email || v.email === email));
@@ -60,7 +65,7 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
         setAddrWa(addr.wa || '');
       }
     });
-  }, [user.id, user.email, refreshKey]);
+  }, [user.id, user.email, refreshKey, settings.referral?.enabled]);
 
   async function handleSave() {
     setSaving(true);
@@ -144,8 +149,94 @@ export default function CustomerSettings({ user, lang, onAddressSaved, refreshKe
         </div>
       )}
 
+      {/* ── Promos & Events ── */}
+      {(section === 'promos' || section === 'vouchers') && (() => {
+        const now = new Date();
+        const events = (settings.events ?? []).filter(ev =>
+          ev.active !== false && (ev.title || '').trim() &&
+          (!ev.until || now <= new Date(ev.until + 'T23:59:59'))
+        );
+        return (
+          <div className="settings-section">
+            <div className="settings-section-title">{t('Promos & Events', '活动专区')}</div>
+            {events.length === 0 ? (
+              <p className="settings-hint">{t('No events right now — stay tuned!', '暂无活动，敬请期待！')}</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '1.25rem' }}>
+                {events.map((ev, i) => (
+                  <div key={i} className="success-info-box" style={{ textAlign: 'left' }}>
+                    <div className="success-info-title">🎉 {ev.title}</div>
+                    {ev.desc && <div style={{ whiteSpace: 'pre-line' }}>{ev.desc}</div>}
+                    {ev.until && (
+                      <div style={{ fontSize: '12px', color: '#A07070', marginTop: '4px' }}>
+                        {t(`Until ${ev.until}`, `截止 ${ev.until}`)}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* ── Referral program ── */}
+      {(section === 'promos' || section === 'vouchers') && settings.referral?.enabled && (() => {
+        const myCode = referralCodeOf(user.id);
+        const shareLink = `${window.location.origin}${window.location.pathname}?ref=${myCode}`;
+        const giftProductName = settings.products?.find(p => p.id === settings.referral?.giftProductId)?.name || '';
+        const pending = myRewards.filter(r => r.status === 'pending');
+        return (
+          <div className="settings-section">
+            <div className="settings-section-title">{t('Refer a friend', '推荐朋友')}</div>
+            <p className="settings-hint">
+              {t(
+                `Share your code — your friend gets RM ${settings.referral?.discount || 0} off their first order, and you get a free ${giftProductName || 'treat'} with your next order!`,
+                `分享您的推荐码 — 朋友首单立减 RM ${settings.referral?.discount || 0}，您下次下单获得免费${giftProductName || '小礼物'}！`
+              )}
+            </p>
+            <div className="success-info-box" style={{ textAlign: 'left', marginTop: '10px' }}>
+              <div className="success-info-title">{t('Your referral code', '您的推荐码')}</div>
+              <div style={{ fontSize: '22px', fontWeight: 700, letterSpacing: '2px', margin: '6px 0' }}>{myCode}</div>
+              <button
+                className="voucher-apply-btn"
+                style={{ marginTop: '4px' }}
+                onClick={() => {
+                  navigator.clipboard?.writeText(shareLink)
+                    .then(() => { setCopyMsg(t('✓ Link copied!', '✓ 链接已复制！')); setTimeout(() => setCopyMsg(''), 2500); })
+                    .catch(() => { setCopyMsg(shareLink); });
+                }}
+              >
+                📋 {t('Copy share link', '复制分享链接')}
+              </button>
+              {copyMsg && <div style={{ fontSize: '12px', color: '#1A7A3A', marginTop: '6px', wordBreak: 'break-all' }}>{copyMsg}</div>}
+            </div>
+            {myRewards.length > 0 && (
+              <div style={{ marginTop: '12px' }}>
+                <div className="settings-section-title" style={{ fontSize: '14px' }}>{t('My rewards', '我的奖励')}</div>
+                {pending.length > 0 && (
+                  <p className="settings-hint" style={{ color: '#1A7A3A' }}>
+                    {t(`🎁 ${pending.length} free gift(s) waiting — added automatically to your next order!`, `🎁 ${pending.length} 份免费礼物待领 — 下次下单自动赠送！`)}
+                  </p>
+                )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                  {myRewards.map((r, i) => (
+                    <div key={i} className="summary-row" style={{ fontSize: '13px' }}>
+                      <span>🎁 {r.giftProductName || t('Gift', '礼物')}</span>
+                      <span style={{ color: r.status === 'pending' ? '#1A7A3A' : '#A07070' }}>
+                        {r.status === 'pending' ? t('Ready to redeem', '待领取') : t(`Redeemed (${r.redeemedOrder || ''})`, `已领取（${r.redeemedOrder || ''}）`)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── Vouchers ── */}
-      {section === 'vouchers' && (
+      {(section === 'promos' || section === 'vouchers') && (
         <div className="settings-section">
           <div className="settings-section-title">{t('My Vouchers', '我的优惠券')}</div>
           {vouchersLoading ? (

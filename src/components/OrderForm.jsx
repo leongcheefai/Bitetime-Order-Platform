@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import emailjs from '@emailjs/browser';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
-import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber, fetchProductSales, DEFAULTS } from '../store';
+import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber, fetchProductSales, DEFAULTS, fetchProfileByReferralCode, isNewCustomer, loadReferralRewards, saveReferralRewards } from '../store';
 import { quoteSameday } from '../geo';
 
 export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
@@ -79,6 +79,48 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
   const [appliedVoucher, setAppliedVoucher] = useState(null);
   const [voucherMsg, setVoucherMsg] = useState('');
   const [voucherApplying, setVoucherApplying] = useState(false);
+
+  // ── Referral program ──
+  const referral = settings.referral ?? {};
+  const referralEnabled = !!referral.enabled;
+  const referralDiscountAmt = parseFloat(referral.discount) || 0;
+  const [referralInput, setReferralInput] = useState(() => new URLSearchParams(window.location.search).get('ref')?.toUpperCase() ?? '');
+  const [appliedReferral, setAppliedReferral] = useState(null);
+  const [referralMsg, setReferralMsg] = useState('');
+  const [referralApplying, setReferralApplying] = useState(false);
+  // Earned-but-unredeemed gift for the logged-in member (one redeemed per order)
+  const [pendingGift, setPendingGift] = useState(null);
+  useEffect(() => {
+    if (!user || !referralEnabled) return;
+    loadReferralRewards().then(rewards => {
+      setPendingGift(rewards.find(r => r.status === 'pending' && r.referrerUserId === user.id) ?? null);
+    }).catch(() => {});
+  }, [user, referralEnabled]);
+  const giftProduct = pendingGift ? (settings.products.find(p => p.id === pendingGift.giftProductId) ?? null) : null;
+  const giftName = pendingGift ? (giftProduct?.name || pendingGift.giftProductName || '') : '';
+
+  async function applyReferral() {
+    const code = referralInput.trim().toUpperCase();
+    if (!code) return;
+    setReferralApplying(true);
+    setReferralMsg('');
+    const profile = await fetchProfileByReferralCode(code);
+    if (!profile) {
+      setReferralMsg(t('❌ Invalid referral code.', '❌ 无效的推荐码。'));
+    } else if (user && profile.id === user.id) {
+      setReferralMsg(t('❌ You cannot use your own referral code.', '❌ 不能使用自己的推荐码。'));
+    } else {
+      setAppliedReferral({ code, referrerId: profile.id, referrerName: profile.name || profile.email });
+      setReferralMsg(t(`✓ Referral applied — RM ${referralDiscountAmt} off your first order!`, `✓ 推荐码已应用 — 首单立减 RM ${referralDiscountAmt}！`));
+    }
+    setReferralApplying(false);
+  }
+
+  function removeReferral() {
+    setAppliedReferral(null);
+    setReferralInput('');
+    setReferralMsg('');
+  }
 
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState({});
@@ -201,6 +243,11 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     return Math.min(appliedVoucher.value, subtotalBeforeDiscount);
   }
 
+  function computeReferralDiscount(totalAfterVoucher) {
+    if (!appliedReferral || !referralEnabled) return 0;
+    return Math.min(referralDiscountAmt, totalAfterVoucher);
+  }
+
   function computeTotal() {
     let total = 0;
     Object.keys(selected).forEach(id => {
@@ -209,7 +256,8 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     });
     total += currentShippingFee();
     const discount = computeDiscount(total);
-    return parseFloat((total - discount).toFixed(2));
+    const referralDisc = computeReferralDiscount(total - discount);
+    return parseFloat((total - discount - referralDisc).toFixed(2));
   }
 
   async function submitOrder() {
@@ -248,6 +296,15 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       } else if (appliedVoucher.minOrder && sub < appliedVoucher.minOrder) {
         removeVoucher();
         setVoucherMsg(t(`❌ Voucher removed — minimum order of RM ${appliedVoucher.minOrder} not met.`, `❌ 优惠券已移除 — 未达到最低消费 RM ${appliedVoucher.minOrder}。`));
+        errs.voucher = true;
+      }
+    }
+    // Referral code is only for first-time customers — verify against order history
+    if (appliedReferral && referralEnabled && !Object.keys(errs).length) {
+      const isNew = await isNewCustomer(custWa, user?.email ?? '');
+      if (!isNew) {
+        removeReferral();
+        setReferralMsg(t('❌ Referral code removed — it is only valid for first-time customers.', '❌ 推荐码已移除 — 仅限新顾客首单使用。'));
         errs.voucher = true;
       }
     }
@@ -307,6 +364,14 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       msg += `\n*Voucher (${appliedVoucher.code}):* −RM ${money(discountAmt)}`;
       total = parseFloat((total - discountAmt).toFixed(2));
     }
+    if (appliedReferral && referralEnabled) {
+      const refDisc = Math.min(referralDiscountAmt, total);
+      msg += `\n*Referral (${appliedReferral.code} — ${appliedReferral.referrerName}):* −RM ${money(refDisc)}`;
+      total = parseFloat((total - refDisc).toFixed(2));
+    }
+    if (pendingGift && giftName) {
+      msg += `\n*🎁 Referral gift:* ${giftName} × 1 — FREE`;
+    }
     msg += `\n*Total: RM ${money(total)}*`;
 
     try {
@@ -314,6 +379,10 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         const p = getProduct(id);
         return { id, name: p.name, qty: qty[id] || 0, price: effPrice(p) };
       });
+      // Redeem an earned referral gift: ships free with this order
+      if (pendingGift && giftName) {
+        items.push({ id: pendingGift.giftProductId || 'referral_gift', name: `🎁 ${giftName}`, qty: 1, price: 0 });
+      }
       const region = mode === 'delivery' ? (EM_STATES.includes(state) ? 'EM' : 'WM') : null;
       await saveOrder({
         order_number: orderNumber,
@@ -330,10 +399,21 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         shipping_fee: currentShippingFee(),
         items,
         total: computeTotal(),
+        referrer_code: appliedReferral && referralEnabled ? appliedReferral.code : null,
       });
 
       // Only burn the voucher once the order is safely saved
       if (appliedVoucher) await markVoucherUsed(appliedVoucher.code).catch(() => {});
+
+      // Mark the redeemed referral gift so it isn't shipped twice
+      if (pendingGift) {
+        loadReferralRewards().then(rewards =>
+          saveReferralRewards(rewards.map(r => r.id === pendingGift.id
+            ? { ...r, status: 'redeemed', redeemedOrder: orderNumber, redeemedAt: new Date().toISOString() }
+            : r))
+        ).catch(() => {});
+        setPendingGift(null);
+      }
 
       if (user?.email && settings.ejsServiceId && settings.ejsTemplateId && settings.ejsPublicKey) {
         const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${money(i.price * i.qty)}`).join('\n');
@@ -622,6 +702,50 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         )}
       </div>
 
+      {/* REFERRAL CODE */}
+      {referralEnabled && (
+        <div className="section">
+          <div className="section-label">{t('Referred by a friend?', '朋友推荐？')}</div>
+          <p style={{ fontSize: '12px', color: '#A07070', margin: '0 0 8px' }}>
+            {t(`First order? Enter your friend's referral code for RM ${referralDiscountAmt} off — they get a free treat too!`, `首次下单？填入朋友的推荐码立减 RM ${referralDiscountAmt} — 朋友也能拿免费小礼物！`)}
+          </p>
+          {appliedReferral ? (
+            <div className="voucher-applied-row">
+              <span className="voucher-applied-badge">{appliedReferral.code}</span>
+              <span className="voucher-applied-desc">− RM {money(referralDiscountAmt)}</span>
+              <button className="voucher-remove-btn" onClick={removeReferral}>{t('Remove', '移除')}</button>
+            </div>
+          ) : (
+            <div className="voucher-input-row">
+              <input
+                type="text"
+                className="voucher-text-input"
+                placeholder={t('Enter referral code', '输入推荐码')}
+                value={referralInput}
+                onChange={e => { setReferralInput(e.target.value.toUpperCase()); setReferralMsg(''); }}
+                onKeyDown={e => e.key === 'Enter' && applyReferral()}
+              />
+              <button className="voucher-apply-btn" onClick={applyReferral} disabled={referralApplying || !referralInput.trim()}>
+                {referralApplying ? '…' : t('Apply', '应用')}
+              </button>
+            </div>
+          )}
+          {referralMsg && (
+            <p className={'voucher-feedback' + (appliedReferral ? ' ok' : ' err')}>{referralMsg}</p>
+          )}
+        </div>
+      )}
+
+      {/* PENDING REFERRAL GIFT */}
+      {referralEnabled && pendingGift && giftName && (
+        <div className="section">
+          <div className="success-info-box" style={{ textAlign: 'left' }}>
+            <div className="success-info-title">🎁 {t('Referral reward', '推荐奖励')}</div>
+            <div>{t(`You've earned a free ${giftName}! It will be added to this order automatically.`, `您获得了免费 ${giftName}！将自动随此订单赠送。`)}</div>
+          </div>
+        </div>
+      )}
+
       <hr className="divider" />
 
       {/* SUMMARY */}
@@ -671,6 +795,12 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
                 <span>{sdQuote.status === 'ok' ? `RM ${money(sdQuote.fee)}` : sdQuote.status === 'loading' ? '…' : t('TBD', '待定')}</span>
               </div>
             )}
+            {pendingGift && giftName && (
+              <div className="summary-row">
+                <span>🎁 {giftName} × 1 {t('(referral reward)', '（推荐奖励）')}</span>
+                <span>{t('FREE', '免费')}</span>
+              </div>
+            )}
             {appliedVoucher && (() => {
               let sub = 0;
               Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) sub += effPrice(p) * (qty[id] || 0); });
@@ -679,6 +809,18 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
               return (
                 <div className="summary-row discount">
                   <span>{appliedVoucher.code}</span>
+                  <span>− RM {money(disc)}</span>
+                </div>
+              );
+            })()}
+            {appliedReferral && referralEnabled && (() => {
+              let sub = 0;
+              Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) sub += effPrice(p) * (qty[id] || 0); });
+              sub += currentShippingFee();
+              const disc = computeReferralDiscount(sub - computeDiscount(sub));
+              return (
+                <div className="summary-row discount">
+                  <span>{t('Referral', '推荐码')} ({appliedReferral.code})</span>
                   <span>− RM {money(disc)}</span>
                 </div>
               );

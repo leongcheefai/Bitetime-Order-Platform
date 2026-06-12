@@ -33,6 +33,10 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   const [pickupHours, setPickupHours] = useState(settings.pickup?.hours ?? '');
   const [paymentNote, setPaymentNote] = useState(settings.paymentNote ?? '');
   const [igUrl, setIgUrl] = useState(settings.igUrl ?? '');
+  const [events, setEvents] = useState(() => (settings.events ?? []).map(ev => ({ ...ev })));
+  const [refEnabled, setRefEnabled] = useState(settings.referral?.enabled ?? false);
+  const [refGiftId, setRefGiftId] = useState(settings.referral?.giftProductId ?? '');
+  const [refDiscount, setRefDiscount] = useState(settings.referral?.discount ?? 5);
   const [waNumber, setWaNumber] = useState(settings.waNumber ?? '');
   // address the current coords were geocoded from — re-geocode on save if it changed
   const [sdGeocodedFor, setSdGeocodedFor] = useState(sd.origin ?? '');
@@ -117,7 +121,19 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
         availableDays,
         leadDays: parseInt(leadDays) || 1,
         blockedDates,
+        events: events
+          .map(ev => ({ ...ev, title: (ev.title || '').trim(), desc: (ev.desc || '').trim() }))
+          .filter(ev => ev.title),
+        referral: {
+          enabled: refEnabled,
+          giftProductId: refGiftId,
+          discount: parseFloat(refDiscount) || 0,
+        },
       };
+      if (refEnabled && !refGiftId) {
+        setSaveMsg(t('⚠ Referral: please choose a gift product.', '⚠ 推荐计划：请选择赠品产品。'));
+        return;
+      }
       console.log('[AdminPanel] Saving settings:', JSON.stringify(newSettings));
       saveSettingsToDB(newSettings);
       onSave(newSettings);
@@ -133,7 +149,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
     <div className="admin-panel">
       <div className="admin-title">
         <span>✏️</span>{' '}
-        {{ menu: t('Menu', '菜单'), shipping: t('Delivery & Shipping', '送货费用'), pickup: t('Pickup & Payment', '自取与付款'), schedule: t('Order Schedule', '下单日期'), bot: t('Bot Settings', '机器人设置'), email: t('Email Settings', '邮件设置') }[tab]}
+        {{ menu: t('Menu', '菜单'), shipping: t('Delivery & Shipping', '送货费用'), pickup: t('Pickup & Payment', '自取与付款'), schedule: t('Order Schedule', '下单日期'), events: t('Promos & Events', '活动专区'), bot: t('Bot Settings', '机器人设置'), email: t('Email Settings', '邮件设置') }[tab]}
       </div>
 
       <div className="admin-tab-content">
@@ -410,6 +426,73 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {tab === 'events' && (
+        <div className="admin-section">
+          <div className="admin-section-label">{t('Promos & Events', '活动专区')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t('Shown to customers under "Promos & Events" in their account drawer. Untick "show" to hide an event without deleting it; events past their end date hide automatically.', '显示在顾客侧边栏的「活动专区」。取消勾选「显示」可隐藏活动而不删除；过了截止日期会自动隐藏。')}
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {events.map((ev, i) => (
+              <div key={i} style={{ border: '1px solid #E8C9C9', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="admin-field full">
+                  <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Title', '标题')}</label>
+                  <input type="text" placeholder={t('e.g. Raya Gift Box Pre-order', '例如：开斋节礼盒预购')} value={ev.title || ''} onChange={e => setEvents(evs => evs.map((x, j) => j === i ? { ...x, title: e.target.value } : x))} />
+                </div>
+                <div className="admin-field full">
+                  <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Details', '内容')}</label>
+                  <textarea rows={3} placeholder={t('Event details shown to customers…', '显示给顾客的活动内容…')} value={ev.desc || ''} onChange={e => setEvents(evs => evs.map((x, j) => j === i ? { ...x, desc: e.target.value } : x))} style={{ resize: 'vertical', fontFamily: 'inherit', fontSize: 14, padding: '8px 10px', border: '1px solid #E8C9C9', borderRadius: 8 }} />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <div className="admin-field">
+                    <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('End date (optional)', '截止日期（选填）')}</label>
+                    <input type="date" value={ev.until || ''} onChange={e => setEvents(evs => evs.map((x, j) => j === i ? { ...x, until: e.target.value } : x))} />
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, marginTop: 14 }}>
+                    <input type="checkbox" checked={ev.active !== false} onChange={e => setEvents(evs => evs.map((x, j) => j === i ? { ...x, active: e.target.checked } : x))} />
+                    {t('Show', '显示')}
+                  </label>
+                  <button type="button" className="voucher-remove-btn" style={{ marginLeft: 'auto', marginTop: 14 }} onClick={() => setEvents(evs => evs.filter((_, j) => j !== i))}>
+                    {t('Delete', '删除')}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button type="button" className="add-btn" style={{ marginTop: 12 }} onClick={() => setEvents(evs => [...evs, { title: '', desc: '', until: '', active: true }])}>
+            + {t('Add event', '新增活动')}
+          </button>
+        </div>
+      )}
+
+      {tab === 'events' && (
+        <div className="admin-section">
+          <div className="admin-section-label">{t('Referral Program', '推荐计划')}</div>
+          <p style={{ fontSize: '12px', color: '#888', marginBottom: '10px' }}>
+            {t('Members share their referral code; a new customer gets a first-order discount, and the referrer earns a free product shipped with their next order (you confirm each reward on the Orders page after the referred order is completed).', '会员分享推荐码；新客首单立减，推荐人获得免费赠品随下次订单一起送出（被推荐的订单完成后，由你在订单页确认发放）。')}
+          </p>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 14, marginBottom: 12 }}>
+            <input type="checkbox" checked={refEnabled} onChange={e => setRefEnabled(e.target.checked)} />
+            {t('Enable referral program', '启用推荐计划')}
+          </label>
+          {refEnabled && (
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <div className="admin-field">
+                <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('Referrer gift product', '推荐人赠品')}</label>
+                <select value={refGiftId} onChange={e => setRefGiftId(e.target.value)}>
+                  <option value="">{t('— Choose product —', '— 选择产品 —')}</option>
+                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div className="admin-field">
+                <label style={{ fontSize: '12px', color: '#A07070', marginBottom: '2px' }}>{t('New customer discount (RM)', '新客立减 (RM)')}</label>
+                <input type="number" min="0" step="0.50" value={refDiscount} onChange={e => setRefDiscount(e.target.value)} style={{ width: 100 }} />
+              </div>
+            </div>
+          )}
         </div>
       )}
 

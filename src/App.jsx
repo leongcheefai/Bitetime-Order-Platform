@@ -19,7 +19,7 @@ const USER_NAV = [
   { key: 'orders',    icon: '', label: 'Orders',           labelZh: '订单' },
   { key: 'menu',      icon: '', label: 'Settings',  labelZh: '设置' },
   { key: 'customers', icon: '', label: 'Customers',        labelZh: '顾客' },
-  { key: 'vouchers',  icon: '', label: 'Vouchers',         labelZh: '优惠券' },
+  { key: 'events',    icon: '', label: 'Promos & Events',  labelZh: '活动专区' },
   { key: 'preview',   icon: '', label: 'Customer View',    labelZh: '顾客视图' },
 ];
 
@@ -38,6 +38,7 @@ export default function App() {
   const [ordersKey, setOrdersKey] = useState(0);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [menuExpanded, setMenuExpanded] = useState(false);
+  const [eventsExpanded, setEventsExpanded] = useState(false);
   const [menuTab, setMenuTab] = useState('menu');
   const [accountSection, setAccountSection] = useState(null);
   const [savedAddress, setSavedAddress] = useState(null);
@@ -122,9 +123,9 @@ export default function App() {
   }
 
   const drawerNavItems = [
-    { key: 'details',  label: t('Personal Details', '个人信息') },
-    { key: 'vouchers', label: t('Vouchers', '优惠券') },
-    { key: 'history',  label: t('Order History', '历史订单') },
+    { key: 'details', label: t('Personal Details', '个人信息') },
+    { key: 'promos',  label: t('Promos & Events', '活动专区') },
+    { key: 'history', label: t('Order History', '历史订单') },
   ];
 
   function openSection(key) {
@@ -271,6 +272,32 @@ export default function App() {
                   </>
                 )}
               </div>
+            ) : key === 'events' ? (
+              <div key="events">
+                <button
+                  className={'drawer-nav-btn drawer-nav-btn--expand' + (userPage === 'events' || userPage === 'vouchers' ? ' active' : '')}
+                  onClick={() => setEventsExpanded(e => !e)}
+                >
+                  <span>{t(label, labelZh)}</span>
+                  <span style={{ fontSize: '10px', opacity: 0.7 }}>{eventsExpanded ? '▲' : '▼'}</span>
+                </button>
+                {eventsExpanded && (
+                  <>
+                    <button
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'events' ? ' active' : '')}
+                      onClick={() => { setUserPage('events'); setDrawerOpen(false); setOrderDone(false); }}
+                    >
+                      {t('Events', '活动')}
+                    </button>
+                    <button
+                      className={'drawer-nav-btn drawer-nav-sub' + (userPage === 'vouchers' ? ' active' : '')}
+                      onClick={() => { setUserPage('vouchers'); setDrawerOpen(false); setOrderDone(false); }}
+                    >
+                      {t('Vouchers', '优惠券')}
+                    </button>
+                  </>
+                )}
+              </div>
             ) : (
             <button
               key={key}
@@ -334,7 +361,7 @@ export default function App() {
                   <span className="reset-link" style={{ display: 'inline-block', marginBottom: '1.25rem' }} onClick={() => setAccountSection(null)}>
                     {t('← Back to Order', '← 返回订单')}
                   </span>
-                  <CustomerSettings user={account} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
+                  <CustomerSettings user={account} lang={lang} settings={settings} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
                 </>
               ) : (
                 <>
@@ -363,6 +390,7 @@ export default function App() {
           {userPage === 'orders' && <OrderList key={ordersKey} lang={lang} settings={settings} user={account} />}
           {userPage === 'customers' && <CustomerList lang={lang} />}
           {userPage === 'vouchers' && <VoucherPanel lang={lang} />}
+          {userPage === 'events' && <AdminPanel settings={settings} lang={lang} onSave={newSettings => setSettings(newSettings)} tab="events" />}
         </div>
         {sideDrawer}
       </>
@@ -399,7 +427,7 @@ export default function App() {
             <span className="reset-link" style={{ display: 'inline-block', marginBottom: '1.25rem' }} onClick={() => setAccountSection(null)}>
               {t('← Back to Order', '← 返回订单')}
             </span>
-            <CustomerSettings user={account} lang={lang} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
+            <CustomerSettings user={account} lang={lang} settings={settings} onAddressSaved={addr => setSavedAddress(addr)} refreshKey={orderCount} section={accountSection} />
           </>
         ) : (
           <>

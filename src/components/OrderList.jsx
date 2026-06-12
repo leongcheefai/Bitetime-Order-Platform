@@ -4,7 +4,7 @@ import { DayPicker } from 'react-day-picker';
 import { format } from 'date-fns';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
-import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId, saveOrder, getNextOrderNumber, fetchProfileByEmail, fetchAllProfiles, fetchProductSales, updateOrderUser } from '../store';
+import { fetchAllOrders, loadOrderStatuses, saveOrderStatus, loadOrderAWBs, saveOrderAWB, loadOrderNotes, saveOrderNote, fetchProfileByUserId, saveOrder, getNextOrderNumber, fetchProfileByEmail, fetchAllProfiles, fetchProductSales, updateOrderUser, fetchProfileByReferralCode, loadReferralRewards, saveReferralRewards } from '../store';
 
 const STATUS_OPTIONS = ['pending', 'confirmed', 'preparing', 'ready', 'completed', 'cancelled'];
 const MY_STATES = ['Johor','Kedah','Kelantan','Melaka','Negeri Sembilan','Pahang','Perak','Perlis','Pulau Pinang','Sabah','Sarawak','Selangor','Terengganu','W.P. Kuala Lumpur','W.P. Labuan','W.P. Putrajaya'];
@@ -54,6 +54,9 @@ export default function OrderList({ lang, settings = {} }) {
   const [allProfiles, setAllProfiles] = useState([]);
   const [orderLinkSaving, setOrderLinkSaving] = useState(null);
   const [orderLinkError, setOrderLinkError] = useState(null);
+  const [refRewards, setRefRewards] = useState([]);
+  const [rewardIssuing, setRewardIssuing] = useState(null);
+  const [rewardError, setRewardError] = useState(null);
   const [showEmailDrop, setShowEmailDrop] = useState(false);
   const emailDropRef = useRef(null);
 
@@ -80,6 +83,7 @@ export default function OrderList({ lang, settings = {} }) {
       setLoading(false);
     });
     fetchAllProfiles().then(setAllProfiles).catch(() => {});
+    loadReferralRewards().then(setRefRewards).catch(() => {});
   }, []);
 
   const products = settings.products ?? [];
@@ -121,6 +125,41 @@ export default function OrderList({ lang, settings = {} }) {
       setOrderLinkError({ orderNumber, message: err.message });
     }
     setOrderLinkSaving(null);
+  }
+
+  async function handleIssueReferralReward(order) {
+    const orderNumber = order.order_number;
+    setRewardIssuing(orderNumber);
+    setRewardError(null);
+    try {
+      const rewards = await loadReferralRewards();
+      if (rewards.some(r => r.orderNumber === orderNumber)) {
+        setRefRewards(rewards);
+        return;
+      }
+      const profile = await fetchProfileByReferralCode(order.referrer_code);
+      if (!profile) throw new Error(t('Referrer not found for this code.', '找不到此推荐码的会员。'));
+      const giftId = settings.referral?.giftProductId || '';
+      const gift = (settings.products ?? []).find(p => p.id === giftId);
+      const entry = {
+        id: 'rw_' + orderNumber,
+        orderNumber,
+        referrerCode: order.referrer_code,
+        referrerUserId: profile.id,
+        referrerName: profile.name || profile.email,
+        giftProductId: giftId,
+        giftProductName: gift?.name ?? '',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+      const updated = [entry, ...rewards];
+      await saveReferralRewards(updated);
+      setRefRewards(updated);
+    } catch (err) {
+      setRewardError({ orderNumber, message: err.message });
+    } finally {
+      setRewardIssuing(null);
+    }
   }
 
   async function handleLookupEmail() {
@@ -712,6 +751,38 @@ export default function OrderList({ lang, settings = {} }) {
                       <div style={{ fontSize: '12px', color: '#A07070', marginTop: '4px' }}>{t('This order has no order number — backfill it first.', '此订单没有订单号 — 请先补订单号。')}</div>
                     )}
                   </div>
+
+                  {order.referrer_code && (() => {
+                    const reward = refRewards.find(r => r.orderNumber === order.order_number);
+                    return (
+                      <div className="user-order-note-row">
+                        <div className="user-order-detail-label">{t('Referral', '推荐')}</div>
+                        <div style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                          <span className="voucher-applied-badge">{order.referrer_code}</span>
+                          {reward ? (
+                            <span style={{ color: '#1A7A3A' }}>
+                              ✓ {t('Reward issued to', '奖励已发给')} {reward.referrerName || reward.referrerCode}
+                              {reward.giftProductName ? ` — 🎁 ${reward.giftProductName}` : ''}
+                              {reward.status === 'redeemed' ? t(' (redeemed)', '（已领取）') : t(' (pending)', '（待领取）')}
+                            </span>
+                          ) : status === 'completed' ? (
+                            <button
+                              className="awb-save-btn"
+                              disabled={rewardIssuing === order.order_number}
+                              onClick={() => handleIssueReferralReward(order)}
+                            >
+                              {rewardIssuing === order.order_number ? t('Issuing…', '发放中…') : t('🎁 Issue referral reward', '🎁 发放推荐奖励')}
+                            </button>
+                          ) : (
+                            <span style={{ color: '#A07070' }}>{t('Mark order completed to issue the reward.', '订单标记完成后即可发放奖励。')}</span>
+                          )}
+                        </div>
+                        {rewardError?.orderNumber === order.order_number && (
+                          <div style={{ fontSize: '12px', color: '#c0392b', marginTop: '4px' }}>{rewardError.message}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div className="user-order-status-row">
                     <span className="user-order-detail-label">{t('Update Status', '更新状态')}</span>

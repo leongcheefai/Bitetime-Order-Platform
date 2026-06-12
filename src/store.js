@@ -124,6 +124,7 @@ export function onAuthChange(callback) {
           email: user.email,
           email_confirmed: !!user.email_confirmed_at,
           created_at: user.created_at,
+          referral_code: referralCodeOf(user.id),
         }, { onConflict: 'id' }).then(({ error }) => {
           if (error) console.error('Profile upsert failed:', error.message);
         });
@@ -317,6 +318,44 @@ export async function deleteVoucher(code) {
   const updated = list.filter(v => v.code !== code);
   await saveVouchers(updated);
   return updated;
+}
+
+// ── Referral program ─────────────────────────────────────────────────────────
+// A member's referral code is the first 8 hex chars of their profile UUID,
+// so the code itself identifies the referrer. Also stored in
+// profiles.referral_code for lookup.
+export function referralCodeOf(userId) {
+  return (userId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+export async function fetchProfileByReferralCode(code) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, email')
+    .eq('referral_code', (code || '').trim().toUpperCase())
+    .single();
+  if (error) return null;
+  return data;
+}
+
+// True when no past order matches this WhatsApp number or account email.
+// Uses a security-definer RPC because guests cannot read the orders table.
+export async function isNewCustomer(wa, email) {
+  const { data, error } = await supabase.rpc('is_new_customer', { p_wa: wa || '', p_email: email || '' });
+  if (error) { console.error('is_new_customer RPC failed:', error.message); return false; }
+  return data === true;
+}
+
+// Ledger of earned referral gifts, stored in the settings key-value table.
+// Entry: { id, orderNumber, referrerCode, referrerUserId, giftProductId,
+//          giftProductName, status: 'pending' | 'redeemed', createdAt, redeemedOrder }
+export async function loadReferralRewards() {
+  const { data } = await supabase.from('settings').select('value').eq('key', 'referral_rewards').single();
+  return data?.value ?? [];
+}
+
+export async function saveReferralRewards(rewards) {
+  await supabase.from('settings').upsert({ key: 'referral_rewards', value: rewards }, { onConflict: 'key' });
 }
 
 export async function loadOrderNotes() {
