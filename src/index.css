@@ -31,7 +31,7 @@ body:has(.user-layout) { padding: 1.25rem; }
 .sidebar-title { font-family: 'Lora', serif; font-size: 13px; color: #7A4F55; margin-top: 2px; }
 .sidebar-role { font-size: 10px; font-weight: 500; color: #A07070; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
 
-.sidebar-nav { flex: 1; padding: 0.75rem 0; display: flex; flex-direction: column; }
+.sidebar-nav { flex: 1; padding: 0.75rem 0; display: flex; flex-direction: column; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
 .sidebar-nav-item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 1.25rem; border: none; border-radius: 0; background: none; color: #4A2530; font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; font-weight: 500; text-align: left; letter-spacing: 0.01em; transition: background 0.15s, color 0.15s; }
 .sidebar-nav-item::after { content: '→'; font-size: 13px; color: #C9A090; margin-left: auto; padding-left: 8px; transition: transform 0.15s, color 0.15s; }
 .sidebar-nav-item::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; background: #7A1028; border-radius: 0 2px 2px 0; transform: scaleY(0); transition: transform 0.15s; }
@@ -288,7 +288,7 @@ body:has(.user-layout) { padding: 1.25rem; }
 .drawer-user-greeting { font-size: 11px; color: #B09080; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px; }
 .drawer-user-name { font-family: 'Lora', serif; font-size: 16px; color: #2B0A10; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.drawer-nav { display: flex; flex-direction: column; flex: 1; padding: 0.75rem 0; }
+.drawer-nav { display: flex; flex-direction: column; flex: 1; padding: 0.75rem 0; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
 .drawer-nav-btn { position: relative; width: 100%; padding: 15px 1.5rem; border: none; background: none; font-size: 14px; font-family: 'DM Sans', sans-serif; color: #4A2530; cursor: pointer; font-weight: 500; transition: background 0.15s, color 0.15s, padding-left 0.15s; text-align: left; display: flex; align-items: center; justify-content: space-between; letter-spacing: 0.01em; }
 .drawer-nav-btn::after { content: '→'; font-size: 13px; color: #C9A090; transition: transform 0.15s, color 0.15s; }
 .drawer-nav-btn::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; background: #7A1028; border-radius: 0 2px 2px 0; transform: scaleY(0); transition: transform 0.15s; }
