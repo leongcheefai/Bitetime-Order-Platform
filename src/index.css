@@ -228,6 +228,8 @@ body:has(.user-layout) { padding: 1.25rem; }
 .order-accordion-total { font-size: 14px; font-weight: 500; color: #2B0A10; }
 .order-accordion-chevron { font-size: 10px; color: #A07070; }
 .order-accordion-body { padding: 12px 16px 16px; border-top: 1px solid #C9A0A8; }
+.invoice-btn { margin-top: 14px; width: 100%; padding: 10px 14px; background: #fff; color: #B86B6B; border: 1px solid #C9A0A8; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s, color .15s; }
+.invoice-btn:hover { background: #B86B6B; color: #fff; border-color: #B86B6B; }
 
 /* ── Voucher redemption (order form) ─────────────────────────────────────── */
 .voucher-input-row { display: flex; gap: 8px; }

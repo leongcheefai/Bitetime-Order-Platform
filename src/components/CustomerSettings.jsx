@@ -82,6 +82,106 @@ export default function CustomerSettings({ user, lang, settings = {}, onAddressS
     return new Date(iso).toLocaleDateString(lang === 'zh' ? 'zh-MY' : 'en-MY', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
+  function generateInvoice(order) {
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const modeLabel = order.mode === 'delivery' ? t('Delivery', '送货')
+      : order.mode === 'sameday' ? t('Same-day delivery', '当天配送')
+      : t('Self-pickup', '自取');
+    const items = (order.items || []).map(it => `
+      <tr>
+        <td>${esc(it.name)}</td>
+        <td class="num">${esc(it.qty)}</td>
+        <td class="num">RM ${esc(it.price)}</td>
+        <td class="num">RM ${esc(it.price * it.qty)}</td>
+      </tr>`).join('');
+    const showShip = (order.mode === 'delivery' || order.mode === 'sameday') && order.shipping_fee > 0;
+    const shipRow = showShip ? `
+      <tr>
+        <td colspan="3">${order.mode === 'sameday' ? t('Same-day delivery', '当天配送') : t('Delivery', '送货') + (order.region ? ` (${esc(order.region)})` : '')}</td>
+        <td class="num">RM ${esc(order.shipping_fee)}</td>
+      </tr>` : '';
+    const awb = orderAWBs[order.order_number];
+    const pickupAddr = settings.pickup?.address;
+
+    const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8">
+<title>${t('Invoice', '发票')} ${esc(order.order_number || '')}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #3a2a2a; margin: 0; padding: 32px; }
+  .invoice { max-width: 640px; margin: 0 auto; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #E5C8C8; padding-bottom: 16px; margin-bottom: 20px; }
+  .brand { font-size: 26px; font-weight: 700; color: #B86B6B; }
+  .brand-sub { font-size: 12px; color: #A07070; margin-top: 4px; }
+  .inv-meta { text-align: right; font-size: 13px; color: #6a5050; }
+  .inv-meta .title { font-size: 18px; font-weight: 700; color: #3a2a2a; margin-bottom: 6px; }
+  .section-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #A07070; margin: 18px 0 6px; }
+  .details { font-size: 13px; line-height: 1.6; }
+  table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 13px; }
+  th { text-align: left; border-bottom: 1px solid #E5C8C8; padding: 8px 6px; color: #A07070; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  td { padding: 8px 6px; border-bottom: 1px solid #f0e4e4; }
+  td.num, th.num { text-align: right; }
+  tr.total td { font-weight: 700; font-size: 15px; border-bottom: none; border-top: 2px solid #E5C8C8; padding-top: 12px; }
+  .awb { background: #FBF1F1; border-radius: 8px; padding: 10px 14px; margin-top: 14px; font-size: 13px; }
+  .awb b { color: #B86B6B; }
+  .foot { margin-top: 28px; text-align: center; font-size: 12px; color: #A07070; }
+  @media print { body { padding: 0; } .no-print { display: none; } }
+  .no-print { text-align: center; margin-bottom: 20px; }
+  .no-print button { background: #B86B6B; color: #fff; border: none; border-radius: 8px; padding: 10px 24px; font-size: 14px; cursor: pointer; }
+</style></head><body>
+<div class="no-print"><button onclick="window.print()">${t('Print / Save as PDF', '打印 / 保存为 PDF')}</button></div>
+<div class="invoice">
+  <div class="head">
+    <div>
+      <div class="brand">Bitetime 🍪</div>
+      <div class="brand-sub">${pickupAddr ? esc(pickupAddr) : ''}</div>
+    </div>
+    <div class="inv-meta">
+      <div class="title">${t('INVOICE', '发票')}</div>
+      <div>${t('No.', '号码')} ${esc(order.order_number || '—')}</div>
+      <div>${esc(formatDate(order.created_at))}</div>
+    </div>
+  </div>
+
+  <div class="section-label">${t('Bill to', '客户')}</div>
+  <div class="details">
+    ${order.customer_name ? `<div>${esc(order.customer_name)}</div>` : ''}
+    ${order.customer_wa ? `<div>${esc(order.customer_wa)}</div>` : ''}
+    <div>${t('Order type', '订单类型')}: ${esc(modeLabel)}</div>
+    ${order.preferred_date ? `<div>${t('Preferred date', '预计日期')}: ${esc(order.preferred_date)}</div>` : ''}
+    ${order.address ? `<div>${t('Delivery address', '送货地址')}: ${esc(order.address)}</div>` : ''}
+  </div>
+
+  <div class="section-label">${t('Order', '订单')}</div>
+  <table>
+    <thead><tr>
+      <th>${t('Item', '项目')}</th>
+      <th class="num">${t('Qty', '数量')}</th>
+      <th class="num">${t('Price', '单价')}</th>
+      <th class="num">${t('Amount', '金额')}</th>
+    </tr></thead>
+    <tbody>
+      ${items}
+      ${shipRow}
+      <tr class="total"><td colspan="3">${t('Total', '总计')}</td><td class="num">RM ${esc(order.total)}</td></tr>
+    </tbody>
+  </table>
+
+  ${awb ? `<div class="awb">${t('Tracking / AWB Number', '追踪号码')}: <b>${esc(awb)}</b></div>` : ''}
+
+  <div class="foot">${t('Thank you for your order! 🍪', '感谢您的订购！🍪')}</div>
+</div>
+<script>window.onload = function(){ setTimeout(function(){ window.print(); }, 300); };</script>
+</body></html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert(t('Please allow pop-ups to generate the invoice.', '请允许弹出窗口以生成发票。'));
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+  }
+
   return (
     <div className="cust-settings">
 
@@ -370,6 +470,10 @@ export default function CustomerSettings({ user, lang, settings = {}, onAddressS
                             </div>
                           </div>
                         )}
+
+                        <button className="invoice-btn" onClick={() => generateInvoice(order)}>
+                          🧾 {t('Generate invoice', '生成发票')}
+                        </button>
                       </div>
                     )}
                   </div>
