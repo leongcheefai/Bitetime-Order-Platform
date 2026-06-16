@@ -71,9 +71,16 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     }, 600);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [mode, postcode, sameday, sdQuoteRaw]);
-  const sdQuote = mode === 'sameday' && postcode.length === 5
-    ? (sdQuoteRaw?.for === postcode ? sdQuoteRaw : { status: 'loading' })
-    : { status: 'idle' };
+  // Same-day delivery is limited to KL & Selangor regardless of distance
+  const SAMEDAY_STATES = ['W.P. Kuala Lumpur', 'Selangor'];
+  const sdStateOk = !state || SAMEDAY_STATES.includes(state);
+  const sdQuote = mode !== 'sameday'
+    ? { status: 'idle' }
+    : !sdStateOk
+      ? { status: 'state' }
+      : postcode.length === 5
+        ? (sdQuoteRaw?.for === postcode ? sdQuoteRaw : { status: 'loading' })
+        : { status: 'idle' };
 
   const [voucherInput, setVoucherInput] = useState('');
   const [appliedVoucher, setAppliedVoucher] = useState(null);
@@ -279,7 +286,9 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       }
       if (!sdSlot) errs.slot = t('Please choose a delivery time slot.', '请选择送达时段。');
       if (!errs.address && sdQuote.status !== 'ok') {
-        errs.address = sdQuote.status === 'range'
+        errs.address = sdQuote.status === 'state'
+          ? t('Same-day delivery is only available in KL & Selangor. Please choose regular delivery.', '当天配送仅限吉隆坡和雪兰莪。请选择普通送货。')
+          : sdQuote.status === 'range'
           ? t('Sorry, your address is outside our same-day delivery range. Please choose regular delivery.', '抱歉，您的地址超出当天配送范围，请选择普通送货。')
           : t('Same-day delivery fee is still being calculated. Please wait a moment or check your postcode.', '当天配送费仍在计算中，请稍候或检查邮政编码。');
       }
@@ -537,7 +546,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         {mode === 'sameday' && (
           <>
             <p style={{ fontSize: '12px', color: '#888', marginTop: '8px' }}>
-              {t('Delivered today via Lalamove / Grab Express. Fee is estimated by distance from our kitchen to your address.', '今天通过 Lalamove / Grab Express 配送。运费按从我们厨房到您地址的距离估算。')}
+              {t('Delivered today via Lalamove / Grab Express, available in KL & Selangor only. Fee is estimated by distance from our kitchen to your address.', '今天通过 Lalamove / Grab Express 配送，仅限吉隆坡和雪兰莪。运费按从我们厨房到您地址的距离估算。')}
             </p>
             <div style={{ fontSize: '13px', fontWeight: 600, color: '#7a2828', margin: '10px 0 6px' }}>{t('Choose a delivery time slot', '选择送达时段')} *</div>
             <div className="radio-row">
