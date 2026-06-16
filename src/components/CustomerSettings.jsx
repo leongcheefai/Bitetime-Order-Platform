@@ -84,6 +84,7 @@ export default function CustomerSettings({ user, lang, settings = {}, onAddressS
 
   function generateInvoice(order) {
     const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const money = (n) => Number(n || 0).toFixed(2);
     const modeLabel = order.mode === 'delivery' ? t('Delivery', '送货')
       : order.mode === 'sameday' ? t('Same-day delivery', '当天配送')
       : t('Self-pickup', '自取');
@@ -91,14 +92,14 @@ export default function CustomerSettings({ user, lang, settings = {}, onAddressS
       <tr>
         <td>${esc(it.name)}</td>
         <td class="num">${esc(it.qty)}</td>
-        <td class="num">RM ${esc(it.price)}</td>
-        <td class="num">RM ${esc(it.price * it.qty)}</td>
+        <td class="num">RM ${money(it.price)}</td>
+        <td class="num">RM ${money(it.price * it.qty)}</td>
       </tr>`).join('');
     const showShip = (order.mode === 'delivery' || order.mode === 'sameday') && order.shipping_fee > 0;
     const shipRow = showShip ? `
       <tr>
         <td colspan="3">${order.mode === 'sameday' ? t('Same-day delivery', '当天配送') : t('Delivery', '送货') + (order.region ? ` (${esc(order.region)})` : '')}</td>
-        <td class="num">RM ${esc(order.shipping_fee)}</td>
+        <td class="num">RM ${money(order.shipping_fee)}</td>
       </tr>` : '';
     const awb = orderAWBs[order.order_number];
     const pickupAddr = settings.pickup?.address;
@@ -106,11 +107,12 @@ export default function CustomerSettings({ user, lang, settings = {}, onAddressS
     const html = `<!DOCTYPE html><html lang="${lang}"><head><meta charset="utf-8">
 <title>${t('Invoice', '发票')} ${esc(order.order_number || '')}</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=Lora:wght@500;600;700&family=DM+Sans:wght@400;500&display=swap');
   * { box-sizing: border-box; }
-  body { font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #3a2a2a; margin: 0; padding: 32px; }
+  body { font-family: 'DM Sans', -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #3a2a2a; margin: 0; padding: 32px; }
   .invoice { max-width: 640px; margin: 0 auto; }
   .head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #E5C8C8; padding-bottom: 16px; margin-bottom: 20px; }
-  .brand { font-size: 26px; font-weight: 700; color: #B86B6B; }
+  .brand { font-family: 'Lora', Georgia, serif; font-size: 30px; font-weight: 600; color: #7A1028; letter-spacing: 0.3px; }
   .brand-sub { font-size: 12px; color: #A07070; margin-top: 4px; }
   .inv-meta { text-align: right; font-size: 13px; color: #6a5050; }
   .inv-meta .title { font-size: 18px; font-weight: 700; color: #3a2a2a; margin-bottom: 6px; }
@@ -132,7 +134,7 @@ export default function CustomerSettings({ user, lang, settings = {}, onAddressS
 <div class="invoice">
   <div class="head">
     <div>
-      <div class="brand">Bitetime 🍪</div>
+      <div class="brand">Bitetime &amp; Co.</div>
       <div class="brand-sub">${pickupAddr ? esc(pickupAddr) : ''}</div>
     </div>
     <div class="inv-meta">
@@ -162,7 +164,7 @@ export default function CustomerSettings({ user, lang, settings = {}, onAddressS
     <tbody>
       ${items}
       ${shipRow}
-      <tr class="total"><td colspan="3">${t('Total', '总计')}</td><td class="num">RM ${esc(order.total)}</td></tr>
+      <tr class="total"><td colspan="3">${t('Total', '总计')}</td><td class="num">RM ${money(order.total)}</td></tr>
     </tbody>
   </table>
 
