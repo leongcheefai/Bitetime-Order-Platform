@@ -10,6 +10,8 @@ import { quoteSameday } from '../geo';
 export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
   const t = (en, zh) => lang === 'zh' ? zh : en;
   const money = (n) => Number(n || 0).toFixed(2);
+  const pName = (p) => (lang === 'zh' && p?.nameZh) ? p.nameZh : p?.name;
+  const pDesc = (p) => (lang === 'zh' && p?.descZh) ? p.descZh : p?.desc;
 
   const [selected, setSelected] = useState({});
   const [qty, setQty] = useState({});
@@ -490,9 +492,9 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             return (
             <div key={p.id} className={'cookie-card' + (selected[p.id] ? ' selected' : '')} style={blocked ? { opacity: 0.45, pointerEvents: 'none' } : undefined} onClick={() => toggleCookie(p.id)}>
               <div className="cookie-check-badge">{selected[p.id] ? '✓' : ''}</div>
-              {p.img && <img className="cookie-img" src={p.img} alt={p.name} loading="lazy" style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '10px', marginBottom: '8px' }} />}
-              <div className="cookie-name">{p.name}</div>
-              <div className="cookie-desc">{p.desc}</div>
+              {p.img && <img className="cookie-img" src={p.img} alt={pName(p)} loading="lazy" style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '10px', marginBottom: '8px' }} />}
+              <div className="cookie-name">{pName(p)}</div>
+              <div className="cookie-desc">{pDesc(p)}</div>
               {promoActive(p) ? (
                 <>
                   <div className="cookie-price">
@@ -792,7 +794,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
             {selectedIds.map(id => {
               const p = getProduct(id); if (!p) return null;
               const q = qty[id] || 0;
-              return <div key={id} className="summary-row"><span>{p.name} × {q} {p.unit}</span><span>RM {money(effPrice(p) * q)}</span></div>;
+              return <div key={id} className="summary-row"><span>{pName(p)} × {q} {p.unit}</span><span>RM {money(effPrice(p) * q)}</span></div>;
             })}
             {mode === 'delivery' && state && (() => {
               const region = EM_STATES.includes(state) ? 'EM' : 'WM';

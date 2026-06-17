@@ -50,7 +50,7 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
   }
 
   function addProduct() {
-    setProducts([...products, { id: 'item_' + Date.now(), name: '', desc: '', price: 0, unit: 'pc', sameday: true, img: '', promoLabel: '', promoPrice: 0, promoLimit: 0, promoStart: new Date().toISOString().slice(0, 10), promoEnd: '' }]);
+    setProducts([...products, { id: 'item_' + Date.now(), name: '', nameZh: '', desc: '', descZh: '', price: 0, unit: 'pc', sameday: true, img: '', promoLabel: '', promoPrice: 0, promoLimit: 0, promoStart: new Date().toISOString().slice(0, 10), promoEnd: '' }]);
   }
 
   function deleteProduct(i) {
@@ -179,6 +179,12 @@ export default function AdminPanel({ settings, onSave, lang, tab = 'menu' }) {
                   <input type="checkbox" checked={p.sameday !== false} onChange={e => updateProduct(i, 'sameday', e.target.checked)} />
                 </span>
                 <button className="del-btn" onClick={() => deleteProduct(i)} title="Remove">×</button>
+                <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', color: '#A07070', paddingTop: '4px' }}>
+                  <span>🇨🇳 {t('Chinese name', '中文名称')}:</span>
+                  <input type="text" style={{ width: '160px' }} placeholder={t('e.g. 巧克力曲奇', '如 巧克力曲奇')} value={p.nameZh || ''} onChange={e => updateProduct(i, 'nameZh', e.target.value)} />
+                  <span>{t('Chinese description', '中文描述')}:</span>
+                  <input type="text" style={{ flex: 1, minWidth: '200px' }} placeholder={t('Chinese description (optional)', '中文描述（选填）')} value={p.descZh || ''} onChange={e => updateProduct(i, 'descZh', e.target.value)} />
+                </div>
                 <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', fontSize: '12px', color: '#A07070', paddingTop: '4px' }}>
                   <span>🖼️ {t('Photo URL', '图片链接')}:</span>
                   <input type="text" style={{ flex: 1, minWidth: '200px' }} placeholder={t('https://… (leave empty for no photo)', 'https://…（留空则不显示图片）')} value={p.img || ''} onChange={e => updateProduct(i, 'img', e.target.value.trim())} />
