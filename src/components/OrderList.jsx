@@ -236,8 +236,15 @@ export default function OrderList({ lang, settings = {} }) {
   async function handleAwbSave(orderNumber) {
     setAwbSaving(orderNumber);
     try {
-      const updated = await saveOrderAWB(orderNumber, awbInputs[orderNumber] || '');
+      const value = awbInputs[orderNumber] || '';
+      const hadAwb = !!awbs[orderNumber];
+      const updated = await saveOrderAWB(orderNumber, value);
       setAwbs(updated);
+      // Confirming a tracking number while already "Out for Delivery" sends the
+      // email. Guard on prior-empty so editing an existing AWB doesn't resend.
+      if (value && !hadAwb && statuses[orderNumber] === 'ready') {
+        await sendShippingEmail(orderNumber, value);
+      }
     } catch (err) {
       console.error('Failed to save AWB:', err);
     } finally {
@@ -257,35 +264,37 @@ export default function OrderList({ lang, settings = {} }) {
     }
   }
 
+  // Shipping email only goes out once a tracking number is confirmed AND the
+  // order is "Out for Delivery" (ready). Either action can be the trigger.
+  async function sendShippingEmail(orderNumber, trackingNumber) {
+    if (!trackingNumber) return;
+    if (!(settings.ejsServiceId && settings.ejsShippingTemplateId && settings.ejsPublicKey)) return;
+    const order = orders.find(o => o.order_number === orderNumber);
+    if (!order?.user_id) return;
+    const profile = await fetchProfileByUserId(order.user_id);
+    if (!profile?.email) return;
+    emailjs.send(
+      settings.ejsServiceId,
+      settings.ejsShippingTemplateId,
+      {
+        to_name: order.customer_name || profile.name || '',
+        to_email: profile.email,
+        order_number: orderNumber,
+        tracking_number: trackingNumber,
+      },
+      settings.ejsPublicKey,
+    ).catch(() => {});
+  }
+
   async function handleStatusChange(orderNumber, newStatus) {
     setStatuses(prev => ({ ...prev, [orderNumber]: newStatus }));
     setSaving(orderNumber);
     setSaveError(null);
     try {
       await saveOrderStatus(orderNumber, newStatus);
-      if (
-        newStatus === 'ready' &&
-        settings.ejsServiceId &&
-        settings.ejsShippingTemplateId &&
-        settings.ejsPublicKey
-      ) {
-        const order = orders.find(o => o.order_number === orderNumber);
-        if (order?.user_id) {
-          const profile = await fetchProfileByUserId(order.user_id);
-          if (profile?.email) {
-            emailjs.send(
-              settings.ejsServiceId,
-              settings.ejsShippingTemplateId,
-              {
-                to_name: order.customer_name || profile.name || '',
-                to_email: profile.email,
-                order_number: orderNumber,
-                tracking_number: awbs[orderNumber] || '',
-              },
-              settings.ejsPublicKey,
-            ).catch(() => {});
-          }
-        }
+      // Set to ready when a tracking number is already saved → send now.
+      if (newStatus === 'ready' && awbs[orderNumber]) {
+        await sendShippingEmail(orderNumber, awbs[orderNumber]);
       }
     } catch (err) {
       console.error('Failed to save status:', err);
