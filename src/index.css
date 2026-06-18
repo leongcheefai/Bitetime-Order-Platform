@@ -21,6 +21,24 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 .hamburger-btn:hover { background: #EDE4D8; border-color: #A07070; }
 .hamburger-btn:hover span { background: #2B0A10; }
 
+/* Notifications bell */
+.notif { position: relative; margin-left: auto; margin-right: 10px; }
+.notif-bell { position: relative; display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1.5px solid #C9A090; border-radius: 10px; background: none; color: #7A4F55; cursor: pointer; transition: all 0.15s; padding: 0; }
+.notif-bell-icon { width: 19px; height: 19px; }
+.notif-bell:hover { background: #EDE4D8; border-color: #A07070; color: #2B0A10; }
+.notif-badge { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box; background: #7A1028; color: #F2EAE0; border-radius: 9px; font-size: 10px; font-weight: 700; line-height: 17px; text-align: center; }
+.notif-panel { position: absolute; top: 44px; right: 0; z-index: 50; width: 280px; max-width: 78vw; background: #FFFDF9; border: 1.5px solid #C9A090; border-radius: 12px; box-shadow: 0 8px 24px rgba(43,10,16,0.16); overflow: hidden; }
+.notif-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #EDE4D8; font-size: 13px; font-weight: 600; color: #2B0A10; }
+.notif-readall { border: none; background: none; color: #7A1028; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 0; }
+.notif-readall:hover { text-decoration: underline; }
+.notif-empty { padding: 22px 14px; text-align: center; color: #A07070; font-size: 13px; }
+.notif-list { max-height: 320px; overflow-y: auto; }
+.notif-item { display: block; width: 100%; text-align: left; padding: 10px 14px; border: none; border-bottom: 1px solid #F2EAE0; background: none; cursor: pointer; font-family: inherit; transition: background 0.12s; }
+.notif-item:last-child { border-bottom: none; }
+.notif-item:hover { background: #EDE4D8; }
+.notif-item-title { font-size: 13px; font-weight: 600; color: #2B0A10; }
+.notif-item-body { font-size: 12px; color: #7A4F55; margin-top: 2px; }
+
 /* ── User layout ─────────────────────────────────────────────────────────── */
 body:has(.user-layout) { padding: 1.25rem; }
 .user-layout { display: flex; min-height: calc(100vh - 2.5rem); gap: 1.25rem; align-items: flex-start; width: 100%; }

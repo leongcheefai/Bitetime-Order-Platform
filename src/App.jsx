@@ -10,6 +10,7 @@ import CustomerSettings from './components/CustomerSettings';
 import VoucherPanel from './components/VoucherPanel';
 import OrderList from './components/OrderList';
 import SalesDashboard from './components/SalesDashboard';
+import Notifications from './components/Notifications';
 
 const USER_EMAIL = 'bitetimeandco@gmail.com';
 
@@ -351,6 +352,7 @@ export default function App() {
             <button className="hamburger-btn" onClick={() => setDrawerOpen(true)} aria-label="Navigation">
               <span /><span /><span />
             </button>
+            <Notifications account={account} isOwner lang={lang} onOpen={() => { setUserPage('orders'); setOrderDone(false); setOrdersKey(k => k + 1); }} />
             <div className="lang-switcher">
               <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
               <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
@@ -419,6 +421,7 @@ export default function App() {
           <button className="hamburger-btn" onClick={() => setDrawerOpen(true)} aria-label="My Account">
             <span /><span /><span />
           </button>
+          {account && <Notifications account={account} isOwner={false} lang={lang} onOpen={() => { setOrderDone(false); setAccountSection('history'); }} />}
           <div className="lang-switcher">
             <button className={'lang-btn' + (lang === 'en' ? ' active' : '')} onClick={() => setLang('en')}>🇬🇧 English</button>
             <button className={'lang-btn' + (lang === 'zh' ? ' active' : '')} onClick={() => setLang('zh')}>🇨🇳 中文</button>
