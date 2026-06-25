@@ -306,9 +306,31 @@ export async function createVoucher(voucher) {
   return updated;
 }
 
-export async function markVoucherUsed(code) {
+// Uses left on a voucher. Infinity = no total cap (still capped to 1 per customer).
+export function voucherUsesLeft(v) {
+  const count = Array.isArray(v.usedBy) ? v.usedBy.length : 0;
+  if (v.maxUses == null || v.maxUses === '') return Infinity;
+  return Math.max(0, v.maxUses - count);
+}
+
+// True when the voucher can no longer be redeemed by anyone.
+export function voucherFullyUsed(v) {
+  // Legacy single-use vouchers: `used:true` with no usedBy list.
+  if (v.used && !Array.isArray(v.usedBy)) return true;
+  return voucherUsesLeft(v) <= 0;
+}
+
+export async function markVoucherUsed(code, email) {
   const list = await loadVouchers();
-  const updated = list.map(v => v.code === code ? { ...v, used: true } : v);
+  const e = (email || '').toLowerCase();
+  const updated = list.map(v => {
+    if (v.code !== code) return v;
+    const usedBy = Array.isArray(v.usedBy) ? v.usedBy : [];
+    // Use email so we can enforce one-per-customer; fall back to a unique
+    // guest token so anonymous redemptions still count toward maxUses.
+    const entry = e || `guest-${Date.now()}`;
+    return { ...v, usedBy: usedBy.includes(entry) ? usedBy : [...usedBy, entry] };
+  });
   await saveVouchers(updated);
   return updated;
 }

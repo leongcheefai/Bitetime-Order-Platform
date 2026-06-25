@@ -326,13 +326,11 @@ export default function App() {
             </>
           )}
         </nav>
-        <div className="drawer-footer">
-          {account ? (
+        {account && (
+          <div className="drawer-footer">
             <button className="drawer-signout" onClick={handleLogout}>{t('Sign out', '退出登录')}</button>
-          ) : (
-            <button className="drawer-signout" onClick={() => { setView('login'); setDrawerOpen(false); }}>{t('Member sign in', '会员登录')}</button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </>
   );

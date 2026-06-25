@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import emailjs from '@emailjs/browser';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
-import { saveOrder, loadVouchers, markVoucherUsed, getNextOrderNumber, fetchProductSales, DEFAULTS, fetchProfileByReferralCode, isNewCustomer, loadReferralRewards, saveReferralRewards } from '../store';
+import { saveOrder, loadVouchers, markVoucherUsed, voucherFullyUsed, getNextOrderNumber, fetchProductSales, DEFAULTS, fetchProfileByReferralCode, isNewCustomer, loadReferralRewards, saveReferralRewards } from '../store';
 import { quoteSameday } from '../geo';
 
 export default function OrderForm({ settings, lang, user, onSuccess, savedAddress }) {
@@ -214,8 +214,10 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     let errMsg = '';
     if (!v) {
       errMsg = t('❌ Invalid voucher code.', '❌ 无效的优惠码。');
-    } else if (v.used) {
-      errMsg = t('❌ This voucher has already been used.', '❌ 此优惠券已被使用。');
+    } else if (voucherFullyUsed(v)) {
+      errMsg = t('❌ This voucher has been fully redeemed.', '❌ 此优惠券已用完。');
+    } else if ((v.usedBy || []).includes((user?.email ?? '').toLowerCase())) {
+      errMsg = t('❌ You have already used this voucher.', '❌ 您已使用过此优惠券。');
     } else if (v.email && v.email !== (user?.email ?? '').toLowerCase()) {
       errMsg = t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。');
     } else if (v.expiresAt && new Date(v.expiresAt) < new Date()) {
@@ -300,7 +302,18 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       let sub = 0;
       Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) sub += p.price * (qty[id] || 0); });
       sub += currentShippingFee();
-      if (appliedVoucher.expiresAt && new Date(appliedVoucher.expiresAt) < new Date()) {
+      // Re-check redemption limits against fresh data (another customer may have
+      // used the last slot, or this customer may have used it in another tab).
+      const fresh = (await loadVouchers()).find(x => x.code === appliedVoucher.code);
+      if (!fresh || voucherFullyUsed(fresh)) {
+        removeVoucher();
+        setVoucherMsg(t('❌ This voucher has been fully redeemed and was removed.', '❌ 此优惠券已用完，已被移除。'));
+        errs.voucher = true;
+      } else if ((fresh.usedBy || []).includes((user?.email ?? '').toLowerCase())) {
+        removeVoucher();
+        setVoucherMsg(t('❌ Voucher removed — you have already used it.', '❌ 优惠券已移除 — 您已使用过。'));
+        errs.voucher = true;
+      } else if (appliedVoucher.expiresAt && new Date(appliedVoucher.expiresAt) < new Date()) {
         removeVoucher();
         setVoucherMsg(t('❌ This voucher has expired and was removed.', '❌ 此优惠券已过期，已被移除。'));
         errs.voucher = true;
@@ -414,7 +427,7 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
       });
 
       // Only burn the voucher once the order is safely saved
-      if (appliedVoucher) await markVoucherUsed(appliedVoucher.code).catch(() => {});
+      if (appliedVoucher) await markVoucherUsed(appliedVoucher.code, user?.email ?? '').catch(() => {});
 
       // Mark the redeemed referral gift so it isn't shipped twice
       if (pendingGift) {

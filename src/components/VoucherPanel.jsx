@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { loadVouchers, createVoucher, deleteVoucher } from '../store';
+import { loadVouchers, createVoucher, deleteVoucher, voucherFullyUsed } from '../store';
 
 function generateCode() {
   return 'BITE-' + Math.random().toString(36).toUpperCase().slice(2, 8);
@@ -16,6 +16,7 @@ export default function VoucherPanel({ lang }) {
   const [targetEmail, setTargetEmail] = useState('');
   const [expiresAt, setExpiresAt] = useState('');
   const [minOrder, setMinOrder] = useState('');
+  const [maxUses, setMaxUses] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [deleting, setDeleting] = useState(null);
@@ -37,7 +38,8 @@ export default function VoucherPanel({ lang }) {
       email: targetEmail.trim().toLowerCase() || null,
       expiresAt: expiresAt || null,
       minOrder: minOrder ? parseFloat(minOrder) : null,
-      used: false,
+      maxUses: maxUses ? parseInt(maxUses, 10) : null,
+      usedBy: [],
       createdAt: new Date().toISOString(),
     };
     const updated = await createVoucher(newVoucher);
@@ -47,6 +49,7 @@ export default function VoucherPanel({ lang }) {
     setTargetEmail('');
     setExpiresAt('');
     setMinOrder('');
+    setMaxUses('');
     setSaving(false);
     setSaveMsg(t('✓ Voucher created!', '✓ 优惠券已创建！'));
     setTimeout(() => setSaveMsg(''), 2500);
@@ -120,6 +123,18 @@ export default function VoucherPanel({ lang }) {
           </div>
           <div className="voucher-field">
             <label>
+              {t('Max redemptions', '可使用总次数')}
+              <span>{t('optional — blank = unlimited', '选填 — 空白表示无限')}</span>
+            </label>
+            <input
+              type="number" min="1" step="1"
+              placeholder={t('e.g. 50', '例如：50')}
+              value={maxUses}
+              onChange={e => setMaxUses(e.target.value)}
+            />
+          </div>
+          <div className="voucher-field">
+            <label>
               {t('Expiry date', '到期日期')}
               <span>{t('optional', '选填')}</span>
             </label>
@@ -153,11 +168,14 @@ export default function VoucherPanel({ lang }) {
         ) : (
           <div className="voucher-list">
             {vouchers.map((v, i) => (
-              <div key={i} className={'voucher-row' + (v.used || isExpired(v) ? ' used' : '')}>
+              <div key={i} className={'voucher-row' + (voucherFullyUsed(v) || isExpired(v) ? ' used' : '')}>
                 <div className="voucher-code">{v.code}</div>
                 <div className="voucher-meta">
                   <span className="voucher-discount">{formatDiscount(v)}</span>
                   {v.minOrder && <span className="voucher-minorder">min RM {v.minOrder}</span>}
+                  <span className="voucher-uses">
+                    {(v.usedBy?.length ?? 0)}{v.maxUses ? ` / ${v.maxUses}` : ''} {t('used', '已用')}
+                  </span>
                   {v.email && <span className="voucher-email">→ {v.email}</span>}
                   {v.expiresAt && (
                     <span className={isExpired(v) ? 'voucher-expiry expired' : 'voucher-expiry'}>
@@ -166,8 +184,8 @@ export default function VoucherPanel({ lang }) {
                   )}
                   <span className="voucher-date">{formatDate(v.createdAt)}</span>
                 </div>
-                <div className={'voucher-status' + (v.used ? ' used' : isExpired(v) ? ' used' : ' active')}>
-                  {v.used ? t('Used', '已使用') : isExpired(v) ? t('Expired', '已过期') : t('Active', '有效')}
+                <div className={'voucher-status' + (voucherFullyUsed(v) ? ' used' : isExpired(v) ? ' used' : ' active')}>
+                  {voucherFullyUsed(v) ? t('Used up', '已用完') : isExpired(v) ? t('Expired', '已过期') : t('Active', '有效')}
                 </div>
                 <button
                   className="voucher-delete-btn"
