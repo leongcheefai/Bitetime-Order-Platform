@@ -30,7 +30,7 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 .notif-bell-icon { width: 19px; height: 19px; }
 .notif-bell:hover { background: var(--color-surface-sunken); border-color: var(--color-clay-muted); color: var(--color-ink); }
 .notif-badge { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px; padding: 0 4px; box-sizing: border-box; background: var(--color-oxblood); color: var(--color-cream); border-radius: 9px; font-size: 10px; font-weight: 700; line-height: 17px; text-align: center; }
-.notif-panel { position: absolute; top: 44px; right: 0; z-index: 50; width: 280px; max-width: 78vw; background: var(--color-surface-high); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(43,10,16,0.16); overflow: hidden; }
+.notif-panel { position: absolute; top: 44px; right: 0; z-index: var(--z-notif-panel); width: 280px; max-width: 78vw; background: var(--color-surface-high); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(43,10,16,0.16); overflow: hidden; }
 .notif-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--color-surface-sunken); font-size: 13px; font-weight: 600; color: var(--color-ink); }
 .notif-readall { border: none; background: none; color: var(--color-oxblood); font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; padding: 0; }
 .notif-readall:hover { text-decoration: underline; }
@@ -299,8 +299,8 @@ body:has(.user-layout) { padding: 1.25rem; }
 .voucher-status.used { background: var(--color-surface-sunken); color: var(--color-text-tertiary); }
 
 /* ── Side Drawer ─────────────────────────────────────────────────────────── */
-.drawer-overlay { position: fixed; inset: 0; background: rgba(43,10,16,0.30); backdrop-filter: blur(2px); z-index: 199; }
-.side-drawer { position: fixed; left: 0; top: 0; height: 100dvh; width: 280px; max-width: 88vw; background: var(--color-surface-raised); border-right: 1px solid var(--color-divider); z-index: 200; display: flex; flex-direction: column; transform: translateX(-100%); transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); box-shadow: 6px 0 32px rgba(43,10,16,0.12); }
+.drawer-overlay { position: fixed; inset: 0; background: rgba(43,10,16,0.30); backdrop-filter: blur(2px); z-index: var(--z-overlay); }
+.side-drawer { position: fixed; left: 0; top: 0; height: 100dvh; width: 280px; max-width: 88vw; background: var(--color-surface-raised); border-right: 1px solid var(--color-divider); z-index: var(--z-drawer); display: flex; flex-direction: column; transform: translateX(-100%); transition: transform 0.28s cubic-bezier(0.4,0,0.2,1); box-shadow: 6px 0 32px rgba(43,10,16,0.12); }
 .side-drawer.open { transform: translateX(0); }
 
 .drawer-header { display: flex; align-items: flex-start; justify-content: space-between; padding: 2rem 1.5rem 1.25rem; flex-shrink: 0; }
@@ -443,7 +443,7 @@ body:has(.user-layout) { padding: 1.25rem; }
 .date-picker-btn:hover { border-color: var(--color-oxblood); }
 .date-picker-btn:focus { outline: none; border-color: var(--color-oxblood); box-shadow: 0 0 0 3px rgba(122,16,40,0.1); }
 .date-picker-btn svg { color: var(--color-rose-muted); flex-shrink: 0; }
-.date-picker-popup { position: absolute; top: calc(100% + 6px); left: 0; z-index: 100; background: var(--color-surface-raised); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-xl); box-shadow: 0 8px 32px rgba(122,16,40,0.13); padding: 12px; }
+.date-picker-popup { position: absolute; top: calc(100% + 6px); left: 0; z-index: var(--z-dropdown); background: var(--color-surface-raised); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-xl); box-shadow: 0 8px 32px rgba(122,16,40,0.13); padding: 12px; }
 /* react-day-picker v9/v10 default rdp- classes */
 .date-picker-popup .rdp-root { font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--color-ink); --rdp-accent-color: var(--color-oxblood); --rdp-accent-background-color: var(--color-oxblood-tint); }
 .date-picker-popup .rdp-month_caption { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 0 4px; }
@@ -543,7 +543,7 @@ body:has(.user-layout) { padding: 1.25rem; }
 .add-order-btn:hover { background: var(--color-oxblood-deep); border-color: var(--color-oxblood-deep); }
 
 /* ── Add Order modal ─────────────────────────────────────────────────────── */
-.add-order-overlay { position: fixed; inset: 0; background: rgba(43,10,16,0.40); backdrop-filter: blur(2px); z-index: 300; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.add-order-overlay { position: fixed; inset: 0; background: rgba(43,10,16,0.40); backdrop-filter: blur(2px); z-index: var(--z-modal); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .add-order-modal { background: var(--color-surface-raised); border-radius: 18px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; box-shadow: 0 12px 48px rgba(43,10,16,0.25); display: flex; flex-direction: column; }
 .add-order-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px 12px; border-bottom: 1px solid var(--color-surface-warm); font-family: 'Lora', serif; font-size: 16px; font-weight: 600; color: var(--color-oxblood); }
 .add-order-close { background: none; border: none; font-size: 16px; color: var(--color-rose-muted); cursor: pointer; padding: 4px 8px; border-radius: var(--radius-sm); }
@@ -579,7 +579,7 @@ body:has(.user-layout) { padding: 1.25rem; }
 .add-order-link-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .add-order-link-found { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--color-success-strong); background: var(--color-success-bg-alt); border: 1px solid var(--color-success-border); border-radius: var(--radius-md); padding: 8px 12px; }
 .add-order-link-clear { background: none; border: none; color: var(--color-rose-muted); cursor: pointer; font-size: 14px; margin-left: auto; padding: 0 2px; }
-.email-drop { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--color-white); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-lg); box-shadow: 0 6px 24px rgba(43,10,16,0.12); z-index: 400; overflow: hidden; }
+.email-drop { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: var(--color-white); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-lg); box-shadow: 0 6px 24px rgba(43,10,16,0.12); z-index: var(--z-modal-popover); overflow: hidden; }
 .email-drop-item { width: 100%; display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: none; border: none; cursor: pointer; text-align: left; transition: background 0.1s; }
 .email-drop-item:hover { background: var(--color-oxblood-tint); }
 .email-drop-name { font-size: 13px; font-weight: 500; color: var(--color-ink); min-width: 80px; }
@@ -594,7 +594,7 @@ body:has(.user-layout) { padding: 1.25rem; }
 .pickup-info-title { font-size: 13px; font-weight: 600; color: var(--color-oxblood); margin-bottom: 4px; }
 .pickup-info-line { font-size: 13px; color: var(--color-ink-faint); line-height: 1.5; }
 
-.sticky-total-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 90; display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--color-surface-raised); border-top: 1px solid var(--color-divider); box-shadow: 0 -4px 20px rgba(43,10,16,0.10); }
+.sticky-total-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: var(--z-sticky); display: flex; align-items: center; justify-content: center; gap: 14px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: var(--color-surface-raised); border-top: 1px solid var(--color-divider); box-shadow: 0 -4px 20px rgba(43,10,16,0.10); }
 .sticky-total-amount { display: flex; flex-direction: column; line-height: 1.2; }
 .sticky-total-label { font-size: 11px; color: var(--color-rose-muted); }
 .sticky-total-value { font-size: 17px; font-weight: 700; color: var(--color-oxblood); }

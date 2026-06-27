@@ -13,10 +13,12 @@ export default function Landing() {
           <div className="lang-switcher mm-land-lang">
             <button
               className={`lang-btn${lang === 'en' ? ' active' : ''}`}
+              aria-pressed={lang === 'en'}
               onClick={() => setLang('en')}
             >EN</button>
             <button
               className={`lang-btn${lang === 'zh' ? ' active' : ''}`}
+              aria-pressed={lang === 'zh'}
               onClick={() => setLang('zh')}
             >中文</button>
           </div>

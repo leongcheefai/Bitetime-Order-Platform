@@ -83,6 +83,15 @@
   --color-danger: #C0392B;
   --color-danger-border: #F5C6CB;
 
+  /* ── Z-index: semantic stacking scale (values preserve existing order) ──── */
+  --z-notif-panel: 50;     /* notification dropdown */
+  --z-sticky: 90;          /* sticky mobile checkout bar */
+  --z-dropdown: 100;       /* date picker, autocomplete */
+  --z-overlay: 199;        /* drawer / modal backdrop */
+  --z-drawer: 200;         /* slide-in drawer */
+  --z-modal: 300;          /* modal dialog */
+  --z-modal-popover: 400;  /* dropdown rendered above a modal */
+
   /* ── Radii: soft & hospitable geometry ─────────────────────────────────── */
   --radius-xs: 4px;
   --radius-sm: 8px;

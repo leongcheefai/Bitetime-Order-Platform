@@ -93,8 +93,8 @@ export default function Storefront() {
             <h1>{merchant.name}</h1>
           </div>
           <div className="lang-switcher" style={{ marginBottom: 0 }}>
-            <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} onClick={() => setLang('en')}>EN</button>
-            <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} onClick={() => setLang('zh')}>中文</button>
+            <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
+            <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} aria-pressed={lang === 'zh'} onClick={() => setLang('zh')}>中文</button>
           </div>
         </div>
 
@@ -157,8 +157,8 @@ export default function Storefront() {
           <p className="tagline">{t('Powered by BiteTime', 'BiteTime 提供技术支持')}</p>
         </div>
         <div className="lang-switcher" style={{ marginBottom: 0 }}>
-          <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} onClick={() => setLang('en')}>EN</button>
-          <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} onClick={() => setLang('zh')}>中文</button>
+          <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
+          <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} aria-pressed={lang === 'zh'} onClick={() => setLang('zh')}>中文</button>
         </div>
       </div>
 
@@ -191,7 +191,7 @@ export default function Storefront() {
                     onClick={() => updateQty(p.id, -1)}
                     aria-label={t('Decrease quantity', '减少数量')}
                   >−</button>
-                  <span className="qty-val">{cart[p.id] || 0}</span>
+                  <span className="qty-val" aria-live="polite" aria-label={t('Quantity', '数量')}>{cart[p.id] || 0}</span>
                   <button
                     className="qty-btn"
                     onClick={() => updateQty(p.id, 1)}
