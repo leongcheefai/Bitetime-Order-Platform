@@ -78,7 +78,14 @@ describe.skipIf(!hasEnv)('tenant isolation (RLS)', () => {
 
   it('a normal user cannot self-promote to superadmin', async () => {
     const uid = (await merchantA.auth.getUser()).data.user.id
-    await merchantA.from('profiles').insert({ user_id: uid })          // forced to customer by trigger
+
+    // INSERT vector: explicit evil app_role must be overridden to 'customer'
+    await merchantA.from('profiles').insert({ user_id: uid, app_role: 'superadmin' })
+    const svc0 = serviceClient()
+    const { data: insChk } = await svc0.from('profiles').select('app_role').eq('user_id', uid).single()
+    expect(insChk.app_role).toBe('customer')
+
+    // UPDATE vector: cannot escalate to superadmin
     const { error } = await merchantA.from('profiles')
       .update({ app_role: 'superadmin' }).eq('user_id', uid)
     expect(error).not.toBeNull()                                       // raise exception => error
