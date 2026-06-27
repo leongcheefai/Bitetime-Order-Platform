@@ -475,6 +475,58 @@ export async function loadDeliveryAddress(userId) {
   return null;
 }
 
+// ── Multi-tenant order placement ─────────────────────────────────────────────
+
+const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
+
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total }) {
+  const { data: orderNumber, error: rpcErr } = await supabase
+    .rpc('next_order_number', { p_merchant: merchantId })
+  if (rpcErr) throw rpcErr
+  const { data, error } = await supabase.from('orders').insert({
+    merchant_id: merchantId,
+    customer_name: customerName,
+    customer_wa: customerWa,
+    mode, address,
+    shipping_fee: shippingFee ?? 0,
+    items, total,
+    order_number: orderNumber,
+    status: 'new',
+  }).select().single()
+  if (error) throw error
+  return { order: data, orderNumber }
+}
+
+export async function fetchMerchantOrders(merchantId) {
+  if (!merchantId) return []
+  const { data, error } = await supabase
+    .from('orders').select('*').eq('merchant_id', merchantId)
+    .order('created_at', { ascending: false })
+  if (error) return []
+  return data ?? []
+}
+
+export async function setOrderStatus(orderId, status) {
+  if (!ORDER_STATUSES.includes(status)) throw new Error('Invalid status')
+  const { data, error } = await supabase
+    .from('orders').update({ status }).eq('id', orderId).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchMerchantCustomers(merchantId) {
+  const orders = await fetchMerchantOrders(merchantId)
+  const byWa = new Map()
+  for (const o of orders) {
+    const key = o.customer_wa || o.customer_name || '—'
+    const cur = byWa.get(key) || { name: o.customer_name, wa: o.customer_wa, orderCount: 0, lastOrder: o.created_at }
+    cur.orderCount += 1
+    if (o.created_at > cur.lastOrder) cur.lastOrder = o.created_at
+    byWa.set(key, cur)
+  }
+  return [...byWa.values()]
+}
+
 // ── Products ──────────────────────────────────────────────────────────────────
 
 export async function fetchProducts(merchantId) {

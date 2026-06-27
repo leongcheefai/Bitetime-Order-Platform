@@ -52,12 +52,15 @@ vi.mock('./supabase', () => {
   const getUser = vi.fn()
   const auth = { getUser }
 
+  // rpc mock — top-level supabase.rpc(name, params) → awaited directly.
+  const rpc = vi.fn()
+
   return {
-    supabase: { from, auth },
+    supabase: { from, auth, rpc },
     __mocks: {
       from, select, eq, single, maybeSingle, insert, update,
       insertSelect, updateEqSelect, upsertSelect, getUser, order,
-      upsert, del, deleteEq,
+      upsert, del, deleteEq, rpc,
     },
   }
 })
@@ -76,6 +79,10 @@ import {
   updateMerchantConfig,
   fetchMerchantSecret,
   upsertMerchantSecret,
+  placeOrder,
+  fetchMerchantOrders,
+  setOrderStatus,
+  fetchMerchantCustomers,
 } from './store'
 import { __mocks } from './supabase'
 
@@ -417,5 +424,161 @@ describe('upsertMerchantSecret', () => {
     await expect(
       upsertMerchantSecret('m1', { tg_token: 'x', tg_chat_id: 'y' })
     ).rejects.toThrow('upsert failed')
+  })
+})
+
+// ── placeOrder (Task 5.2) ─────────────────────────────────────────────────────
+
+describe('placeOrder', () => {
+  it('calls rpc(next_order_number, {p_merchant}) then inserts with correct fields', async () => {
+    __mocks.rpc.mockResolvedValueOnce({ data: 'BT-0001', error: null })
+    const orderRow = {
+      id: 'ord-1', merchant_id: 'm1', order_number: 'BT-0001',
+      status: 'new', items: [{ id: 'p1', qty: 2 }], total: 24,
+    }
+    __mocks.single.mockResolvedValueOnce({ data: orderRow, error: null })
+
+    const result = await placeOrder({
+      merchantId: 'm1',
+      customerName: 'Alice',
+      customerWa: '60123456789',
+      mode: 'delivery',
+      address: '123 Jalan ABC',
+      shippingFee: 8,
+      items: [{ id: 'p1', qty: 2 }],
+      total: 24,
+    })
+
+    expect(__mocks.rpc).toHaveBeenCalledWith('next_order_number', { p_merchant: 'm1' })
+    expect(__mocks.from).toHaveBeenCalledWith('orders')
+    expect(__mocks.insert).toHaveBeenCalledWith(expect.objectContaining({
+      merchant_id: 'm1',
+      order_number: 'BT-0001',
+      status: 'new',
+      items: [{ id: 'p1', qty: 2 }],
+      total: 24,
+    }))
+    expect(result).toEqual({ order: orderRow, orderNumber: 'BT-0001' })
+  })
+
+  it('throws when rpc returns an error without calling insert', async () => {
+    __mocks.rpc.mockResolvedValueOnce({ data: null, error: new Error('rpc failed') })
+    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 })).rejects.toThrow('rpc failed')
+    expect(__mocks.insert).not.toHaveBeenCalled()
+  })
+
+  it('throws when insert returns an error', async () => {
+    __mocks.rpc.mockResolvedValueOnce({ data: 'BT-0001', error: null })
+    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('insert failed') })
+    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 })).rejects.toThrow('insert failed')
+  })
+})
+
+// ── fetchMerchantOrders (Task 5.2) ────────────────────────────────────────────
+
+describe('fetchMerchantOrders', () => {
+  it('returns empty array immediately for falsy merchantId', async () => {
+    expect(await fetchMerchantOrders(null)).toEqual([])
+    expect(await fetchMerchantOrders('')).toEqual([])
+    expect(__mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('queries orders filtered by merchant_id ordered desc', async () => {
+    const rows = [{ id: 'o2', merchant_id: 'm1' }, { id: 'o1', merchant_id: 'm1' }]
+    __mocks.order.mockResolvedValueOnce({ data: rows, error: null })
+
+    const result = await fetchMerchantOrders('m1')
+
+    expect(__mocks.from).toHaveBeenCalledWith('orders')
+    expect(__mocks.select).toHaveBeenCalledWith('*')
+    expect(__mocks.eq).toHaveBeenCalledWith('merchant_id', 'm1')
+    expect(__mocks.order).toHaveBeenCalledWith('created_at', { ascending: false })
+    expect(result).toEqual(rows)
+  })
+
+  it('returns empty array on DB error', async () => {
+    __mocks.order.mockResolvedValueOnce({ data: null, error: { message: 'fail' } })
+    expect(await fetchMerchantOrders('m1')).toEqual([])
+  })
+
+  it('returns empty array when data is null with no error', async () => {
+    __mocks.order.mockResolvedValueOnce({ data: null, error: null })
+    expect(await fetchMerchantOrders('m1')).toEqual([])
+  })
+})
+
+// ── setOrderStatus (Task 5.2) ─────────────────────────────────────────────────
+
+describe('setOrderStatus', () => {
+  it('throws "Invalid status" for unknown status without calling update', async () => {
+    await expect(setOrderStatus('ord-1', 'shipped')).rejects.toThrow('Invalid status')
+    expect(__mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('updates status on orders table and returns the updated row', async () => {
+    const row = { id: 'ord-1', status: 'preparing' }
+    __mocks.single.mockResolvedValueOnce({ data: row, error: null })
+
+    const result = await setOrderStatus('ord-1', 'preparing')
+
+    expect(__mocks.from).toHaveBeenCalledWith('orders')
+    expect(__mocks.update).toHaveBeenCalledWith({ status: 'preparing' })
+    expect(__mocks.eq).toHaveBeenCalledWith('id', 'ord-1')
+    expect(result).toEqual(row)
+  })
+
+  it('accepts all five valid statuses: new, preparing, ready, completed, cancelled', async () => {
+    for (const status of ['new', 'preparing', 'ready', 'completed', 'cancelled']) {
+      vi.clearAllMocks()
+      __mocks.single.mockResolvedValueOnce({ data: { id: 'ord-1', status }, error: null })
+      const result = await setOrderStatus('ord-1', status)
+      expect(result.status).toBe(status)
+    }
+  })
+
+  it('throws on DB error after a valid status', async () => {
+    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('write failed') })
+    await expect(setOrderStatus('ord-1', 'ready')).rejects.toThrow('write failed')
+  })
+})
+
+// ── fetchMerchantCustomers (Task 5.2) ─────────────────────────────────────────
+
+describe('fetchMerchantCustomers', () => {
+  it('groups orders by customer_wa with correct orderCount and lastOrder', async () => {
+    const orders = [
+      { id: 'o1', customer_name: 'Alice', customer_wa: '601', created_at: '2025-01-01' },
+      { id: 'o2', customer_name: 'Bob',   customer_wa: '602', created_at: '2025-01-02' },
+      { id: 'o3', customer_name: 'Alice', customer_wa: '601', created_at: '2025-01-03' },
+    ]
+    __mocks.order.mockResolvedValueOnce({ data: orders, error: null })
+
+    const result = await fetchMerchantCustomers('m1')
+
+    expect(result).toHaveLength(2)
+    const alice = result.find(c => c.wa === '601')
+    const bob   = result.find(c => c.wa === '602')
+    expect(alice.orderCount).toBe(2)
+    expect(alice.lastOrder).toBe('2025-01-03')
+    expect(bob.orderCount).toBe(1)
+  })
+
+  it('returns empty array when merchant has no orders', async () => {
+    __mocks.order.mockResolvedValueOnce({ data: [], error: null })
+    expect(await fetchMerchantCustomers('m1')).toEqual([])
+  })
+
+  it('falls back to customer_name as key when customer_wa is missing', async () => {
+    const orders = [
+      { id: 'o1', customer_name: 'Charlie', customer_wa: null, created_at: '2025-01-01' },
+      { id: 'o2', customer_name: 'Charlie', customer_wa: null, created_at: '2025-01-02' },
+    ]
+    __mocks.order.mockResolvedValueOnce({ data: orders, error: null })
+
+    const result = await fetchMerchantCustomers('m1')
+
+    expect(result).toHaveLength(1)
+    expect(result[0].orderCount).toBe(2)
+    expect(result[0].name).toBe('Charlie')
   })
 })
