@@ -20,3 +20,19 @@ export function toSlugBase(name) {
   )
   return slugify(latinised)
 }
+
+// Every top-level route segment the router owns must be reserved here.
+export const RESERVED_SLUGS = [
+  's', 'admin', 'api', 'merchant', 'app', 'www', 'auth',
+  'login', 'signup', 'account', 'static', 'assets',
+]
+
+export function resolveSlug(name, { taken = [], id = '' } = {}) {
+  const base = toSlugBase(name) || `shop-${id.replace(/-/g, '').slice(0, 6)}`
+  const used = new Set(taken)
+  const blocked = (s) => used.has(s) || RESERVED_SLUGS.includes(s)
+  if (!blocked(base)) return base
+  let n = 2
+  while (blocked(`${base}-${n}`)) n++
+  return `${base}-${n}`
+}
