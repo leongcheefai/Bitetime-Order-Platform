@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "deploy": "npm run build",
     "test": "vitest run",
+    "test:rls": "vitest run tests/rls",
     "test:watch": "vitest"
   },
   "dependencies": {
