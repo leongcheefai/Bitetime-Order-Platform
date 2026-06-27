@@ -1,0 +1,94 @@
+/* ──────────────────────────────────────────────────────────────────────────
+   BiteTime design tokens — "The Hand-Lettered Shopfront"
+   Canonical source: DESIGN.md (frontmatter). Edit there first, mirror here.
+   All values are the exact literals extracted from index.css — no visual change.
+   ────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* ── Primary: oxblood ──────────────────────────────────────────────────── */
+  --color-oxblood: #7A1028;          /* brand voice: buttons, headings, active nav, badges */
+  --color-oxblood-deep: #550A1A;     /* hover/pressed on oxblood fills */
+  --color-oxblood-deeper: #5C0C1E;   /* voucher-apply pressed */
+  --color-oxblood-light: #8B2030;    /* lighter oxblood accent */
+  --color-oxblood-tint: #F5E6E8;     /* active/selected row wash (accent @ ~8%) */
+  --color-oxblood-tint-soft: #FDF0F2;/* faintest oxblood wash */
+
+  /* ── Ink / text ────────────────────────────────────────────────────────── */
+  --color-ink: #2B0A10;              /* primary text (maroon near-black) */
+  --color-ink-soft: #4A2530;         /* sidebar nav labels, recessed body */
+  --color-ink-faint: #5A3A40;        /* faint maroon text */
+
+  /* ── Rose / clay: muted text + borders ─────────────────────────────────── */
+  --color-rose-muted: #7A4F55;       /* secondary text, labels (AA on cream) */
+  --color-rose-deep: #7A4A55;        /* rose-muted variant */
+  --color-clay-muted: #A07070;       /* tertiary only: placeholders, tags */
+  --color-clay-border: #C9A090;      /* default 1.5px stroke (signature edge) */
+  --color-rose-border: #C9A0A8;      /* admin panel / delete-affordance border */
+  --color-rose-tint: #F0DDE0;        /* pale rose tint */
+  --color-rose-pale: #FDE8E8;        /* pale pink-red tint */
+  --color-rose-hover: #EAC8CC;       /* delete-button hover */
+  --color-clay-rose: #B86B6B;        /* warm clay-rose */
+  --color-clay-faint: #B89090;       /* faint clay */
+  --color-clay-warm: #B09080;        /* warm clay */
+  --color-clay-pale: #C9B8B0;        /* pale clay */
+
+  /* ── Surfaces: warm-neutral ladder ─────────────────────────────────────── */
+  --color-cream: #F2EAE0;            /* body bg + input fills (the base) */
+  --color-surface-raised: #FBF6F0;   /* panels, cards, form wraps */
+  --color-surface-high: #FFFDF9;     /* floating UI (popovers) — highest step */
+  --color-surface-sunken: #EDE4D8;   /* sidebar, recessed rails */
+  --color-surface-sunken-hover: #DDD0C4; /* nav hover on sunken rail */
+  --color-surface-warm: #E8D8D0;     /* warm surface tint */
+  --color-surface-warm-alt: #E8D5C8; /* warm surface tint (drawer dividers) */
+  --color-surface-cream-soft: #FAF3EE;/* soft cream surface */
+  --color-divider: #D9C8BC;          /* hairline rules in panels/sidebar */
+  --color-white: #fff;               /* pure white (gold-context inputs only) */
+
+  /* ── Secondary: tracking gold (shipment/AWB only) ──────────────────────── */
+  --color-gold-accent: #C9A030;      /* AWB save / focus */
+  --color-gold-deep: #A07820;        /* deeper gold */
+  --color-gold-deeper: #7A5810;      /* deepest gold text */
+  --color-gold-border: #E8C96A;      /* AWB field border */
+  --color-gold-bg: #FFF8E6;          /* AWB wash */
+
+  /* ── Semantic: order status ────────────────────────────────────────────── */
+  /* success (green) */
+  --color-success-fg: #155724;
+  --color-success-bg: #C3E6CB;
+  --color-success-strong: #1A7A3A;   /* inline "applied" text */
+  --color-success-deep: #166534;
+  --color-success-border: #A8D8B5;
+  --color-success-bg-soft: #D1FADF;
+  --color-success-bg-alt: #DFF5E8;
+  /* info (teal/blue) */
+  --color-info-fg: #0C5460;
+  --color-info-bg: #D1ECF1;
+  --color-info-blue-fg: #1E40AF;
+  --color-info-blue-bg: #DBEAFE;
+  /* preparing (plum/purple) */
+  --color-prep-fg: #5A1A7A;
+  --color-prep-bg: #E8D5F5;
+  --color-prep-fg-alt: #5B21B6;
+  --color-prep-bg-alt: #E9D5FF;
+  /* ready / warn (amber) */
+  --color-warn-fg: #856404;
+  --color-warn-bg: #FFF3CD;
+  --color-warn-fg-alt: #92400E;
+  --color-warn-bg-alt: #FEF3C7;
+  /* completed / done (taupe) */
+  --color-status-done-fg: #4A3020;
+  /* cancelled / danger (red) */
+  --color-danger-fg: #721C24;
+  --color-danger-bg: #F8D7DA;
+  --color-danger: #C0392B;
+  --color-danger-border: #F5C6CB;
+
+  /* ── Radii: soft & hospitable geometry ─────────────────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 16px;
+  --radius-pill: 20px;
+  --radius-round: 50%;
+}
