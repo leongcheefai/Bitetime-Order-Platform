@@ -20,7 +20,8 @@
   /* ── Rose / clay: muted text + borders ─────────────────────────────────── */
   --color-rose-muted: #7A4F55;       /* secondary text, labels (AA on cream) */
   --color-rose-deep: #7A4A55;        /* rose-muted variant */
-  --color-clay-muted: #A07070;       /* tertiary only: placeholders, tags */
+  --color-clay-muted: #A07070;       /* borders + icons ONLY — fails AA as text (3.49:1 on cream) */
+  --color-text-tertiary: #8A5550;    /* tertiary TEXT (dates, stat labels, captions) — AA ≥4.5:1 on cream/raised/sunken */
   --color-clay-border: #C9A090;      /* default 1.5px stroke (signature edge) */
   --color-rose-border: #C9A0A8;      /* admin panel / delete-affordance border */
   --color-rose-tint: #F0DDE0;        /* pale rose tint */
