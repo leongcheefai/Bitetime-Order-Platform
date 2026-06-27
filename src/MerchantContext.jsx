@@ -20,4 +20,7 @@ export function MerchantProvider({ children }) {
   return <MerchantContext.Provider value={current}>{children}</MerchantContext.Provider>
 }
 
+// Hook colocated with its provider by design; fast-refresh limitation only affects
+// HMR of this file, not runtime.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useMerchant = () => useContext(MerchantContext)

@@ -47,6 +47,9 @@ export function SessionProvider({ children }) {
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
 }
 
+// Hook colocated with its provider by design; fast-refresh limitation only affects
+// HMR of this file, not runtime.
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSession() {
   const ctx = useContext(SessionContext)
   if (!ctx) throw new Error('useSession must be used within SessionProvider')
