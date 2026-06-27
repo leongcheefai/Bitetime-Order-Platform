@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import { RESERVED_SLUGS } from './slug';
+import { resolveSlug, RESERVED_SLUGS } from './slug';
+import { orderPrefix } from './orderPrefix';
 
 export const DEFAULTS = {
   products: [
@@ -99,6 +100,44 @@ export async function fetchMerchantBySlug(slug) {
     .eq('slug', s)
     .single()
   if (error) return null
+  return data
+}
+
+export async function listTakenSlugs() {
+  const { data, error } = await supabase.from('merchants').select('slug')
+  if (error) return []
+  return (data ?? []).map(r => r.slug)
+}
+
+export async function fetchMyMerchant(userId) {
+  if (!userId) return null
+  const { data, error } = await supabase
+    .from('merchants').select('*').eq('owner_id', userId).maybeSingle()
+  if (error) return null
+  return data ?? null
+}
+
+export async function createMerchant({ name }) {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('Not signed in')
+  const taken = await listTakenSlugs()
+  const slug = resolveSlug(name, { taken, id: user.id })
+  const { data, error } = await supabase
+    .from('merchants')
+    .insert({ name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending' })
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updateMerchantSlug(id, slug) {
+  const s = (slug || '').trim().toLowerCase()
+  if (!s || RESERVED_SLUGS.includes(s)) throw new Error('Reserved or empty slug')
+  const taken = await listTakenSlugs()
+  if (taken.includes(s)) throw new Error('Slug already taken')
+  const { data, error } = await supabase
+    .from('merchants').update({ slug: s }).eq('id', id).select().single()
+  if (error) throw error
   return data
 }
 
