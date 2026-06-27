@@ -8,7 +8,7 @@ export default function AdminMerchants() {
   const [busy, setBusy] = useState(null)
 
   async function load() { setRows(await fetchAllMerchants()) }
-  useEffect(() => { load() }, [])
+  useEffect(() => { fetchAllMerchants().then(setRows) }, [])
 
   async function act(id, status) {
     setBusy(id)

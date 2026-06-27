@@ -6,16 +6,18 @@ const MerchantContext = createContext({ merchant: null, loading: true, notFound:
 
 export function MerchantProvider({ children }) {
   const { slug } = useParams()
-  const [state, setState] = useState({ merchant: null, loading: true, notFound: false })
+  const [state, setState] = useState({ slug: null, merchant: null, loading: true, notFound: false })
   useEffect(() => {
     let on = true
-    setState({ merchant: null, loading: true, notFound: false })
     fetchMerchantBySlug(slug).then((m) => {
-      if (on) setState({ merchant: m, loading: false, notFound: !m })
+      if (on) setState({ slug, merchant: m, loading: false, notFound: !m })
     })
     return () => { on = false }
   }, [slug])
-  return <MerchantContext.Provider value={state}>{children}</MerchantContext.Provider>
+  // Show loading until the fetch for the *current* slug resolves (avoids a
+  // synchronous setState reset in the effect body).
+  const current = state.slug === slug ? state : { merchant: null, loading: true, notFound: false }
+  return <MerchantContext.Provider value={current}>{children}</MerchantContext.Provider>
 }
 
 export const useMerchant = () => useContext(MerchantContext)

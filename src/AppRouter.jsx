@@ -1,4 +1,4 @@
-import { Routes, Route, useParams } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import { SessionProvider } from './SessionContext'
 import { MerchantProvider, useMerchant } from './MerchantContext'
 import RequireRole from './RequireRole'
