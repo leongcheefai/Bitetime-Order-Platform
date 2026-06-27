@@ -1,12 +1,13 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-06-27T00:00:00.000Z",
+  "generatedAt": "2026-06-27T17:00:00.000Z",
   "title": "Design System: BiteTime",
   "extensions": {
     "colorMeta": {
       "oxblood": { "role": "primary", "displayName": "Oxblood", "canonical": "#7A1028", "tonalRamp": ["#2B0A10", "#46101C", "#5C0C1E", "#7A1028", "#9A3A4E", "#B86B6B", "#D9A8B0", "#F5E6E8"] },
       "cream": { "role": "neutral", "displayName": "Cream", "canonical": "#F2EAE0", "tonalRamp": ["#4A3020", "#6E5240", "#937360", "#B89A85", "#D9C8BC", "#E8D8D0", "#EDE4D8", "#F2EAE0"] },
-      "ink": { "role": "neutral", "displayName": "Maroon Ink", "canonical": "#2B0A10", "tonalRamp": ["#2B0A10", "#4A2530", "#5A3A40", "#7A4F55", "#A07070", "#B89090", "#C9B8B0", "#E8D8D0"] },
+      "ink": { "role": "neutral", "displayName": "Maroon Ink", "canonical": "#2B0A10", "tonalRamp": ["#2B0A10", "#4A2530", "#5A3A40", "#7A4F55", "#8A5550", "#A07070", "#C9B8B0", "#E8D8D0"] },
+      "text-tertiary": { "role": "neutral", "displayName": "Tertiary Text", "canonical": "#8A5550", "tonalRamp": ["#2B0A10", "#4A2530", "#7A4F55", "#8A5550", "#A07070", "#B89090", "#C9B8B0", "#E8D8D0"] },
       "gold-accent": { "role": "secondary", "displayName": "Tracking Gold", "canonical": "#C9A030", "tonalRamp": ["#4A3A10", "#7A5810", "#A07820", "#C9A030", "#E8C96A", "#F0DDA0", "#FFF3CD", "#FFF8E6"] }
     },
     "typographyMeta": {
@@ -121,7 +122,7 @@
       "Do keep oxblood (#7A1028) as the single brand voice; hover to #550A1A, never a second resting accent.",
       "Do build depth from the warm surface ladder (sunken #EDE4D8 → cream #F2EAE0 → raised #FBF6F0 → high #FFFDF9) plus 1.5px clay borders. Step the colour, don't add a shadow.",
       "Do set names and headings in Lora, everything else in DM Sans.",
-      "Do keep body copy on ink (#2B0A10) or rose-muted (#7A4F55); both clear AA on cream. Reserve clay-muted (#A07070) for placeholders and non-essential tags only.",
+      "Do keep body copy on ink (#2B0A10) or rose-muted (#7A4F55), and tertiary text on text-tertiary (#8A5550) — all clear AA on cream. clay-muted (#A07070) is borders/icons only.",
       "Do carry the warm palette into merchant and admin screens — an order table is still hospitable.",
       "Do hold every layout at both EN and 中文 string lengths; provide a prefers-reduced-motion fallback for the nav slide and any entrance."
     ],
@@ -129,7 +130,7 @@
       "Don't build a generic SaaS dashboard: no cold blue/grey panels, no hero-metric template, no endless identical icon-heading-text card grids.",
       "Don't drift toward corporate fintech: no navy-and-gold, no sterile institutional polish, nothing transactional or cold.",
       "Don't reach for a cool grey neutral (#EEE, #F5F5F5, slate). Every neutral lives on the cream→taupe ladder.",
-      "Don't put clay-muted (#A07070) or clay-border (#C9A090) under load-bearing body text — they fail AA on cream.",
+      "Don't set any text in clay-muted (#A07070) or clay-border (#C9A090) — they fail AA on cream; tertiary text goes on text-tertiary (#8A5550).",
       "Don't use gold (#C9A030) anywhere but shipment/tracking, or let serif set body copy, table data, or form labels.",
       "Don't add gradient text, decorative glassmorphism, or a near-white cream standing in for committed colour."
     ]

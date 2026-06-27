@@ -42,7 +42,7 @@ function StorefrontShell() {
         <p className="tagline">Shop not found</p>
       </div>
       <div className="admin-panel" style={{ textAlign: 'left' }}>
-        <p style={{ color: '#7A4F55', fontSize: 14 }}>
+        <p style={{ color: 'var(--color-rose-muted)', fontSize: 14 }}>
           This shop doesn't exist or may have moved.
         </p>
       </div>
@@ -56,7 +56,7 @@ function StorefrontShell() {
         <p className="tagline">{merchant.name}</p>
       </div>
       <div className="admin-panel" style={{ textAlign: 'left' }}>
-        <p style={{ color: '#7A4F55', fontSize: 14 }}>
+        <p style={{ color: 'var(--color-rose-muted)', fontSize: 14 }}>
           This shop isn't available right now.
         </p>
       </div>

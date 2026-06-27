@@ -9,6 +9,7 @@ colors:
   ink-soft: "#4A2530"
   rose-muted: "#7A4F55"
   clay-muted: "#A07070"
+  text-tertiary: "#8A5550"
   clay-border: "#C9A090"
   rose-border: "#C9A0A8"
   cream: "#F2EAE0"
@@ -157,8 +158,9 @@ A warm, low-glow palette: one committed oxblood accent over a ladder of cream-to
 - **Rose Border** (`#C9A0A8`): Warm-toned border for admin panels and delete affordances.
 - **Ink** (`#2B0A10`): Primary text — a near-black with a maroon undertone, never pure black.
 - **Ink Soft** (`#4A2530`): Sidebar nav labels and slightly-recessed body text.
-- **Rose Muted** (`#7A4F55`): Secondary text, field labels, captions. Passes AA on cream.
-- **Clay Muted** (`#A07070`): Tertiary only — placeholders, role tags, timestamps. Borderline on cream; never load-bearing copy.
+- **Rose Muted** (`#7A4F55`): Secondary text, field labels, captions. Passes AA on cream (5.73:1).
+- **Text Tertiary** (`#8A5550`): The lightest text still legible — dates, stat labels, captions, table meta, empty states. Clears AA on cream/raised/sunken (≥4.5:1). This is the token for tertiary *text*.
+- **Clay Muted** (`#A07070`): Borders and decorative icons **only** — fails AA as text (3.49:1 on cream). Never set type in it; use Text Tertiary instead.
 
 ### Semantic (order status — the six-state set)
 - **Pending** — `#155724` on `#C3E6CB` (green)
@@ -246,7 +248,7 @@ The mono order number (`PREFIX-YYYYMMDD-XXXX`, DM Mono 700, +1px) is the brand's
 - **Do** keep oxblood (`#7A1028`) as the single brand voice; hover to `#550A1A`, never a second resting accent (The One Voice Rule).
 - **Do** build depth from the warm surface ladder (sunken `#EDE4D8` → cream `#F2EAE0` → raised `#FBF6F0` → high `#FFFDF9`) plus 1.5px clay borders. Step the colour, don't add a shadow (The Flat-Rest Rule).
 - **Do** set names and headings in Lora, everything else in DM Sans (The Serif-Signage Rule).
-- **Do** keep body copy on `ink` (`#2B0A10`) or `rose-muted` (`#7A4F55`); both clear AA on cream. Reserve `clay-muted` (`#A07070`) for placeholders and non-essential tags only.
+- **Do** keep body copy on `ink` (`#2B0A10`) or `rose-muted` (`#7A4F55`), and tertiary text on `text-tertiary` (`#8A5550`) — all clear AA on cream. `clay-muted` (`#A07070`) is borders/icons only.
 - **Do** carry the warm palette into merchant and admin screens — an order table is still hospitable.
 - **Do** hold every layout at both EN and 中文 string lengths; provide a `prefers-reduced-motion` fallback for the nav slide and any entrance.
 
@@ -254,6 +256,6 @@ The mono order number (`PREFIX-YYYYMMDD-XXXX`, DM Mono 700, +1px) is the brand's
 - **Don't** build a **generic SaaS dashboard**: no cold blue/grey panels, no hero-metric template (big number + small label + gradient), no endless identical icon-heading-text card grids.
 - **Don't** drift toward **corporate fintech**: no navy-and-gold, no sterile institutional polish, nothing that reads transactional or cold.
 - **Don't** reach for a cool grey neutral (`#EEE`, `#F5F5F5`, slate). Every neutral lives on the cream→taupe ladder (The Warm-Floor Rule).
-- **Don't** put `clay-muted` (`#A07070`) or `clay-border` (`#C9A090`) under load-bearing body text — they fail AA on cream; they are tertiary/stroke colours.
+- **Don't** set any text in `clay-muted` (`#A07070`) or `clay-border` (`#C9A090`) — they fail AA on cream (3.49 / 1.98:1); they are stroke/icon colours. Tertiary text goes on `text-tertiary` (`#8A5550`).
 - **Don't** use gold (`#C9A030`) anywhere but shipment/tracking, or let serif set body copy, table data, or form labels.
 - **Don't** add gradient text, decorative glassmorphism, or a near-white cream standing in for committed colour — the warmth is the oxblood and the type, not a washed-out background.
