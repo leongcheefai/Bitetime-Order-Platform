@@ -3,7 +3,7 @@ import { SessionProvider } from './SessionContext'
 import { MerchantProvider, useMerchant } from './MerchantContext'
 import RequireRole from './RequireRole'
 import AdminMerchants from './admin/AdminMerchants'
-import App from './App.jsx'
+import Landing from './marketing/Landing.jsx'
 import SignupScreen from './merchant/SignupScreen'
 import LoginScreen from './merchant/LoginScreen'
 import MerchantHome from './merchant/MerchantHome'
@@ -56,7 +56,7 @@ export default function AppRouter() {
   return (
     <SessionProvider>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route path="/" element={<Landing />} />
         <Route path="/s/:slug/*" element={<MerchantProvider><StorefrontShell /></MerchantProvider>} />
         <Route path="/merchant/signup" element={<SignupScreen />} />
         <Route path="/merchant/login" element={<LoginScreen />} />
