@@ -1148,3 +1148,17 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   .mm-land-value-list { grid-template-columns: 1fr; gap: 2rem; }
   .mm-land-ctas { flex-direction: column; align-items: center; }
 }
+
+/* ── Touch targets ─────────────────────────────────────────────────────────
+   On coarse (touch) pointers, enlarge interactive controls to ≥44px so they
+   clear WCAG 2.5.5. Desktop / fine-pointer UI keeps its compact density. */
+@media (pointer: coarse) {
+  .qty-btn { width: 44px; height: 44px; font-size: 18px; }
+  .qty-val { min-width: 28px; }
+  .lang-btn, .cust-account-btn { min-height: 44px; }
+  .radio-opt { min-height: 44px; }
+  .del-btn { width: 44px; height: 44px; }
+  .hamburger-btn, .notif-bell { width: 44px; height: 44px; }
+  .add-btn, .save-btn, .sidebar-signout, .voucher-remove-btn, .voucher-apply-btn { min-height: 44px; }
+  .sidebar-nav-item { padding-top: 14px; padding-bottom: 14px; }
+}
