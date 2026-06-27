@@ -138,7 +138,7 @@ export async function createMerchant({ name }) {
   const user = await getCurrentUser()
   if (!user) throw new Error('Not signed in')
   const taken = await listTakenSlugs()
-  const slug = resolveSlug(name, { taken, id: user.id })
+  const slug = await resolveSlug(name, { taken, id: user.id })
   const { data, error } = await supabase
     .from('merchants')
     .insert({ name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending' })

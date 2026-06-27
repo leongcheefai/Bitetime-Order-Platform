@@ -71,8 +71,8 @@ export default function ProductsManager() {
         <form onSubmit={save}>
           <div className="admin-fields">
             <div className="admin-field full">
-              <label>{t('Name', '名称')}</label>
-              <input
+              <label htmlFor="pm-1">{t('Name', '名称')}</label>
+              <input id="pm-1"
                 value={form.name}
                 onChange={e => setForm({ ...form, name: e.target.value })}
                 required
@@ -80,24 +80,24 @@ export default function ProductsManager() {
               />
             </div>
             <div className="admin-field full">
-              <label>{t('Chinese name (optional)', '中文名称（可选）')}</label>
-              <input
+              <label htmlFor="pm-2">{t('Chinese name (optional)', '中文名称（可选）')}</label>
+              <input id="pm-2"
                 value={form.name_zh}
                 onChange={e => setForm({ ...form, name_zh: e.target.value })}
                 placeholder="e.g. 焦化奶油曲奇"
               />
             </div>
             <div className="admin-field full">
-              <label>{t('Description', '描述')}</label>
-              <input
+              <label htmlFor="pm-3">{t('Description', '描述')}</label>
+              <input id="pm-3"
                 value={form.descr}
                 onChange={e => setForm({ ...form, descr: e.target.value })}
                 placeholder={t('Short description (optional)', '简短描述（可选）')}
               />
             </div>
             <div className="admin-field full">
-              <label>{t('Price (RM)', '价格 (RM)')}</label>
-              <input
+              <label htmlFor="pm-4">{t('Price (RM)', '价格 (RM)')}</label>
+              <input id="pm-4"
                 type="number"
                 step="0.01"
                 value={form.price}
@@ -107,8 +107,8 @@ export default function ProductsManager() {
               />
             </div>
             <div className="admin-field full">
-              <label>{t('Unit', '单位')}</label>
-              <input
+              <label htmlFor="pm-5">{t('Unit', '单位')}</label>
+              <input id="pm-5"
                 value={form.unit}
                 onChange={e => setForm({ ...form, unit: e.target.value })}
                 placeholder="pc / box / kg"

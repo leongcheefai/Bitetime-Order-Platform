@@ -93,8 +93,8 @@ export default function Storefront() {
             <h1>{merchant.name}</h1>
           </div>
           <div className="lang-switcher" style={{ marginBottom: 0 }}>
-            <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} onClick={() => setLang('en')}>EN</button>
-            <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} onClick={() => setLang('zh')}>中文</button>
+            <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
+            <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} aria-pressed={lang === 'zh'} onClick={() => setLang('zh')}>中文</button>
           </div>
         </div>
 
@@ -139,9 +139,9 @@ export default function Storefront() {
             </div>
           )}
 
-          <span className="reset-link" onClick={handleReset}>
+          <button type="button" className="reset-link" onClick={handleReset}>
             {t('Place another order', '再下一单')}
-          </span>
+          </button>
         </div>
       </div>
     )
@@ -157,8 +157,8 @@ export default function Storefront() {
           <p className="tagline">{t('Powered by BiteTime', 'BiteTime 提供技术支持')}</p>
         </div>
         <div className="lang-switcher" style={{ marginBottom: 0 }}>
-          <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} onClick={() => setLang('en')}>EN</button>
-          <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} onClick={() => setLang('zh')}>中文</button>
+          <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
+          <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} aria-pressed={lang === 'zh'} onClick={() => setLang('zh')}>中文</button>
         </div>
       </div>
 
@@ -191,7 +191,7 @@ export default function Storefront() {
                     onClick={() => updateQty(p.id, -1)}
                     aria-label={t('Decrease quantity', '减少数量')}
                   >−</button>
-                  <span className="qty-val">{cart[p.id] || 0}</span>
+                  <span className="qty-val" aria-live="polite" aria-label={t('Quantity', '数量')}>{cart[p.id] || 0}</span>
                   <button
                     className="qty-btn"
                     onClick={() => updateQty(p.id, 1)}
@@ -209,24 +209,29 @@ export default function Storefront() {
       {/* Fulfilment */}
       <div className="section">
         <div className="section-label">{t('Fulfilment', '配送方式')}</div>
-        <div className="radio-row">
-          <div
-            className={`radio-opt${mode === 'pickup' ? ' active' : ''}`}
+        <div className="radio-row" role="group" aria-label={t('Fulfilment method', '配送方式')}>
+          <button
+            type="button"
+            className="radio-opt"
+            aria-pressed={mode === 'pickup'}
             onClick={() => setMode('pickup')}
           >
             {t('Pickup', '自取')}
-          </div>
-          <div
-            className={`radio-opt${mode === 'delivery' ? ' active' : ''}`}
+          </button>
+          <button
+            type="button"
+            className="radio-opt"
+            aria-pressed={mode === 'delivery'}
             onClick={() => setMode('delivery')}
           >
             {t('Delivery', '送货')} (+RM {Number(deliveryFee).toFixed(2)})
-          </div>
+          </button>
         </div>
         {mode === 'delivery' && (
           <div className="field" style={{ marginTop: '0.75rem' }}>
-            <label>{t('Delivery address', '送货地址')}</label>
+            <label htmlFor="sf-address">{t('Delivery address', '送货地址')}</label>
             <textarea
+              id="sf-address"
               className="mm-sf-textarea"
               value={address}
               onChange={e => setAddress(e.target.value)}
@@ -243,8 +248,9 @@ export default function Storefront() {
       <div className="section">
         <div className="section-label">{t('Your Details', '您的资料')}</div>
         <div className="field" style={{ marginBottom: '0.75rem' }}>
-          <label>{t('Name', '姓名')} *</label>
+          <label htmlFor="sf-name">{t('Name', '姓名')} *</label>
           <input
+            id="sf-name"
             type="text"
             value={name}
             onChange={e => setName(e.target.value)}
@@ -252,8 +258,9 @@ export default function Storefront() {
           />
         </div>
         <div className="field">
-          <label>{t('WhatsApp', 'WhatsApp')} *</label>
+          <label htmlFor="sf-wa">{t('WhatsApp', 'WhatsApp')} *</label>
           <input
+            id="sf-wa"
             type="tel"
             value={wa}
             onChange={e => setWa(e.target.value)}
