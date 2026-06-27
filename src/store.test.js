@@ -5,6 +5,10 @@ vi.mock('./supabase', () => {
   const single = vi.fn()
   const maybeSingle = vi.fn()
 
+  // order() is a terminal for list queries like fetchAllMerchants.
+  // Mock per-test with order.mockResolvedValueOnce({data, error}).
+  const order = vi.fn()
+
   // select() returned from insert() chain → { single }
   const insertSelect = vi.fn(() => ({ single }))
   // select() returned from update().eq() chain → { single }
@@ -21,10 +25,12 @@ vi.mock('./supabase', () => {
   // update() → { eq }
   const update = vi.fn(() => ({ eq }))
 
-  // from().select() → { eq, single, maybeSingle } by default.
+  // from().select() → { eq, single, maybeSingle, order } by default.
   // Override per-test with select.mockResolvedValueOnce({data, error}) for
   // terminal list queries (listTakenSlugs: from().select('slug')).
-  const select = vi.fn(() => ({ eq, single, maybeSingle }))
+  // Use order.mockResolvedValueOnce({data, error}) for order-terminated chains
+  // (fetchAllMerchants: from().select('*').order(...)).
+  const select = vi.fn(() => ({ eq, single, maybeSingle, order }))
 
   // from() → { select, insert, update }
   const from = vi.fn(() => ({ select, insert, update }))
@@ -35,7 +41,7 @@ vi.mock('./supabase', () => {
 
   return {
     supabase: { from, auth },
-    __mocks: { from, select, eq, single, maybeSingle, insert, update, insertSelect, updateEqSelect, getUser },
+    __mocks: { from, select, eq, single, maybeSingle, insert, update, insertSelect, updateEqSelect, getUser, order },
   }
 })
 
@@ -45,6 +51,8 @@ import {
   fetchMyMerchant,
   createMerchant,
   updateMerchantSlug,
+  fetchAllMerchants,
+  setMerchantStatus,
 } from './store'
 import { __mocks } from './supabase'
 
@@ -176,5 +184,62 @@ describe('updateMerchantSlug', () => {
     expect(__mocks.update).toHaveBeenCalledWith({ slug: 'new-shop' })
     expect(__mocks.eq).toHaveBeenCalledWith('id', 'm1')
     expect(result).toEqual(updated)
+  })
+})
+
+// ── fetchAllMerchants (Task 3.2) ──────────────────────────────────────────────
+
+describe('fetchAllMerchants', () => {
+  it('queries merchants table with select(*) + order and returns list', async () => {
+    const rows = [{ id: 'm2', created_at: '2025-02-01' }, { id: 'm1', created_at: '2025-01-01' }]
+    __mocks.order.mockResolvedValueOnce({ data: rows, error: null })
+    const result = await fetchAllMerchants()
+    expect(__mocks.from).toHaveBeenCalledWith('merchants')
+    expect(__mocks.select).toHaveBeenCalledWith('*')
+    expect(__mocks.order).toHaveBeenCalledWith('created_at', { ascending: false })
+    expect(result).toEqual(rows)
+  })
+
+  it('returns empty array when data is null', async () => {
+    __mocks.order.mockResolvedValueOnce({ data: null, error: null })
+    expect(await fetchAllMerchants()).toEqual([])
+  })
+
+  it('throws on DB error', async () => {
+    __mocks.order.mockResolvedValueOnce({ data: null, error: new Error('DB fail') })
+    await expect(fetchAllMerchants()).rejects.toThrow('DB fail')
+  })
+})
+
+// ── setMerchantStatus (Task 3.2) ──────────────────────────────────────────────
+
+describe('setMerchantStatus', () => {
+  it('throws "Invalid status" for an unknown status without calling update', async () => {
+    await expect(setMerchantStatus('m1', 'banned')).rejects.toThrow('Invalid status')
+    expect(__mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('updates status on merchants table and returns the updated row', async () => {
+    const row = { id: 'm1', status: 'active' }
+    __mocks.single.mockResolvedValueOnce({ data: row, error: null })
+    const result = await setMerchantStatus('m1', 'active')
+    expect(__mocks.from).toHaveBeenCalledWith('merchants')
+    expect(__mocks.update).toHaveBeenCalledWith({ status: 'active' })
+    expect(__mocks.eq).toHaveBeenCalledWith('id', 'm1')
+    expect(result).toEqual(row)
+  })
+
+  it('accepts all three valid statuses: pending, active, suspended', async () => {
+    for (const status of ['pending', 'active', 'suspended']) {
+      vi.clearAllMocks()
+      __mocks.single.mockResolvedValueOnce({ data: { id: 'm1', status }, error: null })
+      const result = await setMerchantStatus('m1', status)
+      expect(result.status).toBe(status)
+    }
+  })
+
+  it('throws on DB error after a valid status', async () => {
+    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('write failed') })
+    await expect(setMerchantStatus('m1', 'suspended')).rejects.toThrow('write failed')
   })
 })

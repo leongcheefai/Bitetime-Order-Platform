@@ -91,6 +91,23 @@ export async function fetchAllProfiles() {
   return data ?? [];
 }
 
+const MERCHANT_STATUSES = ['pending', 'active', 'suspended']
+
+export async function fetchAllMerchants() {
+  const { data, error } = await supabase
+    .from('merchants').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function setMerchantStatus(id, status) {
+  if (!MERCHANT_STATUSES.includes(status)) throw new Error('Invalid status')
+  const { data, error } = await supabase
+    .from('merchants').update({ status }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
 export async function fetchMerchantBySlug(slug) {
   const s = (slug || '').trim().toLowerCase()
   if (!s || RESERVED_SLUGS.includes(s)) return null
