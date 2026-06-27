@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 import { loadSettings, loadSettingsFromDB, onAuthChange, signOut, loadDeliveryAddress, updatePassword } from './store';
+import { useSession } from './SessionContext';
 import LoginView from './components/LoginView';
 import RegisterView from './components/RegisterView';
 import AdminPanel from './components/AdminPanel';
@@ -26,8 +27,7 @@ const USER_NAV = [
 ];
 
 export default function App() {
-  const [account, setAccount] = useState(undefined);
-  const [lang, setLang] = useState('en');
+  const { account, role, lang, setLang, t } = useSession();
   const [settings, setSettings] = useState(loadSettings);
   const [orderDone, setOrderDone] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState('');
@@ -46,12 +46,10 @@ export default function App() {
   const [savedAddress, setSavedAddress] = useState(null);
   const [orderCount, setOrderCount] = useState(0);
 
-  const t = (en, zh) => lang === 'zh' ? zh : en;
   const money = (n) => Number(n || 0).toFixed(2);
 
   useEffect(() => {
     const unsubscribe = onAuthChange((u, event) => {
-      setAccount(u);
       if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
       if (event === 'SIGNED_IN') setView('order');
       // Local cache first (sync inside loadDeliveryAddress), falls back to DB so a new device still gets the saved address
