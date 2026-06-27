@@ -1,3 +1,7 @@
+// pinyin-pro carries a ~1MB dictionary and is only needed to transliterate
+// Chinese shop names at signup, so it's dynamically imported on demand
+// (see toSlugBase) to keep it out of the core bundle every visitor loads.
+
 // True if the string contains any CJK ideograph.
 function hasCJK(s) {
   return /[一-鿿]/.test(s)

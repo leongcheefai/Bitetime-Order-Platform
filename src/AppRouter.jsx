@@ -70,6 +70,7 @@ export default function AppRouter() {
   return (
     <SessionProvider>
       <Suspense fallback={<RouteFallback />}>
+
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/s/:slug/*" element={<MerchantProvider><StorefrontShell /></MerchantProvider>} />
