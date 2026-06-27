@@ -14,8 +14,9 @@ export function slugify(name) {
 
 export function toSlugBase(name) {
   const raw = String(name ?? '')
-  const latinised = hasCJK(raw)
-    ? pinyin(raw, { toneType: 'none', type: 'array' }).join(' ') + ' ' + raw.replace(/[一-鿿]+/g, ' ')
-    : raw
+  if (!hasCJK(raw)) return slugify(raw)
+  const latinised = raw.replace(/[一-鿿]+/g, match =>
+    pinyin(match, { toneType: 'none', separator: ' ' })
+  )
   return slugify(latinised)
 }

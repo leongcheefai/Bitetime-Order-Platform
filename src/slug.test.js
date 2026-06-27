@@ -21,7 +21,7 @@ describe('toSlugBase', () => {
     expect(toSlugBase('点心铺')).toBe('dian-xin-pu')
   })
   it('handles mixed latin + Chinese', () => {
-    expect(toSlugBase('点心 Cafe')).toBe('dian-xin-c-a-f-e-cafe')
+    expect(toSlugBase('点心 Cafe')).toBe('dian-xin-cafe')
   })
   it('returns empty for pure punctuation', () => {
     expect(toSlugBase('!!!')).toBe('')
