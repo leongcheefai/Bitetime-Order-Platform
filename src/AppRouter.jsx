@@ -3,6 +3,7 @@ import { SessionProvider } from './SessionContext'
 import { MerchantProvider, useMerchant } from './MerchantContext'
 import RequireRole from './RequireRole'
 import App from './App.jsx'
+import SignupScreen from './merchant/SignupScreen'
 
 function StorefrontShell() {
   const { merchant, loading, notFound } = useMerchant()
@@ -17,6 +18,7 @@ export default function AppRouter() {
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/s/:slug/*" element={<MerchantProvider><StorefrontShell /></MerchantProvider>} />
+        <Route path="/merchant/signup" element={<SignupScreen />} />
         <Route path="/merchant/*" element={<RequireRole role="merchant"><div style={{ padding: 24 }}>Merchant dashboard (P2/P4)</div></RequireRole>} />
         <Route path="/admin/*" element={<RequireRole role="superadmin"><div style={{ padding: 24 }}>Admin (P3)</div></RequireRole>} />
       </Routes>
