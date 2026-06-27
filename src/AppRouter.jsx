@@ -7,6 +7,7 @@ import App from './App.jsx'
 import SignupScreen from './merchant/SignupScreen'
 import LoginScreen from './merchant/LoginScreen'
 import MerchantHome from './merchant/MerchantHome'
+import Storefront from './store/Storefront'
 
 function StorefrontShell() {
   const { merchant, loading, notFound } = useMerchant()
@@ -34,19 +35,21 @@ function StorefrontShell() {
     </div>
   )
 
-  return (
+  if (merchant.status !== 'active') return (
     <div className="form-wrap mm-storefront-state">
       <div className="brand">
-        <h1>{merchant.name}</h1>
-        <p className="tagline">Powered by BiteTime</p>
+        <h1>BiteTime</h1>
+        <p className="tagline">{merchant.name}</p>
       </div>
       <div className="admin-panel" style={{ textAlign: 'left' }}>
         <p style={{ color: '#7A4F55', fontSize: 14 }}>
-          Storefront for <strong>{merchant.name}</strong> — coming soon.
+          This shop isn't available right now.
         </p>
       </div>
     </div>
   )
+
+  return <Storefront />
 }
 
 export default function AppRouter() {

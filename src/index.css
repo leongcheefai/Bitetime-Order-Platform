@@ -772,3 +772,80 @@ body:has(.sticky-total-bar) .form-wrap { padding-bottom: 80px; }
   .mm-product-actions { width: 100%; justify-content: flex-end; }
   .mm-dash-tab { flex: 0 1 auto; font-size: 13px; padding: 8px 10px; }
 }
+
+/* ── Storefront order page (.mm-sf-*) ───────────────────────────────────── */
+.mm-sf-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+.mm-sf-brand-left { margin-bottom: 0; text-align: left; }
+.mm-sf-header .lang-switcher { margin-bottom: 0; flex-shrink: 0; }
+
+.mm-sf-product-list { display: flex; flex-direction: column; gap: 10px; }
+
+.mm-sf-product-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: #FBF6F0;
+  border: 1.5px solid #C9A090;
+  border-radius: 14px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.mm-sf-product-card--selected {
+  border-color: #7A1028;
+  background: #F5E6E8;
+}
+
+.mm-sf-product-info { flex: 1; min-width: 0; }
+.mm-sf-product-name { font-size: 14px; font-weight: 500; color: #2B0A10; }
+.mm-sf-product-descr { font-size: 12px; color: #7A4F55; margin-top: 2px; line-height: 1.4; }
+.mm-sf-product-price { font-size: 13px; font-weight: 500; color: #7A1028; margin-top: 5px; }
+
+.mm-sf-textarea {
+  width: 100%;
+  padding: 10px 13px;
+  border: 1px solid #C9A090;
+  border-radius: 10px;
+  font-size: 14px;
+  background: #FBF6F0;
+  color: #2B0A10;
+  font-family: 'DM Sans', sans-serif;
+  resize: vertical;
+  min-height: 72px;
+  box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.mm-sf-textarea:focus {
+  outline: none;
+  border-color: #7A1028;
+  box-shadow: 0 0 0 3px rgba(122,16,40,0.1);
+}
+
+.mm-sf-empty {
+  font-size: 14px;
+  color: #7A4F55;
+  font-style: italic;
+  padding: 1.5rem 0;
+  text-align: center;
+}
+
+.mm-sf-error {
+  font-size: 13px;
+  color: #C0392B;
+  background: #FDE8E8;
+  border: 1px solid #F5C6CB;
+  border-radius: 10px;
+  padding: 10px 13px;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+@media (max-width: 480px) {
+  .mm-sf-header { flex-direction: column; gap: 0.5rem; }
+  .mm-sf-header .lang-switcher { justify-content: flex-start; }
+}
