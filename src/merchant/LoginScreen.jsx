@@ -30,12 +30,12 @@ export default function LoginScreen() {
         <form onSubmit={onSubmit}>
           <div className="auth-fields">
             <div className="field">
-              <label>{t('Email', '邮箱')}</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+              <label htmlFor="login-1">{t('Email', '邮箱')}</label>
+              <input id="login-1" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
             <div className="field">
-              <label>{t('Password', '密码')}</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+              <label htmlFor="login-2">{t('Password', '密码')}</label>
+              <input id="login-2" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
           </div>
           <button className="auth-btn" disabled={busy}>

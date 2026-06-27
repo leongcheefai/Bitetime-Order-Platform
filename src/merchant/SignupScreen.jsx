@@ -49,17 +49,17 @@ export default function SignupScreen() {
         <form onSubmit={onSubmit}>
           <div className="auth-fields">
             <div className="field">
-              <label>{t('Shop name', '店铺名称')}</label>
-              <input value={name} onChange={e => setName(e.target.value)} required placeholder={t('e.g. Sunny Bakes', '如：阳光烘焙')} />
+              <label htmlFor="signup-1">{t('Shop name', '店铺名称')}</label>
+              <input id="signup-1" value={name} onChange={e => setName(e.target.value)} required placeholder={t('e.g. Sunny Bakes', '如：阳光烘焙')} />
             </div>
             <p className="mm-slug-preview">{t('Your store URL', '店铺网址')}: /s/{slugPreview}</p>
             <div className="field">
-              <label>{t('Email', '邮箱')}</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+              <label htmlFor="signup-2">{t('Email', '邮箱')}</label>
+              <input id="signup-2" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
             <div className="field">
-              <label>{t('Password', '密码')}</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
+              <label htmlFor="signup-3">{t('Password', '密码')}</label>
+              <input id="signup-3" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
             </div>
           </div>
           <button type="submit" className="auth-btn" disabled={busy}>

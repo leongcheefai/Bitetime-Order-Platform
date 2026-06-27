@@ -146,8 +146,10 @@ body:has(.user-layout) { padding: 1.25rem; }
 .qty-val { font-size: 14px; font-weight: 500; min-width: 20px; text-align: center; color: var(--color-ink); }
 
 .radio-row { display: flex; gap: 10px; }
-.radio-opt { flex: 1; border: 1px solid var(--color-clay-border); border-radius: var(--radius-md); padding: 10px 14px; cursor: pointer; font-size: 14px; color: var(--color-ink); text-align: center; background: var(--color-surface-raised); transition: all 0.15s; }
+.radio-opt { flex: 1; border: 1px solid var(--color-clay-border); border-radius: var(--radius-md); padding: 10px 14px; cursor: pointer; font-size: 14px; font-family: inherit; color: var(--color-ink); text-align: center; background: var(--color-surface-raised); transition: all 0.15s; }
 .radio-opt:hover { border-color: var(--color-oxblood); }
+.radio-opt:focus-visible { outline: 2px solid var(--color-oxblood); outline-offset: 2px; }
+.radio-opt[aria-pressed="true"] { border: 1.5px solid var(--color-oxblood); background: var(--color-oxblood-tint); color: var(--color-oxblood); font-weight: 500; }
 .radio-opt.active { border: 1.5px solid var(--color-oxblood); background: var(--color-oxblood-tint); color: var(--color-oxblood); font-weight: 500; }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
