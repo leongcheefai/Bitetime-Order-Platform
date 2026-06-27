@@ -1,4 +1,6 @@
 import { supabase } from './supabase';
+import { resolveSlug, RESERVED_SLUGS } from './slug';
+import { orderPrefix } from './orderPrefix';
 
 export const DEFAULTS = {
   products: [
@@ -63,7 +65,7 @@ export async function signUp(name, email, password) {
 export async function fetchProfileByUserId(userId) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, email')
+    .select('id, name, email, app_role, merchant_id')
     .eq('id', userId)
     .single();
   if (error) return null;
@@ -87,6 +89,73 @@ export async function fetchAllProfiles() {
     .order('created_at', { ascending: true });
   if (error) throw error;
   return data ?? [];
+}
+
+const MERCHANT_STATUSES = ['pending', 'active', 'suspended']
+
+export async function fetchAllMerchants() {
+  const { data, error } = await supabase
+    .from('merchants').select('*').order('created_at', { ascending: false })
+  if (error) throw error
+  return data ?? []
+}
+
+export async function setMerchantStatus(id, status) {
+  if (!MERCHANT_STATUSES.includes(status)) throw new Error('Invalid status')
+  const { data, error } = await supabase
+    .from('merchants').update({ status }).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchMerchantBySlug(slug) {
+  const s = (slug || '').trim().toLowerCase()
+  if (!s || RESERVED_SLUGS.includes(s)) return null
+  const { data, error } = await supabase
+    .from('merchants')
+    .select('*')
+    .eq('slug', s)
+    .single()
+  if (error) return null
+  return data
+}
+
+export async function listTakenSlugs() {
+  const { data, error } = await supabase.from('merchants').select('slug')
+  if (error) return []
+  return (data ?? []).map(r => r.slug)
+}
+
+export async function fetchMyMerchant(userId) {
+  if (!userId) return null
+  const { data, error } = await supabase
+    .from('merchants').select('*').eq('owner_id', userId).maybeSingle()
+  if (error) return null
+  return data ?? null
+}
+
+export async function createMerchant({ name }) {
+  const user = await getCurrentUser()
+  if (!user) throw new Error('Not signed in')
+  const taken = await listTakenSlugs()
+  const slug = resolveSlug(name, { taken, id: user.id })
+  const { data, error } = await supabase
+    .from('merchants')
+    .insert({ name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending' })
+    .select().single()
+  if (error) throw error
+  return data
+}
+
+export async function updateMerchantSlug(id, slug) {
+  const s = (slug || '').trim().toLowerCase()
+  if (!s || RESERVED_SLUGS.includes(s)) throw new Error('Reserved or empty slug')
+  const taken = await listTakenSlugs()
+  if (taken.includes(s)) throw new Error('Slug already taken')
+  const { data, error } = await supabase
+    .from('merchants').update({ slug: s }).eq('id', id).select().single()
+  if (error) throw error
+  return data
 }
 
 export async function signOut() {
@@ -404,4 +473,99 @@ export async function loadDeliveryAddress(userId) {
     return data.delivery_address;
   }
   return null;
+}
+
+// ── Multi-tenant order placement ─────────────────────────────────────────────
+
+const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
+
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total }) {
+  const { data: orderNumber, error: rpcErr } = await supabase
+    .rpc('next_order_number', { p_merchant: merchantId })
+  if (rpcErr) throw rpcErr
+  const { data, error } = await supabase.from('orders').insert({
+    merchant_id: merchantId,
+    customer_name: customerName,
+    customer_wa: customerWa,
+    mode, address,
+    shipping_fee: shippingFee ?? 0,
+    items, total,
+    order_number: orderNumber,
+    status: 'new',
+  }).select().single()
+  if (error) throw error
+  return { order: data, orderNumber }
+}
+
+export async function fetchMerchantOrders(merchantId) {
+  if (!merchantId) return []
+  const { data, error } = await supabase
+    .from('orders').select('*').eq('merchant_id', merchantId)
+    .order('created_at', { ascending: false })
+  if (error) return []
+  return data ?? []
+}
+
+export async function setOrderStatus(orderId, status) {
+  if (!ORDER_STATUSES.includes(status)) throw new Error('Invalid status')
+  const { data, error } = await supabase
+    .from('orders').update({ status }).eq('id', orderId).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchMerchantCustomers(merchantId) {
+  const orders = await fetchMerchantOrders(merchantId)
+  const byWa = new Map()
+  for (const o of orders) {
+    const key = o.customer_wa || o.customer_name || '—'
+    const cur = byWa.get(key) || { name: o.customer_name, wa: o.customer_wa, orderCount: 0, lastOrder: o.created_at }
+    cur.orderCount += 1
+    if (o.created_at > cur.lastOrder) cur.lastOrder = o.created_at
+    byWa.set(key, cur)
+  }
+  return [...byWa.values()]
+}
+
+// ── Products ──────────────────────────────────────────────────────────────────
+
+export async function fetchProducts(merchantId) {
+  if (!merchantId) return []
+  const { data, error } = await supabase
+    .from('products').select('*').eq('merchant_id', merchantId)
+    .order('sort', { ascending: true }).order('created_at', { ascending: true })
+  if (error) return []
+  return data ?? []
+}
+
+export async function upsertProduct(product) {
+  const { data, error } = await supabase.from('products').upsert(product).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteProduct(id) {
+  const { error } = await supabase.from('products').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Merchant config & secrets ─────────────────────────────────────────────────
+
+export async function updateMerchantConfig(id, patch) {
+  const { data, error } = await supabase.from('merchants').update(patch).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchMerchantSecret(merchantId) {
+  const { data, error } = await supabase
+    .from('merchant_secrets').select('tg_token, tg_chat_id').eq('merchant_id', merchantId).maybeSingle()
+  if (error) return null
+  return data ?? null
+}
+
+export async function upsertMerchantSecret(merchantId, secret) {
+  const { error } = await supabase
+    .from('merchant_secrets').upsert({ merchant_id: merchantId, ...secret })
+  if (error) throw error
 }

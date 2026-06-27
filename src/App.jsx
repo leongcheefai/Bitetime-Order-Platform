@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 import { loadSettings, loadSettingsFromDB, onAuthChange, signOut, loadDeliveryAddress, updatePassword } from './store';
+import { useSession } from './SessionContext';
 import LoginView from './components/LoginView';
 import RegisterView from './components/RegisterView';
 import AdminPanel from './components/AdminPanel';
@@ -11,8 +12,6 @@ import VoucherPanel from './components/VoucherPanel';
 import OrderList from './components/OrderList';
 import SalesDashboard from './components/SalesDashboard';
 import Notifications from './components/Notifications';
-
-const USER_EMAIL = 'bitetimeandco@gmail.com';
 
 const USER_NAV = [
   { key: 'home',      icon: '', label: 'Home',             labelZh: '主页' },
@@ -26,8 +25,7 @@ const USER_NAV = [
 ];
 
 export default function App() {
-  const [account, setAccount] = useState(undefined);
-  const [lang, setLang] = useState('en');
+  const { account, role, lang, setLang, t } = useSession();
   const [settings, setSettings] = useState(loadSettings);
   const [orderDone, setOrderDone] = useState(false);
   const [lastOrderNumber, setLastOrderNumber] = useState('');
@@ -46,12 +44,10 @@ export default function App() {
   const [savedAddress, setSavedAddress] = useState(null);
   const [orderCount, setOrderCount] = useState(0);
 
-  const t = (en, zh) => lang === 'zh' ? zh : en;
   const money = (n) => Number(n || 0).toFixed(2);
 
   useEffect(() => {
     const unsubscribe = onAuthChange((u, event) => {
-      setAccount(u);
       if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
       if (event === 'SIGNED_IN') setView('order');
       // Local cache first (sync inside loadDeliveryAddress), falls back to DB so a new device still gets the saved address
@@ -76,7 +72,7 @@ export default function App() {
     setView('order');
   }
 
-  const isUser = account?.email === USER_EMAIL;
+  const isAdmin = role === 'superadmin' || role === 'merchant';
   const accountName = account?.user_metadata?.name || account?.email || '';
 
   if (account === undefined) {
@@ -223,7 +219,7 @@ export default function App() {
           )}
         </div>
         <nav className="drawer-nav">
-          {isUser && userPage !== 'preview' ? USER_NAV.map(({ key, label, labelZh }) => (
+          {isAdmin && userPage !== 'preview' ? USER_NAV.map(({ key, label, labelZh }) => (
             key === 'menu' ? (
               <div key="menu">
                 <button
@@ -336,7 +332,7 @@ export default function App() {
   );
 
   // ── User (owner) layout ────────────────────────────────────────────────────
-  if (isUser) {
+  if (isAdmin) {
     return (
       <>
         <div className="form-wrap form-wrap--owner">
