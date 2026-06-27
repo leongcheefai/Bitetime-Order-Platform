@@ -1,5 +1,3 @@
-import { pinyin } from 'pinyin-pro'
-
 // True if the string contains any CJK ideograph.
 function hasCJK(s) {
   return /[一-鿿]/.test(s)
@@ -12,9 +10,13 @@ export function slugify(name) {
     .replace(/^-+|-+$/g, '')
 }
 
-export function toSlugBase(name) {
+// Async: latin names resolve fast; CJK names lazily load the (large) pinyin-pro
+// dictionary via dynamic import, so it stays out of every route's bundle and
+// only downloads when a Chinese shop name is actually slugged.
+export async function toSlugBase(name) {
   const raw = String(name ?? '')
   if (!hasCJK(raw)) return slugify(raw)
+  const { pinyin } = await import('pinyin-pro')
   const latinised = raw.replace(/[一-鿿]+/g, match =>
     pinyin(match, { toneType: 'none', separator: ' ' })
   )
@@ -27,8 +29,8 @@ export const RESERVED_SLUGS = [
   'login', 'signup', 'account', 'static', 'assets',
 ]
 
-export function resolveSlug(name, { taken = [], id = '' } = {}) {
-  const base = toSlugBase(name) || `shop-${id.replace(/-/g, '').slice(0, 6)}`
+export async function resolveSlug(name, { taken = [], id = '' } = {}) {
+  const base = (await toSlugBase(name)) || `shop-${id.replace(/-/g, '').slice(0, 6)}`
   const used = new Set(taken)
   const blocked = (s) => used.has(s) || RESERVED_SLUGS.includes(s)
   if (!blocked(base)) return base

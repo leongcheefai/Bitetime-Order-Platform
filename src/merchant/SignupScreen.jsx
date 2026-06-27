@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { signUp, signIn, createMerchant } from '../store'
 import { toSlugBase } from '../slug'
@@ -13,7 +13,12 @@ export default function SignupScreen() {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
-  const slugPreview = toSlugBase(name) || 'shop-…'
+  const [slugPreview, setSlugPreview] = useState('shop-…')
+  useEffect(() => {
+    let active = true
+    toSlugBase(name).then(base => { if (active) setSlugPreview(base || 'shop-…') })
+    return () => { active = false }
+  }, [name])
 
   async function onSubmit(e) {
     e.preventDefault()
