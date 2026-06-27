@@ -10,9 +10,11 @@ npm run build      # production build → dist/
 npm run lint       # ESLint check
 npm run preview    # serve dist/ locally
 npm run deploy     # production build (deploy via Vercel)
+npm test           # Vitest unit tests (run once)
+npm run test:rls   # RLS tenant-isolation integration tests (needs local Supabase env vars)
 ```
 
-No test suite exists in this project.
+Tests use Vitest (added during the multi-merchant build). Pure logic and `store.js` functions have unit tests (`src/*.test.js`); tenant isolation is covered by integration tests in `tests/rls/` that need a running local Supabase (`supabase start`) and its keys as env vars. UI is verified by running the app (run-and-verify), not component tests.
 
 ## Architecture
 
