@@ -474,3 +474,46 @@ export async function loadDeliveryAddress(userId) {
   }
   return null;
 }
+
+// ── Products ──────────────────────────────────────────────────────────────────
+
+export async function fetchProducts(merchantId) {
+  if (!merchantId) return []
+  const { data, error } = await supabase
+    .from('products').select('*').eq('merchant_id', merchantId)
+    .order('sort', { ascending: true }).order('created_at', { ascending: true })
+  if (error) return []
+  return data ?? []
+}
+
+export async function upsertProduct(product) {
+  const { data, error } = await supabase.from('products').upsert(product).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteProduct(id) {
+  const { error } = await supabase.from('products').delete().eq('id', id)
+  if (error) throw error
+}
+
+// ── Merchant config & secrets ─────────────────────────────────────────────────
+
+export async function updateMerchantConfig(id, patch) {
+  const { data, error } = await supabase.from('merchants').update(patch).eq('id', id).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchMerchantSecret(merchantId) {
+  const { data, error } = await supabase
+    .from('merchant_secrets').select('tg_token, tg_chat_id').eq('merchant_id', merchantId).maybeSingle()
+  if (error) return null
+  return data ?? null
+}
+
+export async function upsertMerchantSecret(merchantId, secret) {
+  const { error } = await supabase
+    .from('merchant_secrets').upsert({ merchant_id: merchantId, ...secret })
+  if (error) throw error
+}

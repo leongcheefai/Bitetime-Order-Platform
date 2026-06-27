@@ -5,19 +5,32 @@ vi.mock('./supabase', () => {
   const single = vi.fn()
   const maybeSingle = vi.fn()
 
-  // order() is a terminal for list queries like fetchAllMerchants.
-  // Mock per-test with order.mockResolvedValueOnce({data, error}).
-  const order = vi.fn()
+  // order() — used for ordered list queries.
+  // Default returns { order } so chains like .eq().order().order() work;
+  // mock the LAST call with .mockResolvedValueOnce({data, error}) to terminate.
+  const order = vi.fn(() => ({ order }))
 
   // select() returned from insert() chain → { single }
   const insertSelect = vi.fn(() => ({ single }))
   // select() returned from update().eq() chain → { single }
   const updateEqSelect = vi.fn(() => ({ single }))
+  // select() returned from upsert() chain → { single }
+  const upsertSelect = vi.fn(() => ({ single }))
 
-  // eq() → { single, maybeSingle, select: updateEqSelect }
+  // deleteEq — terminal for delete().eq() chain; awaited directly.
+  const deleteEq = vi.fn()
+  // del (delete) → { eq: deleteEq }
+  const del = vi.fn(() => ({ eq: deleteEq }))
+
+  // upsert() → { select: upsertSelect } by default (for .upsert().select().single() chains).
+  // For terminal-await use (no .select()), mock with .mockResolvedValueOnce({error}).
+  const upsert = vi.fn(() => ({ select: upsertSelect }))
+
+  // eq() → { single, maybeSingle, select: updateEqSelect, order }
   // Used by: fetchMerchantBySlug (→single), fetchMyMerchant (→maybeSingle),
-  //          updateMerchantSlug (→updateEqSelect→single)
-  const eq = vi.fn(() => ({ single, maybeSingle, select: updateEqSelect }))
+  //          updateMerchantSlug / setMerchantStatus (→updateEqSelect→single),
+  //          fetchProducts (→order→order)
+  const eq = vi.fn(() => ({ single, maybeSingle, select: updateEqSelect, order }))
 
   // insert() → { select: insertSelect }
   const insert = vi.fn(() => ({ select: insertSelect }))
@@ -32,8 +45,8 @@ vi.mock('./supabase', () => {
   // (fetchAllMerchants: from().select('*').order(...)).
   const select = vi.fn(() => ({ eq, single, maybeSingle, order }))
 
-  // from() → { select, insert, update }
-  const from = vi.fn(() => ({ select, insert, update }))
+  // from() → { select, insert, update, upsert, delete: del }
+  const from = vi.fn(() => ({ select, insert, update, upsert, delete: del }))
 
   // auth mock for getCurrentUser() → supabase.auth.getUser()
   const getUser = vi.fn()
@@ -41,7 +54,11 @@ vi.mock('./supabase', () => {
 
   return {
     supabase: { from, auth },
-    __mocks: { from, select, eq, single, maybeSingle, insert, update, insertSelect, updateEqSelect, getUser, order },
+    __mocks: {
+      from, select, eq, single, maybeSingle, insert, update,
+      insertSelect, updateEqSelect, upsertSelect, getUser, order,
+      upsert, del, deleteEq,
+    },
   }
 })
 
@@ -53,6 +70,12 @@ import {
   updateMerchantSlug,
   fetchAllMerchants,
   setMerchantStatus,
+  fetchProducts,
+  upsertProduct,
+  deleteProduct,
+  updateMerchantConfig,
+  fetchMerchantSecret,
+  upsertMerchantSecret,
 } from './store'
 import { __mocks } from './supabase'
 
@@ -241,5 +264,158 @@ describe('setMerchantStatus', () => {
   it('throws on DB error after a valid status', async () => {
     __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('write failed') })
     await expect(setMerchantStatus('m1', 'suspended')).rejects.toThrow('write failed')
+  })
+})
+
+// ── fetchProducts (Task 4.1) ───────────────────────────────────────────────────
+
+describe('fetchProducts', () => {
+  it('returns empty array immediately when merchantId is falsy', async () => {
+    expect(await fetchProducts(null)).toEqual([])
+    expect(await fetchProducts('')).toEqual([])
+    expect(__mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('queries products by merchant_id, ordered by sort then created_at', async () => {
+    const rows = [{ id: 'p1', sort: 0 }, { id: 'p2', sort: 1 }]
+    __mocks.order
+      .mockReturnValueOnce({ order: __mocks.order }) // first .order() → chainable
+      .mockResolvedValueOnce({ data: rows, error: null }) // second .order() → terminal
+
+    const result = await fetchProducts('m1')
+
+    expect(__mocks.from).toHaveBeenCalledWith('products')
+    expect(__mocks.select).toHaveBeenCalledWith('*')
+    expect(__mocks.eq).toHaveBeenCalledWith('merchant_id', 'm1')
+    expect(__mocks.order).toHaveBeenNthCalledWith(1, 'sort', { ascending: true })
+    expect(__mocks.order).toHaveBeenNthCalledWith(2, 'created_at', { ascending: true })
+    expect(result).toEqual(rows)
+  })
+
+  it('returns empty array on DB error', async () => {
+    __mocks.order
+      .mockReturnValueOnce({ order: __mocks.order })
+      .mockResolvedValueOnce({ data: null, error: { message: 'fail' } })
+    expect(await fetchProducts('m1')).toEqual([])
+  })
+
+  it('returns empty array when data is null with no error', async () => {
+    __mocks.order
+      .mockReturnValueOnce({ order: __mocks.order })
+      .mockResolvedValueOnce({ data: null, error: null })
+    expect(await fetchProducts('m1')).toEqual([])
+  })
+})
+
+// ── upsertProduct (Task 4.1) ──────────────────────────────────────────────────
+
+describe('upsertProduct', () => {
+  it('upserts the product and returns the single row', async () => {
+    const product = { name: 'Cookie', merchant_id: 'm1' }
+    const saved = { id: 'p1', ...product }
+    __mocks.single.mockResolvedValueOnce({ data: saved, error: null })
+
+    const result = await upsertProduct(product)
+
+    expect(__mocks.from).toHaveBeenCalledWith('products')
+    expect(__mocks.upsert).toHaveBeenCalledWith(product)
+    expect(__mocks.upsertSelect).toHaveBeenCalled()
+    expect(result).toEqual(saved)
+  })
+
+  it('throws on DB error', async () => {
+    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('write failed') })
+    await expect(upsertProduct({ name: 'x', merchant_id: 'm1' })).rejects.toThrow('write failed')
+  })
+})
+
+// ── deleteProduct (Task 4.1) ──────────────────────────────────────────────────
+
+describe('deleteProduct', () => {
+  it('calls delete().eq(id) on products table', async () => {
+    __mocks.deleteEq.mockResolvedValueOnce({ error: null })
+
+    await deleteProduct('p1')
+
+    expect(__mocks.from).toHaveBeenCalledWith('products')
+    expect(__mocks.del).toHaveBeenCalled()
+    expect(__mocks.deleteEq).toHaveBeenCalledWith('id', 'p1')
+  })
+
+  it('throws on DB error', async () => {
+    __mocks.deleteEq.mockResolvedValueOnce({ error: new Error('delete failed') })
+    await expect(deleteProduct('p1')).rejects.toThrow('delete failed')
+  })
+})
+
+// ── updateMerchantConfig (Task 4.1) ───────────────────────────────────────────
+
+describe('updateMerchantConfig', () => {
+  it('updates the merchants row with the given patch and returns it', async () => {
+    const patch = { name: 'New Name', shipping: { WM: 10 } }
+    const row = { id: 'm1', ...patch }
+    __mocks.single.mockResolvedValueOnce({ data: row, error: null })
+
+    const result = await updateMerchantConfig('m1', patch)
+
+    expect(__mocks.from).toHaveBeenCalledWith('merchants')
+    expect(__mocks.update).toHaveBeenCalledWith(patch)
+    expect(__mocks.eq).toHaveBeenCalledWith('id', 'm1')
+    expect(result).toEqual(row)
+  })
+
+  it('throws on DB error', async () => {
+    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('update failed') })
+    await expect(updateMerchantConfig('m1', { name: 'x' })).rejects.toThrow('update failed')
+  })
+})
+
+// ── fetchMerchantSecret (Task 4.1) ────────────────────────────────────────────
+
+describe('fetchMerchantSecret', () => {
+  it('selects tg_token and tg_chat_id from merchant_secrets by merchant_id', async () => {
+    const secret = { tg_token: 'tok123', tg_chat_id: '456' }
+    __mocks.maybeSingle.mockResolvedValueOnce({ data: secret, error: null })
+
+    const result = await fetchMerchantSecret('m1')
+
+    expect(__mocks.from).toHaveBeenCalledWith('merchant_secrets')
+    expect(__mocks.select).toHaveBeenCalledWith('tg_token, tg_chat_id')
+    expect(__mocks.eq).toHaveBeenCalledWith('merchant_id', 'm1')
+    expect(result).toEqual(secret)
+  })
+
+  it('returns null when no row exists', async () => {
+    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
+    expect(await fetchMerchantSecret('m1')).toBeNull()
+  })
+
+  it('returns null on DB error', async () => {
+    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: { message: 'fail' } })
+    expect(await fetchMerchantSecret('m1')).toBeNull()
+  })
+})
+
+// ── upsertMerchantSecret (Task 4.1) ───────────────────────────────────────────
+
+describe('upsertMerchantSecret', () => {
+  it('upserts merchant_id + secret fields into merchant_secrets', async () => {
+    __mocks.upsert.mockResolvedValueOnce({ error: null })
+
+    await upsertMerchantSecret('m1', { tg_token: 'tok', tg_chat_id: '123' })
+
+    expect(__mocks.from).toHaveBeenCalledWith('merchant_secrets')
+    expect(__mocks.upsert).toHaveBeenCalledWith({
+      merchant_id: 'm1',
+      tg_token: 'tok',
+      tg_chat_id: '123',
+    })
+  })
+
+  it('throws on DB error', async () => {
+    __mocks.upsert.mockResolvedValueOnce({ error: new Error('upsert failed') })
+    await expect(
+      upsertMerchantSecret('m1', { tg_token: 'x', tg_chat_id: 'y' })
+    ).rejects.toThrow('upsert failed')
   })
 })
