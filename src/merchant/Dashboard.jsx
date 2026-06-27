@@ -2,10 +2,14 @@ import { useState } from 'react'
 import { useSession } from '../SessionContext'
 import ProductsManager from './ProductsManager'
 import ShopSettings from './ShopSettings'
+import OrdersView from './OrdersView'
+import CustomersView from './CustomersView'
 
 const SECTIONS = [
-  { key: 'products', en: 'Products', zh: '产品' },
-  { key: 'settings', en: 'Settings', zh: '设置' },
+  { key: 'products',  en: 'Products',  zh: '产品' },
+  { key: 'settings',  en: 'Settings',  zh: '设置' },
+  { key: 'orders',    en: 'Orders',    zh: '订单' },
+  { key: 'customers', en: 'Customers', zh: '顾客' },
 ]
 
 export default function Dashboard() {
@@ -33,15 +37,11 @@ export default function Dashboard() {
             {t(s.en, s.zh)}
           </button>
         ))}
-        <button type="button" className="mm-dash-tab" disabled>
-          {t('Orders', '订单')} · {t('Soon', '即将推出')}
-        </button>
-        <button type="button" className="mm-dash-tab" disabled>
-          {t('Customers', '顾客')} · {t('Soon', '即将推出')}
-        </button>
       </nav>
-      {section === 'products' && <ProductsManager />}
-      {section === 'settings' && <ShopSettings />}
+      {section === 'products'  && <ProductsManager />}
+      {section === 'settings'  && <ShopSettings />}
+      {section === 'orders'    && <OrdersView />}
+      {section === 'customers' && <CustomersView />}
     </div>
   )
 }
