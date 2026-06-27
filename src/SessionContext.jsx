@@ -10,6 +10,7 @@ export function SessionProvider({ children }) {
   const [account, setAccount] = useState(undefined)
   const [profile, setProfile] = useState(null)
   const [merchant, setMerchant] = useState(null)
+  const [merchantLoaded, setMerchantLoaded] = useState(false)
   const [lang, setLang] = useState('en')
 
   const loadProfile = useCallback(async (user) => {
@@ -22,7 +23,8 @@ export function SessionProvider({ children }) {
     const unsubscribe = onAuthChange((user) => {
       setAccount(user ?? null)
       loadProfile(user)
-      if (user) fetchMyMerchant(user.id).then(setMerchant); else setMerchant(null)
+      if (user) fetchMyMerchant(user.id).then(m => { setMerchant(m); setMerchantLoaded(true) })
+      else { setMerchant(null); setMerchantLoaded(true) }
     })
     return unsubscribe
   }, [loadProfile])
@@ -34,7 +36,7 @@ export function SessionProvider({ children }) {
   const refreshProfile = () => loadProfile(account)
   const refreshMerchant = () => account && fetchMyMerchant(account.id).then(setMerchant)
 
-  const value = { account, profile, role, merchant, loading: account === undefined, lang, setLang, t, refreshProfile, refreshMerchant }
+  const value = { account, profile, role, merchant, loading: account === undefined || !merchantLoaded, lang, setLang, t, refreshProfile, refreshMerchant }
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
 }
 

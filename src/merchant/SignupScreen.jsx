@@ -29,7 +29,7 @@ export default function SignupScreen() {
       }
       await createMerchant({ name })
       await refreshMerchant()
-      navigate('/merchant/pending')
+      navigate('/merchant')
     } catch (err) {
       setMsg(err.message || t('Something went wrong.', '出错了。'))
       setBusy(false)
