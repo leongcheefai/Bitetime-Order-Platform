@@ -75,4 +75,15 @@ describe.skipIf(!hasEnv)('tenant isolation (RLS)', () => {
     expect(error).toBeNull()
     expect(data).toEqual([])
   })
+
+  it('a normal user cannot self-promote to superadmin', async () => {
+    const uid = (await merchantA.auth.getUser()).data.user.id
+    await merchantA.from('profiles').insert({ user_id: uid })          // forced to customer by trigger
+    const { error } = await merchantA.from('profiles')
+      .update({ app_role: 'superadmin' }).eq('user_id', uid)
+    expect(error).not.toBeNull()                                       // raise exception => error
+    const svc = serviceClient()
+    const { data } = await svc.from('profiles').select('app_role').eq('user_id', uid).single()
+    expect(data.app_role).toBe('customer')
+  })
 })
