@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { RESERVED_SLUGS } from './slug';
 
 export const DEFAULTS = {
   products: [
@@ -63,7 +64,7 @@ export async function signUp(name, email, password) {
 export async function fetchProfileByUserId(userId) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, email')
+    .select('id, name, email, app_role, merchant_id')
     .eq('id', userId)
     .single();
   if (error) return null;
@@ -87,6 +88,18 @@ export async function fetchAllProfiles() {
     .order('created_at', { ascending: true });
   if (error) throw error;
   return data ?? [];
+}
+
+export async function fetchMerchantBySlug(slug) {
+  const s = (slug || '').trim().toLowerCase()
+  if (!s || RESERVED_SLUGS.includes(s)) return null
+  const { data, error } = await supabase
+    .from('merchants')
+    .select('*')
+    .eq('slug', s)
+    .single()
+  if (error) return null
+  return data
 }
 
 export async function signOut() {
