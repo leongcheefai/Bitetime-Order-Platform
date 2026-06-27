@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
-import { onAuthChange, fetchProfileByUserId, fetchMyMerchant } from './store'
+import { onAuthChange, fetchProfileByUserId, fetchMyMerchant, getCurrentUser } from './store'
 
 // TODO(P3): remove this transitional fallback once superadmin role is seeded in DB.
 const USER_EMAIL = 'bitetimeandco@gmail.com'
@@ -34,7 +34,14 @@ export function SessionProvider({ children }) {
 
   const t = (en, zh) => (lang === 'zh' ? zh : en)
   const refreshProfile = () => loadProfile(account)
-  const refreshMerchant = () => account && fetchMyMerchant(account.id).then(setMerchant)
+  // Resolve the user freshly rather than closing over `account`, which is stale
+  // immediately after signup/login (the just-signed-in user isn't in this render yet).
+  const refreshMerchant = async () => {
+    const user = await getCurrentUser()
+    if (!user) { setMerchant(null); setMerchantLoaded(true); return }
+    const m = await fetchMyMerchant(user.id)
+    setMerchant(m); setMerchantLoaded(true)
+  }
 
   const value = { account, profile, role, merchant, loading: account === undefined || !merchantLoaded, lang, setLang, t, refreshProfile, refreshMerchant }
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
