@@ -10,7 +10,8 @@ export default function ShopSettings() {
   const [note, setNote] = useState(merchant.payment_note ?? '')
   const [tgToken, setTgToken] = useState('')
   const [tgChat, setTgChat] = useState('')
-  const [msg, setMsg] = useState(''); const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     fetchMerchantSecret(merchant.id).then(s => {
@@ -27,29 +28,60 @@ export default function ShopSettings() {
       })
       await upsertMerchantSecret(merchant.id, { tg_token: tgToken, tg_chat_id: tgChat })
       await refreshMerchant()
-      setMsg(t('Saved.','已保存。'))
-    } catch (err) { setMsg(err.message || t('Save failed','保存失败')) }
+      setMsg(t('Saved.', '已保存。'))
+    } catch (err) { setMsg(err.message || t('Save failed', '保存失败')) }
     finally { setBusy(false) }
   }
 
   return (
-    <form onSubmit={save} style={{ display:'grid', gap:8, maxWidth:440 }}>
-      <h3>{t('Shop settings','店铺设置')}</h3>
-      <label>{t('Shipping West Malaysia (RM)','西马运费 (RM)')}
-        <input type="number" step="0.01" value={wm} onChange={e=>setWm(e.target.value)} /></label>
-      <label>{t('Shipping East Malaysia (RM)','东马运费 (RM)')}
-        <input type="number" step="0.01" value={em} onChange={e=>setEm(e.target.value)} /></label>
-      <label>{t('Bank / payment details','银行/付款信息')}
-        <input value={bank} onChange={e=>setBank(e.target.value)} /></label>
-      <label>{t('Payment note (shown to customers)','付款备注（顾客可见）')}
-        <input value={note} onChange={e=>setNote(e.target.value)} /></label>
-      <h4>{t('Order notifications (Telegram)','订单通知（Telegram）')}</h4>
-      <label>{t('Bot token','机器人令牌')}
-        <input value={tgToken} onChange={e=>setTgToken(e.target.value)} /></label>
-      <label>{t('Chat ID','聊天 ID')}
-        <input value={tgChat} onChange={e=>setTgChat(e.target.value)} /></label>
-      <button disabled={busy}>{busy ? t('Saving…','保存中…') : t('Save settings','保存设置')}</button>
-      {msg && <p>{msg}</p>}
+    <form onSubmit={save}>
+      <div className="admin-panel">
+        <h3 className="admin-title">{t('Shipping rates', '运费')}</h3>
+        <div className="admin-fields">
+          <div className="admin-field full">
+            <label>{t('West Malaysia (RM)', '西马运费 (RM)')}</label>
+            <input type="number" step="0.01" value={wm} onChange={e => setWm(e.target.value)} />
+          </div>
+          <div className="admin-field full">
+            <label>{t('East Malaysia (RM)', '东马运费 (RM)')}</label>
+            <input type="number" step="0.01" value={em} onChange={e => setEm(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="admin-panel">
+        <h3 className="admin-title">{t('Payment', '付款')}</h3>
+        <div className="admin-fields">
+          <div className="admin-field full">
+            <label>{t('Bank / payment details', '银行/付款信息')}</label>
+            <input value={bank} onChange={e => setBank(e.target.value)} />
+          </div>
+          <div className="admin-field full">
+            <label>{t('Payment note (shown to customers)', '付款备注（顾客可见）')}</label>
+            <input value={note} onChange={e => setNote(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      <div className="admin-panel">
+        <h3 className="admin-title">{t('Order notifications', '订单通知')}</h3>
+        <p className="admin-section-label" style={{ marginBottom: '0.75rem' }}>Telegram</p>
+        <div className="admin-fields">
+          <div className="admin-field full">
+            <label>{t('Bot token', '机器人令牌')}</label>
+            <input value={tgToken} onChange={e => setTgToken(e.target.value)} />
+          </div>
+          <div className="admin-field full">
+            <label>{t('Chat ID', '聊天 ID')}</label>
+            <input value={tgChat} onChange={e => setTgChat(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" className="save-btn" disabled={busy}>
+        {busy ? t('Saving…', '保存中…') : t('Save settings', '保存设置')}
+      </button>
+      {msg && <p className="mm-save-msg">{msg}</p>}
     </form>
   )
 }

@@ -12,16 +12,33 @@ export default function Dashboard() {
   const { t, merchant } = useSession()
   const [section, setSection] = useState('products')
   return (
-    <div style={{ padding: 24, maxWidth: 880 }}>
-      <h2>{merchant.name}</h2>
-      <p style={{ color:'#888' }}>{t('Store','店铺')}: <a href={`/s/${merchant.slug}`}>/s/{merchant.slug}</a></p>
-      <nav style={{ display:'flex', gap:12, margin:'12px 0', borderBottom:'1px solid #eee', paddingBottom:8 }}>
+    <div className="form-wrap form-wrap--wide">
+      <div className="mm-dash-header">
+        <h1 className="mm-dash-shop-name">{merchant.name}</h1>
+        <p className="mm-store-url">
+          {t('Store', '店铺')}:{' '}
+          <a href={`/s/${merchant.slug}`} target="_blank" rel="noopener noreferrer">
+            /s/{merchant.slug}
+          </a>
+        </p>
+      </div>
+      <nav className="mm-dash-nav">
         {SECTIONS.map(s => (
-          <button key={s.key} onClick={() => setSection(s.key)}
-            style={{ fontWeight: section===s.key ? 700 : 400 }}>{t(s.en, s.zh)}</button>
+          <button
+            key={s.key}
+            type="button"
+            className={`mm-dash-tab${section === s.key ? ' active' : ''}`}
+            onClick={() => setSection(s.key)}
+          >
+            {t(s.en, s.zh)}
+          </button>
         ))}
-        <span style={{ color:'#bbb' }}>{t('Orders','订单')} ({t('P5','P5')})</span>
-        <span style={{ color:'#bbb' }}>{t('Customers','顾客')} ({t('P5','P5')})</span>
+        <button type="button" className="mm-dash-tab" disabled>
+          {t('Orders', '订单')} · {t('Soon', '即将推出')}
+        </button>
+        <button type="button" className="mm-dash-tab" disabled>
+          {t('Customers', '顾客')} · {t('Soon', '即将推出')}
+        </button>
       </nav>
       {section === 'products' && <ProductsManager />}
       {section === 'settings' && <ShopSettings />}

@@ -600,3 +600,175 @@ body:has(.sticky-total-bar) .form-wrap { padding-bottom: 80px; }
 .success-summary { max-width: 360px; margin: 0 auto 1.25rem; text-align: left; padding: 12px 16px; background: #FBF6F0; border: 1.5px solid #D9C8BC; border-radius: 10px; }
 .success-info-box { max-width: 360px; margin: 0 auto 1rem; text-align: left; padding: 10px 14px; background: #FBF6F0; border: 1.5px solid #D9C8BC; border-radius: 10px; font-size: 13px; color: #5A3A40; line-height: 1.5; }
 .success-info-title { font-weight: 600; color: #7A1028; margin-bottom: 4px; }
+
+/* ── Multi-merchant screens ── */
+
+/* Auth screens — slug URL preview helper */
+.mm-slug-preview {
+  font-size: 12px;
+  color: #7A4F55;
+  padding: 5px 10px;
+  background: #EDE4D8;
+  border-radius: 8px;
+  font-family: 'DM Mono', monospace, 'DM Sans', sans-serif;
+  letter-spacing: 0.3px;
+  line-height: 1.5;
+}
+
+/* Auth/info message note — neutral surface for both confirmation and error */
+.mm-auth-note {
+  font-size: 13px;
+  color: #4A2530;
+  background: #F5E6E8;
+  border: 1px solid #C9A0A8;
+  border-radius: 8px;
+  padding: 10px 13px;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+/* PendingScreen — amber "pending review" pill */
+.mm-pending-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: #FFF3CD;
+  color: #856404;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 1rem;
+}
+
+/* Merchant Dashboard — compact shop header */
+.mm-dash-header { margin-bottom: 1.25rem; }
+.mm-dash-shop-name { font-family: 'Lora', serif; font-size: 22px; font-weight: 500; color: #7A1028; }
+
+/* Dashboard tab nav */
+.mm-dash-nav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1.75rem;
+  background: #EDE4D8;
+  border-radius: 14px;
+  padding: 5px;
+  flex-wrap: wrap;
+}
+.mm-dash-tab {
+  flex: 1;
+  min-width: 80px;
+  padding: 9px 12px;
+  border: none;
+  border-radius: 10px;
+  background: none;
+  font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
+  color: #7A4F55;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+  white-space: nowrap;
+  text-align: center;
+}
+.mm-dash-tab:hover:not(:disabled) { background: #DDD0C4; color: #2B0A10; }
+.mm-dash-tab.active { background: #7A1028; color: #F2EAE0; }
+.mm-dash-tab:disabled { opacity: 0.40; cursor: default; font-size: 13px; color: #7A4F55; }
+
+/* Merchant product list */
+.mm-product-list { display: flex; flex-direction: column; gap: 8px; }
+.mm-product-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #F2EAE0;
+  border: 1.5px solid #C9A090;
+  border-radius: 12px;
+  transition: border-color 0.15s;
+}
+.mm-product-row--hidden { opacity: 0.5; }
+.mm-product-info { flex: 1; min-width: 0; }
+.mm-product-name { font-size: 14px; font-weight: 500; color: #2B0A10; }
+.mm-product-zh { color: #7A4F55; font-weight: 400; }
+.mm-product-hidden-tag { font-style: italic; font-size: 12px; color: #A07070; }
+.mm-product-meta { font-size: 12px; color: #7A4F55; margin-top: 2px; }
+.mm-product-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* Small pill action buttons — products and admin table */
+.mm-pill-btn {
+  padding: 5px 12px;
+  border-radius: 20px;
+  border: 1.5px solid #C9A090;
+  background: #FBF6F0;
+  color: #7A4F55;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.mm-pill-btn:hover { border-color: #7A1028; color: #7A1028; background: #F5E6E8; }
+
+/* Merchant status badges — background tint, no border stripe */
+.mm-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+.mm-badge--pending   { background: #FFF3CD; color: #856404; }
+.mm-badge--active    { background: #D1FADF; color: #166534; }
+.mm-badge--suspended { background: #F8D7DA; color: #721C24; }
+
+/* Admin table action buttons */
+.mm-act-btn {
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1.5px solid #C9A090;
+  background: #FBF6F0;
+  color: #7A4F55;
+  font-size: 12px;
+  font-family: 'DM Sans', sans-serif;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.mm-act-btn + .mm-act-btn { margin-left: 4px; }
+.mm-act-btn:hover:not(:disabled) { border-color: #7A1028; color: #7A1028; background: #F5E6E8; }
+.mm-act-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.mm-act-btn--primary { background: #7A1028; color: #F2EAE0; border-color: #7A1028; }
+.mm-act-btn--primary:hover:not(:disabled) { background: #550A1A; border-color: #550A1A; color: #F2EAE0; }
+
+/* Store URL / slug helper line */
+.mm-store-url { font-size: 13px; color: #7A4F55; }
+.mm-store-url a { color: #7A1028; text-decoration: none; font-weight: 500; }
+.mm-store-url a:hover { text-decoration: underline; }
+
+/* Admin merchant table */
+.mm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mm-table th {
+  font-size: 10px;
+  font-weight: 500;
+  color: #7A1028;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 8px 12px;
+  border-bottom: 1.5px solid #C9A0A8;
+  text-align: left;
+  white-space: nowrap;
+}
+.mm-table td { padding: 12px; border-bottom: 1px solid #E8D5C8; color: #2B0A10; vertical-align: middle; }
+.mm-table tbody tr:last-child td { border-bottom: none; }
+.mm-table tbody tr:hover td { background: #F5E6E8; }
+.mm-table .mm-table-actions { text-align: right; white-space: nowrap; }
+
+/* Saved confirmation message (oxblood, not raw black) */
+.mm-save-msg { font-size: 13px; color: #7A1028; font-weight: 500; text-align: center; margin-top: 8px; min-height: 18px; }
+
+/* Storefront shell loading / not-found / placeholder states */
+.mm-storefront-state { text-align: center; padding: 2rem 0 3rem; }
+.mm-storefront-state p { color: #7A4F55; font-size: 14px; line-height: 1.6; margin-top: 6px; }
+
+/* Responsive — stack product actions, compress tabs */
+@media (max-width: 480px) {
+  .mm-product-row { flex-wrap: wrap; }
+  .mm-product-actions { width: 100%; justify-content: flex-end; }
+  .mm-dash-tab { flex: 0 1 auto; font-size: 13px; padding: 8px 10px; }
+}

@@ -16,37 +16,77 @@ export default function AdminMerchants() {
     finally { setBusy(null) }
   }
 
-  if (!rows) return <div style={{ padding: 24 }}>{t('Loading…','加载中…')}</div>
+  if (!rows) return (
+    <div className="form-wrap">
+      <p className="empty-msg" style={{ paddingTop: '2rem', textAlign: 'center' }}>
+        {t('Loading…', '加载中…')}
+      </p>
+    </div>
+  )
 
   return (
-    <div style={{ padding: 24, maxWidth: 760 }}>
-      <h2>{t('Merchants','商家')}</h2>
-      {rows.length === 0 && <p>{t('No merchants yet.','暂无商家。')}</p>}
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead><tr>
-          <th style={{ textAlign:'left' }}>{t('Shop','店铺')}</th>
-          <th style={{ textAlign:'left' }}>{t('Slug','网址')}</th>
-          <th style={{ textAlign:'left' }}>{t('Status','状态')}</th>
-          <th>{t('Actions','操作')}</th>
-        </tr></thead>
-        <tbody>
-          {rows.map(m => (
-            <tr key={m.id} style={{ borderTop:'1px solid #eee' }}>
-              <td>{m.name}</td>
-              <td>/s/{m.slug}</td>
-              <td>{m.status}</td>
-              <td style={{ textAlign:'right' }}>
-                {m.status === 'pending' && <>
-                  <button disabled={busy===m.id} onClick={() => act(m.id,'active')}>{t('Approve','批准')}</button>{' '}
-                  <button disabled={busy===m.id} onClick={() => act(m.id,'suspended')}>{t('Reject','拒绝')}</button>
-                </>}
-                {m.status === 'active' && <button disabled={busy===m.id} onClick={() => act(m.id,'suspended')}>{t('Suspend','暂停')}</button>}
-                {m.status === 'suspended' && <button disabled={busy===m.id} onClick={() => act(m.id,'active')}>{t('Reactivate','恢复')}</button>}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="form-wrap form-wrap--wide">
+      <div className="brand">
+        <h1>{t('Merchants', '商家')}</h1>
+        <p className="tagline">{t('Platform admin', '平台管理')}</p>
+      </div>
+      <div className="admin-panel">
+        {rows.length === 0 ? (
+          <p className="empty-msg">{t('No merchants yet.', '暂无商家。')}</p>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="mm-table">
+              <thead>
+                <tr>
+                  <th>{t('Shop', '店铺')}</th>
+                  <th>{t('Slug', '网址')}</th>
+                  <th>{t('Status', '状态')}</th>
+                  <th className="mm-table-actions">{t('Actions', '操作')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(m => (
+                  <tr key={m.id}>
+                    <td style={{ fontWeight: 500 }}>{m.name}</td>
+                    <td><span className="mm-store-url">/s/{m.slug}</span></td>
+                    <td>
+                      <span className={`mm-badge mm-badge--${m.status}`}>{m.status}</span>
+                    </td>
+                    <td className="mm-table-actions">
+                      {m.status === 'pending' && <>
+                        <button
+                          className="mm-act-btn mm-act-btn--primary"
+                          disabled={busy === m.id}
+                          onClick={() => act(m.id, 'active')}
+                        >{t('Approve', '批准')}</button>
+                        <button
+                          className="mm-act-btn"
+                          disabled={busy === m.id}
+                          onClick={() => act(m.id, 'suspended')}
+                        >{t('Reject', '拒绝')}</button>
+                      </>}
+                      {m.status === 'active' && (
+                        <button
+                          className="mm-act-btn"
+                          disabled={busy === m.id}
+                          onClick={() => act(m.id, 'suspended')}
+                        >{t('Suspend', '暂停')}</button>
+                      )}
+                      {m.status === 'suspended' && (
+                        <button
+                          className="mm-act-btn mm-act-btn--primary"
+                          disabled={busy === m.id}
+                          onClick={() => act(m.id, 'active')}
+                        >{t('Reactivate', '恢复')}</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

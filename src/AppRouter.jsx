@@ -10,9 +10,43 @@ import MerchantHome from './merchant/MerchantHome'
 
 function StorefrontShell() {
   const { merchant, loading, notFound } = useMerchant()
-  if (loading) return <div style={{ padding: 24 }}>Loading shop…</div>
-  if (notFound) return <div style={{ padding: 24 }}>Shop not found.</div>
-  return <div style={{ padding: 24 }}>Storefront for <b>{merchant.name}</b> (coming in P5)</div>
+
+  if (loading) return (
+    <div className="form-wrap mm-storefront-state">
+      <div className="brand">
+        <h1>BiteTime</h1>
+      </div>
+      <p>Loading shop…</p>
+    </div>
+  )
+
+  if (notFound) return (
+    <div className="form-wrap mm-storefront-state">
+      <div className="brand">
+        <h1>BiteTime</h1>
+        <p className="tagline">Shop not found</p>
+      </div>
+      <div className="admin-panel" style={{ textAlign: 'left' }}>
+        <p style={{ color: '#7A4F55', fontSize: 14 }}>
+          This shop doesn't exist or may have moved.
+        </p>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="form-wrap mm-storefront-state">
+      <div className="brand">
+        <h1>{merchant.name}</h1>
+        <p className="tagline">Powered by BiteTime</p>
+      </div>
+      <div className="admin-panel" style={{ textAlign: 'left' }}>
+        <p style={{ color: '#7A4F55', fontSize: 14 }}>
+          Storefront for <strong>{merchant.name}</strong> — coming soon.
+        </p>
+      </div>
+    </div>
+  )
 }
 
 export default function AppRouter() {

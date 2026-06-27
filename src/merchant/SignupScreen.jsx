@@ -37,23 +37,39 @@ export default function SignupScreen() {
   }
 
   return (
-    <div className="form-wrap" style={{ maxWidth: 420 }}>
-      <h2>{t('Start your shop', '开店')}</h2>
-      <form onSubmit={onSubmit}>
-        <label>{t('Shop name', '店铺名称')}
-          <input value={name} onChange={e => setName(e.target.value)} required />
-        </label>
-        <p style={{ fontSize: 13, color: '#888' }}>{t('Your store URL', '店铺网址')}: /s/{slugPreview}</p>
-        <label>{t('Email', '邮箱')}
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-        </label>
-        <label>{t('Password', '密码')}
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
-        </label>
-        <button type="submit" disabled={busy}>{busy ? t('Creating…','创建中…') : t('Create shop','创建店铺')}</button>
-      </form>
-      {msg && <p style={{ color: '#c00' }}>{msg}</p>}
-      <p><Link to="/merchant/login">{t('Already have a shop? Log in','已有店铺？登录')}</Link></p>
+    <div className="auth-wrap">
+      <div className="brand">
+        <h1>BiteTime</h1>
+        <p className="tagline">{t('Merchant Portal', '商家入口')}</p>
+      </div>
+      <div className="auth-card">
+        <h2 className="auth-title">{t('Start your shop', '开店')}</h2>
+        <p className="auth-subtitle">{t('Create your merchant account to get started.', '创建商家账号以开始使用。')}</p>
+        {msg && <div className="mm-auth-note">{msg}</div>}
+        <form onSubmit={onSubmit}>
+          <div className="auth-fields">
+            <div className="field">
+              <label>{t('Shop name', '店铺名称')}</label>
+              <input value={name} onChange={e => setName(e.target.value)} required placeholder={t('e.g. Sunny Bakes', '如：阳光烘焙')} />
+            </div>
+            <p className="mm-slug-preview">{t('Your store URL', '店铺网址')}: /s/{slugPreview}</p>
+            <div className="field">
+              <label>{t('Email', '邮箱')}</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label>{t('Password', '密码')}</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
+            </div>
+          </div>
+          <button type="submit" className="auth-btn" disabled={busy}>
+            {busy ? t('Creating…', '创建中…') : t('Create shop', '创建店铺')}
+          </button>
+        </form>
+        <p className="auth-switch">
+          <Link to="/merchant/login">{t('Already have a shop? Log in', '已有店铺？登录')}</Link>
+        </p>
+      </div>
     </div>
   )
 }
