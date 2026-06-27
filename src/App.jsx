@@ -13,8 +13,6 @@ import OrderList from './components/OrderList';
 import SalesDashboard from './components/SalesDashboard';
 import Notifications from './components/Notifications';
 
-const USER_EMAIL = 'bitetimeandco@gmail.com';
-
 const USER_NAV = [
   { key: 'home',      icon: '', label: 'Home',             labelZh: '主页' },
   { key: 'orders',    icon: '', label: 'Orders',           labelZh: '订单' },
@@ -74,7 +72,7 @@ export default function App() {
     setView('order');
   }
 
-  const isUser = account?.email === USER_EMAIL;
+  const isAdmin = role === 'superadmin' || role === 'merchant';
   const accountName = account?.user_metadata?.name || account?.email || '';
 
   if (account === undefined) {
@@ -221,7 +219,7 @@ export default function App() {
           )}
         </div>
         <nav className="drawer-nav">
-          {isUser && userPage !== 'preview' ? USER_NAV.map(({ key, label, labelZh }) => (
+          {isAdmin && userPage !== 'preview' ? USER_NAV.map(({ key, label, labelZh }) => (
             key === 'menu' ? (
               <div key="menu">
                 <button
@@ -334,7 +332,7 @@ export default function App() {
   );
 
   // ── User (owner) layout ────────────────────────────────────────────────────
-  if (isUser) {
+  if (isAdmin) {
     return (
       <>
         <div className="form-wrap form-wrap--owner">
