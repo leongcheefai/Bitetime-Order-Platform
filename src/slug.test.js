@@ -43,4 +43,7 @@ describe('resolveSlug', () => {
   it('falls back to shop-<id> when base is empty', () => {
     expect(resolveSlug('!!!', { taken: [], id: 'a3f9c1d2-xxxx' })).toBe('shop-a3f9c1')
   })
+  it('de-dupes fallback shop-<id> against taken', () => {
+    expect(resolveSlug('!!!', { taken: ['shop-a3f9c1'], id: 'a3f9c1d2-xxxx' })).toBe('shop-a3f9c1-2')
+  })
 })
