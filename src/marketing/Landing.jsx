@@ -27,7 +27,6 @@ export default function Landing() {
         t('1 shop', '1 间店铺'),
         t('Product catalog', '产品目录'),
         t('Order management', '订单管理'),
-        t('Telegram + email alerts', 'Telegram + 邮件通知'),
       ],
       cta: t('Start your shop', '开始建店'),
       to: '/merchant/signup',
@@ -41,6 +40,7 @@ export default function Landing() {
       blurb: t('For growing shops.', '为成长中的店铺打造。'),
       features: [
         t('Everything in Basic', '包含基础版所有功能'),
+        t('Telegram + email alerts', 'Telegram + 邮件通知'),
         t('Vouchers & promotions', '优惠券与促销'),
         t('Custom shop link', '自定义店铺链接'),
         t('Multiple shops', '多间店铺'),
