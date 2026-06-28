@@ -745,6 +745,8 @@ body:has(.sticky-total-bar) .form-wrap { padding-bottom: 80px; }
 .mm-store-url { font-size: 13px; color: var(--color-rose-muted); }
 .mm-store-url a { color: var(--color-oxblood); text-decoration: none; font-weight: 500; }
 .mm-store-url a:hover { text-decoration: underline; }
+a.mm-store-url--link { color: var(--color-oxblood); text-decoration: none; font-weight: 500; }
+a.mm-store-url--link:hover { text-decoration: underline; }
 
 /* Admin merchant table */
 .mm-table { width: 100%; border-collapse: collapse; font-size: 13px; }

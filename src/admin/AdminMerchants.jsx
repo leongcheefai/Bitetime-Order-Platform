@@ -50,14 +50,15 @@ export default function AdminMerchants() {
                 {rows.map(m => (
                   <tr key={m.id}>
                     <td style={{ fontWeight: 500 }}>{m.name}</td>
-                    <td><span className="mm-store-url">/s/{m.slug}</span></td>
+                    <td>
+                      <a href={`/s/${m.slug}`} target="_blank" rel="noopener noreferrer" className="mm-store-url mm-store-url--link">/s/{m.slug}</a>
+                    </td>
                     <td>
                       <span className={`mm-badge mm-badge--${m.status}`}>{m.status}</span>
                     </td>
                     <td>
                       <span className="mm-open-links">
                         <Link to={`/merchant/${m.slug}`} className="mm-open-link">{t('Dashboard', '后台')}</Link>
-                        <a href={`/s/${m.slug}`} target="_blank" rel="noopener noreferrer" className="mm-open-link">{t('Store', '店铺')}</a>
                       </span>
                     </td>
                     <td className="mm-table-actions">
