@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { fetchAllMerchants, setMerchantStatus } from '../store'
 import { useSession } from '../SessionContext'
 
@@ -41,6 +42,7 @@ export default function AdminMerchants() {
                   <th>{t('Shop', '店铺')}</th>
                   <th>{t('Slug', '网址')}</th>
                   <th>{t('Status', '状态')}</th>
+                  <th>{t('Open', '打开')}</th>
                   <th className="mm-table-actions">{t('Actions', '操作')}</th>
                 </tr>
               </thead>
@@ -48,9 +50,16 @@ export default function AdminMerchants() {
                 {rows.map(m => (
                   <tr key={m.id}>
                     <td style={{ fontWeight: 500 }}>{m.name}</td>
-                    <td><span className="mm-store-url">/s/{m.slug}</span></td>
+                    <td>
+                      <a href={`/s/${m.slug}`} target="_blank" rel="noopener noreferrer" className="mm-store-url mm-store-url--link">/s/{m.slug}</a>
+                    </td>
                     <td>
                       <span className={`mm-badge mm-badge--${m.status}`}>{m.status}</span>
+                    </td>
+                    <td>
+                      <span className="mm-open-links">
+                        <Link to={`/merchant/${m.slug}`} className="mm-open-link">{t('Dashboard', '后台')}</Link>
+                      </span>
                     </td>
                     <td className="mm-table-actions">
                       {m.status === 'pending' && <>

@@ -745,6 +745,8 @@ body:has(.sticky-total-bar) .form-wrap { padding-bottom: 80px; }
 .mm-store-url { font-size: 13px; color: var(--color-rose-muted); }
 .mm-store-url a { color: var(--color-oxblood); text-decoration: none; font-weight: 500; }
 .mm-store-url a:hover { text-decoration: underline; }
+a.mm-store-url--link { color: var(--color-oxblood); text-decoration: none; font-weight: 500; }
+a.mm-store-url--link:hover { text-decoration: underline; }
 
 /* Admin merchant table */
 .mm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -944,6 +946,11 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   transition: color 0.15s;
 }
 .mm-land-login-link:hover { color: var(--color-oxblood); }
+.mm-land-account { position: relative; }
+.mm-menu-overlay { position: fixed; inset: 0; z-index: var(--z-dropdown); }
+.mm-account-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: var(--z-modal-popover); min-width: 160px; background: var(--color-surface-high); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-lg); box-shadow: 0 8px 24px rgba(43,10,16,0.16); overflow: hidden; padding: 4px; }
+.mm-account-menu-item { display: block; width: 100%; box-sizing: border-box; text-align: left; padding: 9px 12px; border: none; border-radius: var(--radius-sm); background: none; color: var(--color-rose-muted); font-size: 13px; font-family: 'DM Sans', sans-serif; font-weight: 500; text-decoration: none; cursor: pointer; transition: all 0.15s; }
+.mm-account-menu-item:hover { background: var(--color-oxblood-tint); color: var(--color-oxblood); }
 
 /* Hero */
 .mm-land-hero {
@@ -1156,4 +1163,13 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   .hamburger-btn, .notif-bell { width: 44px; height: 44px; }
   .add-btn, .save-btn, .sidebar-signout, .voucher-remove-btn, .voucher-apply-btn { min-height: 44px; }
   .sidebar-nav-item { padding-top: 14px; padding-bottom: 14px; }
+}
+
+/* ── Admin merchants: per-shop portal links ────────────────────────────────── */
+.mm-open-links { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.mm-open-link { padding: 4px 10px; border: 1px solid var(--color-clay-border); border-radius: var(--radius-pill); color: var(--color-rose-muted); font-size: 11px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: all 0.15s; }
+.mm-open-link:hover { background: var(--color-oxblood-tint); color: var(--color-oxblood); }
+
+@media (pointer: coarse) {
+  .mm-open-link { min-height: 36px; display: inline-flex; align-items: center; }
 }

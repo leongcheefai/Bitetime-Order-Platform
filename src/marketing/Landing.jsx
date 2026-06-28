@@ -1,8 +1,18 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSession } from '../SessionContext'
+import { signOut } from '../store'
 
 export default function Landing() {
-  const { t, lang, setLang } = useSession()
+  const { t, lang, setLang, account, role, loading } = useSession()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  // Where the signed-in user's portal lives, by role. Customers have no portal.
+  const portal = role === 'superadmin'
+    ? { to: '/admin', label: t('Admin', '管理后台') }
+    : role === 'merchant'
+      ? { to: '/merchant', label: t('My dashboard', '我的后台') }
+      : null
 
   return (
     <div className="mm-land">
@@ -22,9 +32,43 @@ export default function Landing() {
               onClick={() => setLang('zh')}
             >中文</button>
           </div>
-          <Link to="/merchant/login" className="mm-land-login-link">
-            {t('Merchant log in', '商家登录')}
-          </Link>
+          {loading ? null : account ? (
+            <div className="mm-land-account">
+              <button
+                type="button"
+                className="cust-account-btn"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen(o => !o)}
+              >
+                {account.email}
+              </button>
+              {menuOpen && (
+                <>
+                  <div className="mm-menu-overlay" onClick={() => setMenuOpen(false)} />
+                  <div className="mm-account-menu" role="menu">
+                    {portal && (
+                      <Link to={portal.to} className="mm-account-menu-item" role="menuitem" onClick={() => setMenuOpen(false)}>
+                        {portal.label}
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      className="mm-account-menu-item"
+                      role="menuitem"
+                      onClick={async () => { setMenuOpen(false); await signOut() }}
+                    >
+                      {t('Sign out', '退出登录')}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <Link to="/merchant/login" className="mm-land-login-link">
+              {t('Merchant log in', '商家登录')}
+            </Link>
+          )}
         </div>
       </nav>
 
