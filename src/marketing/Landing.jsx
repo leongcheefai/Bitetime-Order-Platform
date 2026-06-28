@@ -241,7 +241,7 @@ export default function Landing() {
                   ))}
                 </ul>
                 <Link
-                  to={tier.to}
+                  to={`${tier.to}?plan=${tier.id}&billing=${billing}`}
                   className={tier.highlight ? 'mm-land-cta-primary' : 'mm-land-cta-ghost'}
                 >
                   {tier.cta}

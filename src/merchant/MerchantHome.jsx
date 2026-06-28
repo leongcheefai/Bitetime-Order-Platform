@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useParams } from 'react-router-dom'
+import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useSession } from '../SessionContext'
 import PendingScreen from './PendingScreen'
 import Dashboard from './Dashboard'
 
 export default function MerchantHome() {
   const { slug } = useParams()
-  const { t, merchant, ownMerchant, role, impersonate, stopImpersonating } = useSession()
+  const { t, merchant, ownMerchant, role, impersonate, stopImpersonating, refreshMerchant } = useSession()
+  const [params, setParams] = useSearchParams()
   // Records which slug the resolution belongs to, so a stale result from a
   // previous slug doesn't render as ready after navigating between shops.
   const [resolved, setResolved] = useState({ slug: null, notFound: false })
@@ -20,6 +21,19 @@ export default function MerchantHome() {
     return () => { active = false; stopImpersonating() }
   }, [slug, impersonate, stopImpersonating])
 
+  // Just back from Stripe Checkout: the webhook may lag a second or two before it
+  // flips status to 'active'. Poll until it does, then clear the query param.
+  const justPaid = params.get('checkout') === 'success'
+  useEffect(() => {
+    if (slug || !justPaid) return
+    if (ownMerchant?.status === 'active') {
+      setParams({}, { replace: true })
+      return
+    }
+    const id = setTimeout(() => { refreshMerchant() }, 2000)
+    return () => clearTimeout(id)
+  }, [slug, justPaid, ownMerchant?.status, refreshMerchant, setParams])
+
   if (slug) {
     if (role !== 'superadmin') return <Navigate to="/" replace />
     const ready = resolved.slug === slug
@@ -29,6 +43,9 @@ export default function MerchantHome() {
   }
 
   if (!ownMerchant) return <Navigate to="/merchant/signup" replace />
+  if (justPaid && ownMerchant.status !== 'active') {
+    return <div className="form-wrap">{t('Setting up your subscription…', '正在设置您的订阅…')}</div>
+  }
   if (ownMerchant.status === 'pending') return <PendingScreen />
   if (ownMerchant.status === 'suspended') return <div className="form-wrap"><h2>{t('Shop suspended', '店铺已暂停')}</h2></div>
   return <Dashboard />

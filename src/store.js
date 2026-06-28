@@ -134,17 +134,51 @@ export async function fetchMyMerchant(userId) {
   return data ?? null
 }
 
-export async function createMerchant({ name }) {
+export async function createMerchant({ name, plan = 'basic', billing = 'monthly' }) {
   const user = await getCurrentUser()
   if (!user) throw new Error('Not signed in')
   const taken = await listTakenSlugs()
   const slug = await resolveSlug(name, { taken, id: user.id })
   const { data, error } = await supabase
     .from('merchants')
-    .insert({ name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending' })
+    .insert({
+      name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending',
+      plan, billing_cycle: billing,
+    })
     .select().single()
   if (error) throw error
   return data
+}
+
+// ── Billing (Stripe via the Hono backend) ──────────────────────────────────────
+
+const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
+
+// Create a Stripe Checkout Session for the current merchant and return its URL.
+export async function startCheckout({ plan, billing }) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/checkout`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ plan, billing }),
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || 'Could not start checkout')
+  }
+  const { url } = await res.json()
+  return url
+}
+
+// Read the merchant's authoritative billing row (owner-readable via RLS).
+export async function fetchMyBilling(merchantId) {
+  if (!merchantId) return null
+  const { data, error } = await supabase
+    .from('merchant_billing').select('*').eq('merchant_id', merchantId).maybeSingle()
+  if (error) return null
+  return data ?? null
 }
 
 export async function updateMerchantSlug(id, slug) {

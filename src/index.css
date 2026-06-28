@@ -620,6 +620,39 @@ body:has(.sticky-total-bar) .form-wrap { padding-bottom: 80px; }
   line-height: 1.5;
 }
 
+/* Signup — selected-plan summary chip */
+.mm-signup-plan {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 13px;
+  margin-bottom: 14px;
+  background: var(--color-oxblood-tint);
+  border: 1px solid var(--color-rose-border);
+  border-radius: var(--radius-md);
+}
+.mm-signup-plan-label {
+  font-weight: 600;
+  color: var(--color-oxblood);
+  font-size: 14px;
+}
+.mm-signup-plan-price {
+  font-family: 'Lora', serif;
+  color: var(--color-ink);
+  font-size: 15px;
+}
+.mm-signup-plan-trial {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--color-oxblood);
+  color: var(--color-cream);
+}
+
 /* Auth/info message note — neutral surface for both confirmation and error */
 .mm-auth-note {
   font-size: 13px;
