@@ -1091,6 +1091,153 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   margin: 0;
 }
 
+/* Pricing */
+.mm-land-pricing {
+  padding: 4rem 2rem;
+  max-width: 1000px;
+  margin: 0 auto;
+  width: 100%;
+  text-align: center;
+  border-top: 1px solid var(--color-clay-border);
+}
+.mm-land-pricing-sub {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--color-ink-soft);
+  margin: -1.75rem 0 2rem;
+}
+.mm-land-pricing-toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1.5px solid var(--color-clay-border);
+  border-radius: var(--radius-pill);
+  background: var(--color-surface-raised);
+}
+.mm-land-pricing-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 8px 18px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-pill);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.mm-land-pricing-toggle-btn.is-active {
+  background: var(--color-oxblood);
+  color: var(--color-cream);
+}
+.mm-land-pricing-save {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-oxblood-tint);
+  color: var(--color-oxblood);
+}
+.mm-land-pricing-toggle-btn.is-active .mm-land-pricing-save {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--color-cream);
+}
+.mm-land-pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2.5rem;
+  text-align: left;
+}
+.mm-land-pricing-card {
+  display: flex;
+  flex-direction: column;
+  padding: 1.75rem;
+  border: 1px solid var(--color-clay-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+.mm-land-pricing-card.is-highlight {
+  border: 1.5px solid var(--color-oxblood);
+  box-shadow: 0 6px 24px rgba(122, 16, 40, 0.12);
+}
+.mm-land-pricing-badge {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  margin-bottom: 0.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--color-oxblood);
+  color: var(--color-cream);
+}
+.mm-land-pricing-name {
+  font-family: 'Lora', serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--color-ink);
+  margin: 0;
+}
+.mm-land-pricing-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+.mm-land-pricing-price {
+  font-family: 'Lora', serif;
+  font-size: 34px;
+  font-weight: 600;
+  color: var(--color-oxblood);
+  line-height: 1;
+}
+.mm-land-pricing-per {
+  font-size: 14px;
+  color: var(--color-rose-muted);
+}
+.mm-land-pricing-note {
+  min-height: 1.1em;
+  font-size: 12px;
+  color: var(--color-rose-muted);
+  margin: 0.35rem 0 0;
+}
+.mm-land-pricing-blurb {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--color-ink-soft);
+  margin: 0.75rem 0 1.25rem;
+}
+.mm-land-pricing-features {
+  list-style: none;
+  margin: 0 0 1.75rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.mm-land-pricing-features li {
+  position: relative;
+  padding-left: 1.5rem;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-ink);
+}
+.mm-land-pricing-features li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: var(--color-oxblood);
+  font-weight: 600;
+}
+.mm-land-pricing-card .mm-land-cta-primary,
+.mm-land-pricing-card .mm-land-cta-ghost {
+  margin-top: auto;
+  text-align: center;
+}
+
 /* Footer CTA */
 .mm-land-foot-cta {
   border-top: 1px solid var(--color-clay-border);
