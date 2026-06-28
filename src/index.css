@@ -1157,3 +1157,12 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   .add-btn, .save-btn, .sidebar-signout, .voucher-remove-btn, .voucher-apply-btn { min-height: 44px; }
   .sidebar-nav-item { padding-top: 14px; padding-bottom: 14px; }
 }
+
+/* ── Admin merchants: per-shop portal links ────────────────────────────────── */
+.mm-open-links { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.mm-open-link { padding: 4px 10px; border: 1px solid var(--color-clay-border); border-radius: var(--radius-pill); color: var(--color-rose-muted); font-size: 11px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: all 0.15s; }
+.mm-open-link:hover { background: var(--color-oxblood-tint); color: var(--color-oxblood); }
+
+@media (pointer: coarse) {
+  .mm-open-link { min-height: 36px; display: inline-flex; align-items: center; }
+}

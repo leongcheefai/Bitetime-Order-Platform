@@ -77,6 +77,7 @@ export default function AppRouter() {
         <Route path="/merchant/signup" element={<SignupScreen />} />
         <Route path="/merchant/login" element={<LoginScreen />} />
         <Route path="/merchant" element={<RequireRole role="merchant"><MerchantHome /></RequireRole>} />
+        <Route path="/merchant/:slug" element={<RequireRole role="superadmin"><MerchantHome /></RequireRole>} />
         <Route path="/admin/merchants" element={<RequireRole role="superadmin"><AdminMerchants /></RequireRole>} />
         <Route path="/admin" element={<RequireRole role="superadmin"><AdminMerchants /></RequireRole>} />
       </Routes>
