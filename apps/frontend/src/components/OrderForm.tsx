@@ -6,6 +6,7 @@ import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
 import { saveOrder, loadVouchers, markVoucherUsed, voucherFullyUsed, getNextOrderNumber, fetchProductSales, DEFAULTS, fetchProfileByReferralCode, isNewCustomer, loadReferralRewards, saveReferralRewards } from '../store';
 import { quoteSameday } from '../geo';
+import { priceOrder, voucherError, type PriceInput, type VoucherErrorCode } from '../pricing';
 import type { Lang, Product, Voucher, Settings, SamedayConfig } from '../types';
 import type { User } from '@supabase/supabase-js';
 
@@ -233,10 +234,43 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
 
   const EM_STATES = ['Sabah', 'Sarawak', 'W.P. Labuan'];
   const needsAddress = mode === 'delivery' || mode === 'sameday';
-  function currentShippingFee() {
-    if (mode === 'delivery' && state) return settings.shipping[EM_STATES.includes(state) ? 'EM' : 'WM'] || 0;
-    if (mode === 'sameday' && sdQuote.status === 'ok') return sdQuote.fee ?? 0;
-    return 0;
+
+  // Single source of truth for every total this form shows: feed the current
+  // cart + context to the pure Order pricing module. See CONTEXT.md.
+  function buildPriceInput(voucher: Voucher | null = appliedVoucher): PriceInput {
+    const cart: Record<string, number> = {};
+    const promoSoldMap: Record<string, number> = {};
+    Object.keys(selected).forEach(id => {
+      cart[id] = qty[id] || 0;
+      const p = getProduct(id);
+      if (p) promoSoldMap[id] = promoSold(p);
+    });
+    return {
+      products: settings.products,
+      cart,
+      mode: mode as PriceInput['mode'],
+      state,
+      rates: settings.shipping,
+      samedayFee: mode === 'sameday' && sdQuote.status === 'ok' ? (sdQuote.fee ?? 0) : 0,
+      voucher,
+      referral: appliedReferral ? { amount: referralDiscountAmt, enabled: referralEnabled } : null,
+      promoSold: promoSoldMap,
+    };
+  }
+  function breakdown() { return priceOrder(buildPriceInput()); }
+
+  function currentShippingFee() { return breakdown().shipping; }
+
+  function voucherErrorMessage(code: VoucherErrorCode | null, v?: Voucher | null): string {
+    switch (code) {
+      case 'invalid': return t('❌ Invalid voucher code.', '❌ 无效的优惠码。');
+      case 'fully_used': return t('❌ This voucher has been fully redeemed.', '❌ 此优惠券已用完。');
+      case 'already_used': return t('❌ You have already used this voucher.', '❌ 您已使用过此优惠券。');
+      case 'not_assigned': return t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。');
+      case 'expired': return t('❌ This voucher has expired.', '❌ 此优惠券已过期。');
+      case 'min_order': return t(`❌ Minimum order of RM ${v?.minOrder} required.`, `❌ 需要最低消费 RM ${v?.minOrder}。`);
+      default: return '';
+    }
   }
 
   async function applyVoucher() {
@@ -246,25 +280,14 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     setVoucherMsg('');
     const vouchers = await loadVouchers();
     const v = vouchers.find((v: Voucher) => v.code === code);
-    let errMsg = '';
-    if (!v) {
-      errMsg = t('❌ Invalid voucher code.', '❌ 无效的优惠码。');
-    } else if (voucherFullyUsed(v)) {
-      errMsg = t('❌ This voucher has been fully redeemed.', '❌ 此优惠券已用完。');
-    } else if ((v.usedBy || []).includes((user?.email ?? '').toLowerCase())) {
-      errMsg = t('❌ You have already used this voucher.', '❌ 您已使用过此优惠券。');
-    } else if (v.email && v.email !== (user?.email ?? '').toLowerCase()) {
-      errMsg = t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。');
-    } else if (v.expiresAt && new Date(v.expiresAt) < new Date()) {
-      errMsg = t('❌ This voucher has expired.', '❌ 此优惠券已过期。');
-    } else if (v.minOrder) {
-      let subtotal = 0;
-      Object.keys(selected).forEach(id => { const p = getProduct(id); if (p) subtotal += effPrice(p) * (qty[id] || 0); });
-      subtotal += currentShippingFee();
-      if (subtotal < v.minOrder) {
-        errMsg = t(`❌ Minimum order of RM ${v.minOrder} required.`, `❌ 需要最低消费 RM ${v.minOrder}。`);
-      }
-    }
+    const bd = priceOrder(buildPriceInput(null));
+    const errCode = voucherError(v ?? null, {
+      subtotal: bd.subtotal + bd.shipping,
+      userEmail: user?.email ?? '',
+      now: new Date(),
+      fullyUsed: v ? voucherFullyUsed(v) : false,
+    });
+    const errMsg = voucherErrorMessage(errCode, v);
     if (errMsg) {
       setVoucherMsg(errMsg);
     } else {
@@ -281,30 +304,12 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     setVoucherMsg('');
   }
 
-  function computeDiscount(subtotalBeforeDiscount: number) {
-    if (!appliedVoucher) return 0;
-    if (appliedVoucher.type === 'percent') {
-      return parseFloat(((subtotalBeforeDiscount * appliedVoucher.value) / 100).toFixed(2));
-    }
-    return Math.min(appliedVoucher.value, subtotalBeforeDiscount);
-  }
-
-  function computeReferralDiscount(totalAfterVoucher: number) {
-    if (!appliedReferral || !referralEnabled) return 0;
-    return Math.min(referralDiscountAmt, totalAfterVoucher);
-  }
-
-  function computeTotal() {
-    let total = 0;
-    Object.keys(selected).forEach(id => {
-      const p = getProduct(id); if (!p) return;
-      total += effPrice(p) * (qty[id] || 0);
-    });
-    total += currentShippingFee();
-    const discount = computeDiscount(total);
-    const referralDisc = computeReferralDiscount(total - discount);
-    return parseFloat((total - discount - referralDisc).toFixed(2));
-  }
+  // Discount/referral/total all read from the one pricing breakdown, so the
+  // on-screen lines, the Telegram message, and the saved order can never drift.
+  // (The arg is ignored; kept so existing call sites compile unchanged.)
+  function computeDiscount(_subtotalBeforeDiscount?: number) { return breakdown().discount; }
+  function computeReferralDiscount(_totalAfterVoucher?: number) { return breakdown().referralDiscount; }
+  function computeTotal() { return breakdown().total; }
 
   async function submitOrder() {
     if (submitting) return;
@@ -394,44 +399,33 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
     if (effectiveDate) msg += `*Preferred date:* ${effectiveDate}\n`;
     msg += `\n*Items:*\n`;
 
-    let total = 0;
+    const bd = breakdown();
     Object.keys(selected).forEach(id => {
       const p = getProduct(id); if (!p) return;
       const q = qty[id] || 0, sub = effPrice(p) * q;
-      total += sub;
       msg += `• ${p.name} × ${q} — RM ${money(sub)}\n`;
     });
 
     if (mode === 'delivery') {
       const region = EM_STATES.includes(state) ? 'EM' : 'WM';
-      const fee = settings.shipping[region] || 0;
-      total += fee;
       const fullAddress = [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ');
-      msg += `\n*Delivery (${region}):* RM ${money(fee)}\n*Address:* ${fullAddress}\n`;
+      msg += `\n*Delivery (${region}):* RM ${money(bd.shipping)}\n*Address:* ${fullAddress}\n`;
     } else if (mode === 'sameday') {
-      const fee = sdQuote.fee ?? 0;
-      total += fee;
       const fullAddress = [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ');
-      msg += `\n*Same-day delivery (Lalamove/Grab, ~${sdQuote.km} km):* RM ${money(fee)}\n*Time slot:* ${sdSlot}\n*Address:* ${fullAddress}\n`;
+      msg += `\n*Same-day delivery (Lalamove/Grab, ~${sdQuote.km} km):* RM ${money(bd.shipping)}\n*Time slot:* ${sdSlot}\n*Address:* ${fullAddress}\n`;
     } else {
       msg += `\n*Order type:* Self-pickup\n`;
     }
     if (appliedVoucher) {
-      const discountAmt = appliedVoucher.type === 'percent'
-        ? parseFloat(((total * appliedVoucher.value) / 100).toFixed(2))
-        : Math.min(appliedVoucher.value, total);
-      msg += `\n*Voucher (${appliedVoucher.code}):* −RM ${money(discountAmt)}`;
-      total = parseFloat((total - discountAmt).toFixed(2));
+      msg += `\n*Voucher (${appliedVoucher.code}):* −RM ${money(bd.discount)}`;
     }
     if (appliedReferral && referralEnabled) {
-      const refDisc = Math.min(referralDiscountAmt, total);
-      msg += `\n*Referral (${appliedReferral.code} — ${appliedReferral.referrerName}):* −RM ${money(refDisc)}`;
-      total = parseFloat((total - refDisc).toFixed(2));
+      msg += `\n*Referral (${appliedReferral.code} — ${appliedReferral.referrerName}):* −RM ${money(bd.referralDiscount)}`;
     }
     if (pendingGift && giftName) {
       msg += `\n*🎁 Referral gift:* ${giftName} × 1 — FREE`;
     }
-    msg += `\n*Total: RM ${money(total)}*`;
+    msg += `\n*Total: RM ${money(bd.total)}*`;
 
     try {
       const items = Object.keys(selected).map(id => {
