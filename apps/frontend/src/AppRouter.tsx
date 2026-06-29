@@ -3,6 +3,8 @@ import { Routes, Route, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'motion/react'
 import { PageTransition } from './motion'
 import { SessionProvider } from './SessionContext'
+import { ToastProvider } from './ToastContext'
+import Toaster from './components/Toaster'
 import { MerchantProvider, useMerchant } from './MerchantContext'
 import RequireRole from './RequireRole'
 import { Spinner } from './components/Loaders'
@@ -74,7 +76,10 @@ function StorefrontShell() {
 export default function AppRouter() {
   return (
     <SessionProvider>
-      <AnimatedRoutes />
+      <ToastProvider>
+        <AnimatedRoutes />
+        <Toaster />
+      </ToastProvider>
     </SessionProvider>
   )
 }

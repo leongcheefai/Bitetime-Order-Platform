@@ -1371,3 +1371,10 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 .spinner { width: 18px; height: 18px; border: 2px solid var(--color-clay-border); border-top-color: var(--color-oxblood); border-radius: 50%; animation: spin 0.7s linear infinite; }
 .spinner-label { font-family: 'DM Sans', sans-serif; }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Toast / Toaster ──────────────────────────────────────────────────────── */
+.toaster { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: var(--z-toast, 9999); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: max-content; max-width: calc(100vw - 2rem); }
+.toast { pointer-events: auto; cursor: pointer; border: 1px solid var(--color-clay-border); border-radius: var(--radius-pill); padding: 10px 18px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(43,10,16,0.14); background: var(--color-surface-raised); color: var(--color-ink); text-align: center; }
+.toast--success { border-color: var(--color-clay-border); background: var(--color-surface-raised); color: var(--color-ink); }
+.toast--error { border-color: var(--color-rose-border); background: var(--color-oxblood-tint); color: var(--color-oxblood); }
+.toast--info { border-color: var(--color-clay-border); background: var(--color-cream); color: var(--color-rose-muted); }
