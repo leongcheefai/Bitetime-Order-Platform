@@ -3,6 +3,10 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Smooth in-page anchor scrolling (e.g. nav "Pricing" → #pricing). Disabled
+   under prefers-reduced-motion by the media query below. */
+html { scroll-behavior: smooth; }
+
 @keyframes shimmer { 0% { background-position: -468px 0; } 100% { background-position: 468px 0; } }
 
 @media (prefers-reduced-motion: reduce) {
