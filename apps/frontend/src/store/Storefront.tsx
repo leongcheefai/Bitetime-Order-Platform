@@ -4,7 +4,7 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { useToast } from '../ToastContext'
-import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed } from '../store'
+import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote } from '../store'
 import { priceOrder, voucherError } from '../pricing'
 import type { Product, Voucher } from '../types'
 
@@ -148,6 +148,8 @@ export default function Storefront() {
         // Best-effort: failure to record usage must not fail a placed order.
         await redeemVoucher(merchant.id, appliedVoucher.code, voucherEntry).catch(() => {})
       }
+      // Best-effort server-side Telegram notify; never blocks a placed order.
+      await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
       setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total })
       toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {

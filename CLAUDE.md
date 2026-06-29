@@ -21,10 +21,11 @@ pnpm deploy        # frontend production build (deploy via Vercel)
 pnpm test          # Vitest unit tests across workspaces
 pnpm --filter @bitetime/frontend preview   # serve built dist/ locally
 pnpm --filter @bitetime/backend dev         # billing server only
-pnpm --filter @bitetime/backend test        # RLS tenant-isolation tests (needs local Supabase env vars)
+pnpm --filter @bitetime/backend test        # backend unit tests (notify, etc.) — no Supabase needed
+pnpm --filter @bitetime/backend test:rls    # RLS tenant-isolation tests (needs local Supabase env vars)
 ```
 
-Tests use Vitest (added during the multi-merchant build). Pure logic and `store.ts` functions have unit tests (`apps/frontend/src/*.test.ts`); tenant isolation is covered by integration tests in `apps/backend/tests/rls/` that need a running local Supabase (`supabase start`) and its keys as env vars. UI is verified by running the app (run-and-verify), not component tests.
+Tests use Vitest (added during the multi-merchant build). Pure logic and `store.ts` functions have unit tests (`apps/frontend/src/*.test.ts`); the backend has pure unit tests in `apps/backend/tests/unit/` (run by `test`, no Supabase); tenant isolation is covered by integration tests in `apps/backend/tests/rls/` (run by `test:rls`) that need a running local Supabase (`supabase start`) and its keys as env vars. UI is verified by running the app (run-and-verify), not component tests.
 
 ## Architecture
 

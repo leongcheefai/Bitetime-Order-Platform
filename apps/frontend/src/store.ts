@@ -599,6 +599,18 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   return { order: data, orderNumber }
 }
 
+// Trigger the server-side order notification (Telegram). The bot token stays on
+// the backend, which reads it from merchant_secrets — only the order reference
+// is sent from the browser.
+export async function notifyOrderPlacedRemote(merchantId: string, orderNumber: string) {
+  const res = await fetch(`${API_URL}/api/notify/order`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ merchantId, orderNumber }),
+  })
+  if (!res.ok) throw new Error('Order notification failed')
+}
+
 export async function fetchMerchantOrders(merchantId: string) {
   if (!merchantId) return []
   const { data, error } = await supabase
