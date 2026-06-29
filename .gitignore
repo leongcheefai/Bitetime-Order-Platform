@@ -4,6 +4,9 @@ dist
 .env
 .env.local
 
+# Turborepo
+.turbo
+
 # Supabase CLI local state
-supabase/.branches
-supabase/.temp
+apps/backend/supabase/.branches
+apps/backend/supabase/.temp

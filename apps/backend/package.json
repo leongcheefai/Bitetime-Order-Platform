@@ -1,0 +1,27 @@
+{
+  "name": "@bitetime/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "BiteTime billing backend — Hono + Stripe + Supabase",
+  "scripts": {
+    "dev": "node --watch --env-file=.env src/index.js",
+    "start": "node dist/server.js",
+    "build": "esbuild src/index.js --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "lint": "eslint .",
+    "test": "vitest run tests/rls"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@supabase/supabase-js": "^2.107.0",
+    "hono": "^4.6.0",
+    "stripe": "^17.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "esbuild": "^0.25.0",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
+    "vitest": "^3.2.6"
+  }
+}
