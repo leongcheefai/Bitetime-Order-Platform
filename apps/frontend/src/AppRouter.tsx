@@ -7,7 +7,7 @@ import { ToastProvider } from './ToastContext'
 import Toaster from './components/Toaster'
 import { MerchantProvider, useMerchant } from './MerchantContext'
 import RequireRole from './RequireRole'
-import { Spinner } from './components/Loaders'
+import { PageSkeleton } from './components/Loaders'
 
 // Route-level code splitting: each surface ships its own chunk, so a storefront
 // customer never downloads merchant/admin/signup code (signup pulls in the heavy
@@ -20,25 +20,13 @@ const MerchantHome = lazy(() => import('./merchant/MerchantHome'))
 const Storefront = lazy(() => import('./store/Storefront'))
 
 function RouteFallback() {
-  return (
-    <div className="form-wrap mm-storefront-state">
-      <div className="brand"><h1>BiteTime</h1></div>
-      <Spinner label="Loading…" />
-    </div>
-  )
+  return <PageSkeleton />
 }
 
 function StorefrontShell() {
   const { merchant, loading, notFound } = useMerchant()
 
-  if (loading) return (
-    <div className="form-wrap mm-storefront-state">
-      <div className="brand">
-        <h1>BiteTime</h1>
-      </div>
-      <Spinner label="Loading shop…" />
-    </div>
-  )
+  if (loading) return <PageSkeleton />
 
   if (notFound) return (
     <div className="form-wrap mm-storefront-state">
