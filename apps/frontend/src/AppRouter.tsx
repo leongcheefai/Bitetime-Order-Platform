@@ -5,6 +5,7 @@ import { PageTransition } from './motion'
 import { SessionProvider } from './SessionContext'
 import { MerchantProvider, useMerchant } from './MerchantContext'
 import RequireRole from './RequireRole'
+import { Spinner } from './components/Loaders'
 
 // Route-level code splitting: each surface ships its own chunk, so a storefront
 // customer never downloads merchant/admin/signup code (signup pulls in the heavy
@@ -20,7 +21,7 @@ function RouteFallback() {
   return (
     <div className="form-wrap mm-storefront-state">
       <div className="brand"><h1>BiteTime</h1></div>
-      <p>Loading…</p>
+      <Spinner label="Loading…" />
     </div>
   )
 }
@@ -33,7 +34,7 @@ function StorefrontShell() {
       <div className="brand">
         <h1>BiteTime</h1>
       </div>
-      <p>Loading shop…</p>
+      <Spinner label="Loading shop…" />
     </div>
   )
 

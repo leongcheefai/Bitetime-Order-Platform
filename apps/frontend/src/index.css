@@ -1364,3 +1364,10 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 @media (pointer: coarse) {
   .mm-open-link { min-height: 36px; display: inline-flex; align-items: center; }
 }
+
+.skeleton { display: block; background: linear-gradient(90deg, var(--color-cream) 25%, var(--color-surface-raised) 50%, var(--color-cream) 75%); background-size: 936px 100%; animation: shimmer 1.4s linear infinite; }
+.skeleton-text { display: flex; flex-direction: column; gap: 8px; }
+.spinner-wrap { display: inline-flex; align-items: center; gap: 10px; color: var(--color-rose-muted); font-size: 14px; }
+.spinner { width: 18px; height: 18px; border: 2px solid var(--color-clay-border); border-top-color: var(--color-oxblood); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.spinner-label { font-family: 'DM Sans', sans-serif; }
+@keyframes spin { to { transform: rotate(360deg); } }

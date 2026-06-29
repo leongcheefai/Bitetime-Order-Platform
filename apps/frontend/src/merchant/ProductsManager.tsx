@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { fetchProducts, upsertProduct, deleteProduct } from '../store'
+import { SkeletonText } from '../components/Loaders'
 
 const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pc', active: true }
 
@@ -30,7 +31,7 @@ export default function ProductsManager() {
 
   if (!rows) return (
     <div className="admin-panel">
-      <p className="empty-msg">{t('Loading…', '加载中…')}</p>
+      <SkeletonText lines={4} />
     </div>
   )
 

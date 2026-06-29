@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, setOrderStatus } from '../store'
+import { SkeletonText } from '../components/Loaders'
 
 const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
 
@@ -40,7 +41,7 @@ export default function OrdersView() {
   }
 
   if (orders === null) {
-    return <p className="mm-orders-loading">{t('Loading…', '加载中…')}</p>
+    return <div className="admin-panel"><SkeletonText lines={4} /></div>
   }
 
   if (orders.length === 0) {
