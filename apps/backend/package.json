@@ -5,10 +5,11 @@
   "type": "module",
   "description": "BiteTime billing backend — Hono + Stripe + Supabase",
   "scripts": {
-    "dev": "node --watch --env-file=.env src/index.js",
+    "dev": "node --watch --env-file=.env src/index.ts",
     "start": "node dist/server.js",
-    "build": "esbuild src/index.js --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --target=node20 --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run tests/rls"
   },
   "dependencies": {
@@ -19,9 +20,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^26.0.1",
     "esbuild": "^0.25.0",
     "eslint": "^10.3.0",
     "globals": "^17.6.0",
+    "jiti": "^2.7.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.0",
     "vitest": "^3.2.6"
   }
 }

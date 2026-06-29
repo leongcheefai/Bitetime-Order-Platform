@@ -71,7 +71,7 @@ Convert the app into a multi-merchant SaaS:
 ### Tenancy model
 - **Multi-tenant via `merchant_id` on every tenant-owned table.** Path-slug storefronts at `/s/:slug`.
 - **One Supabase Auth user per person, profile-per-merchant.** Supabase Auth is global-by-email, so "per-merchant customers" is realised at the data layer: `profiles` gets a row per `(user_id, merchant_id)` pair. `profiles` primary key moves off `id` to a composite/surrogate keyed by `(user_id, merchant_id)`. (Resolves the auth-vs-tenancy contradiction; compounds the existing PK quirk noted in prior DB/code-drift work.)
-- **Role-based access.** Add a `role` concept (`customer` | `merchant` | `superadmin`). This replaces the hardcoded `OWNER_EMAIL` gate in `App.jsx`.
+- **Role-based access.** Add a `role` concept (`customer` | `merchant` | `superadmin`). This replaces the hardcoded `OWNER_EMAIL` gate in `App.tsx`.
 
 ### Schema (fresh start — no migration of existing global data)
 - New `merchants` table: `id`, `name`, `slug` (unique), `status` (`pending` | `active` | `suspended`), `order_prefix`, payment config (QR / bank / `tg_token` / `tg_chat_id`), delivery zones/rates.
@@ -80,14 +80,14 @@ Convert the app into a multi-merchant SaaS:
 - Per-merchant order counter (a row per merchant, replacing the single global `order_counter`).
 - The previous global `settings` key-value blob model (`main`, `vouchers`, `order_statuses`, `order_awb`, `order_counter`, etc.) is retired in favour of real tables. Order status / AWB / notes become columns/rows on `orders` scoped by `merchant_id`.
 
-### Data-access seam (`src/store.js`)
-- All Supabase access continues to route through `store.js` (the single primary seam). Every data function becomes **merchant-scoped**: it takes (or closes over) the active `merchantId` and filters/inserts accordingly.
+### Data-access seam (`src/store.ts`)
+- All Supabase access continues to route through `store.ts` (the single primary seam). Every data function becomes **merchant-scoped**: it takes (or closes over) the active `merchantId` and filters/inserts accordingly.
 - Order number generation: `<merchant.order_prefix>-YYYYMMDD-XXXX`, using the per-merchant counter.
 - Slug generation lives behind a single function: latin → slugify; Chinese → pinyin transliteration; empty/too-short → `shop-<short-id>`; then collision-suffix (`-2`, `-3`); reject reserved words.
 
 ### Routing & context
 - Introduce `react-router`. Routes: `/` (marketing+signup), `/s/:slug` (storefront), `/s/:slug/account`, `/merchant/*` (merchant dashboard), `/admin/*` (super-admin).
-- Merchant is resolved from `:slug` **once** at the route boundary and provided via a React **MerchantContext**. Components read context; they never re-resolve the merchant. The monolithic `App.jsx` state is decomposed along these route boundaries.
+- Merchant is resolved from `:slug` **once** at the route boundary and provided via a React **MerchantContext**. Components read context; they never re-resolve the merchant. The monolithic `App.tsx` state is decomposed along these route boundaries.
 
 ### Security (RLS — mandatory, second seam)
 - RLS policies on every tenant table so a merchant (and that merchant's customers) can only read/write rows matching their `merchant_id`; super-admin role bypasses to read all.
@@ -105,9 +105,9 @@ P0 schema + RLS · P1 router + role-based access · P2 merchant signup/onboardin
 ## Testing Decisions
 
 - **What makes a good test here:** assert external behaviour, not implementation. For the data layer that means: given an active merchant, store functions return/insert only that merchant's rows; order numbers carry the right prefix and increment per-merchant; slug generation yields expected slug for latin, Chinese (pinyin), empty (fallback), collision, and reserved inputs. Tests must not assert on internal query shapes.
-- **Primary tested module — `src/store.js`** (the single data seam). Slug generation and order-number generation are pure-ish and the highest-value unit tests. Merchant-scoped read/write functions are tested against a test Supabase project (or local Supabase) with two seeded merchants.
+- **Primary tested module — `src/store.ts`** (the single data seam). Slug generation and order-number generation are pure-ish and the highest-value unit tests. Merchant-scoped read/write functions are tested against a test Supabase project (or local Supabase) with two seeded merchants.
 - **Tenant isolation — RLS (second seam):** integration tests using two separate authenticated clients (merchant A, merchant B) asserting A cannot read/write B's products/orders/customers, and that super-admin can read all. This is the security-critical test set and cannot be replaced by app-layer tests.
-- **Prior art:** none — no test suite exists in the repo today. This PRD introduces the first tests. Recommend **Vitest** for unit tests of `store.js` pure functions and a separate integration suite (local Supabase) for RLS. Establishing the runner is part of P0.
+- **Prior art:** none — no test suite exists in the repo today. This PRD introduces the first tests. Recommend **Vitest** for unit tests of `store.ts` pure functions and a separate integration suite (local Supabase) for RLS. Establishing the runner is part of P0.
 
 ## Out of Scope
 
@@ -122,7 +122,7 @@ P0 schema + RLS · P1 router + role-based access · P2 merchant signup/onboardin
 
 ## Further Notes
 
-- **Biggest hidden cost:** the real work is retrofitting a router onto a no-router app and decomposing the `App.jsx` god-component along route boundaries — not the onboarding form itself. Budget accordingly.
+- **Biggest hidden cost:** the real work is retrofitting a router onto a no-router app and decomposing the `App.tsx` god-component along route boundaries — not the onboarding form itself. Budget accordingly.
 - The hardcoded `OWNER_EMAIL` gate and the `localStorage` caches (`bitetime_settings`, `bitetime_addr_<userId>`) must become merchant-scoped or be removed; stale single-tenant caches will leak across merchants if left as-is.
 - Bilingual `t(en, zh)` behaviour and existing product/voucher features (zh product fields, multi-use vouchers, referral rewards, same-day KL/Selangor delivery) must be preserved per-merchant, not dropped in the rewrite.
 - Reserved slug blocklist must include every top-level route segment introduced by the router.
