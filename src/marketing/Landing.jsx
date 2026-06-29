@@ -15,54 +15,41 @@ export default function Landing() {
       ? { to: '/merchant', label: t('My dashboard', '我的后台') }
       : null
 
-  // Pricing tiers. Placeholder RM prices — yearly = 10× monthly (2 months free).
+  // Pricing tiers. yearly = 10× monthly (2 months free).
   const tiers = [
     {
-      id: 'free',
-      name: t('Free', '免费'),
-      monthly: 0,
-      yearly: 0,
-      blurb: t('Try it out, no card needed.', '免费试用，无需信用卡。'),
+      id: 'basic',
+      name: t('Basic', '基础版'),
+      monthly: 9.99,
+      yearly: 99.90,
+      blurb: t('For getting started.', '适合刚起步的你。'),
       features: [
         t('1 shop', '1 间店铺'),
         t('Product catalog', '产品目录'),
         t('Order management', '订单管理'),
       ],
-      cta: t('Start free', '免费开始'),
+      cta: t('Start your shop', '开始建店'),
       to: '/merchant/signup',
       highlight: false,
     },
     {
       id: 'pro',
       name: 'Pro',
-      monthly: 39,
-      yearly: 390,
+      monthly: 39.99,
+      yearly: 399.90,
       blurb: t('For growing shops.', '为成长中的店铺打造。'),
       features: [
-        t('Everything in Free', '包含免费版所有功能'),
+        t('Everything in Basic', '包含基础版所有功能'),
+        t('Telegram + email alerts', 'Telegram + 邮件通知'),
         t('Vouchers & promotions', '优惠券与促销'),
         t('Custom shop link', '自定义店铺链接'),
-        t('Telegram + email alerts', 'Telegram + 邮件通知'),
-      ],
-      cta: t('Start your shop', '开始建店'),
-      to: '/merchant/signup',
-      highlight: true,
-      badge: t('Most popular', '最受欢迎'),
-    },
-    {
-      id: 'business',
-      name: 'Business',
-      monthly: 99,
-      yearly: 990,
-      blurb: t('For multi-shop operators.', '为多店铺经营者打造。'),
-      features: [
-        t('Everything in Pro', '包含 Pro 版所有功能'),
         t('Multiple shops', '多间店铺'),
         t('Priority support', '优先客服支持'),
       ],
       cta: t('Start your shop', '开始建店'),
       to: '/merchant/signup',
-      highlight: false,
+      highlight: true,
+      badge: t('Most popular', '最受欢迎'),
     },
   ]
 
@@ -230,7 +217,7 @@ export default function Landing() {
 
         <div className="mm-land-pricing-grid">
           {tiers.map(tier => {
-            const price = billing === 'yearly' ? Math.round(tier.yearly / 12) : tier.monthly
+            const price = (billing === 'yearly' ? tier.yearly / 12 : tier.monthly).toFixed(2)
             return (
               <div
                 key={tier.id}
@@ -254,7 +241,7 @@ export default function Landing() {
                   ))}
                 </ul>
                 <Link
-                  to={tier.to}
+                  to={`${tier.to}?plan=${tier.id}&billing=${billing}`}
                   className={tier.highlight ? 'mm-land-cta-primary' : 'mm-land-cta-ghost'}
                 >
                   {tier.cta}

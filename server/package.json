@@ -1,0 +1,17 @@
+{
+  "name": "bitetime-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "BiteTime billing backend — Hono + Stripe + Supabase",
+  "scripts": {
+    "dev": "node --watch --env-file=.env src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.13.0",
+    "@supabase/supabase-js": "^2.107.0",
+    "hono": "^4.6.0",
+    "stripe": "^17.0.0"
+  }
+}
