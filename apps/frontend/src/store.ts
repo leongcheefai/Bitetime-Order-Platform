@@ -483,6 +483,27 @@ export async function redeemVoucher(merchantId: string, code: string, entry: str
   if (error) throw error;
 }
 
+// Merchant-facing voucher management (writes the merchant's own rows — allowed
+// by vouchers_write_own).
+export async function createMerchantVoucher(input: {
+  merchantId: string; code: string; kind: string; amount: number; maxUses?: number | null;
+}): Promise<Voucher> {
+  const { data, error } = await supabase.from('vouchers').insert({
+    merchant_id: input.merchantId,
+    code: input.code.trim().toUpperCase(),
+    kind: input.kind,
+    amount: input.amount,
+    max_uses: input.maxUses ?? null,
+  }).select().single();
+  if (error) throw error;
+  return voucherFromRow(data);
+}
+
+export async function deleteMerchantVoucher(id: string) {
+  const { error } = await supabase.from('vouchers').delete().eq('id', id);
+  if (error) throw error;
+}
+
 // ── Referral program ─────────────────────────────────────────────────────────
 // A member's referral code is the first 8 hex chars of their profile UUID,
 // so the code itself identifies the referrer. Also stored in

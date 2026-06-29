@@ -86,6 +86,8 @@ import {
   voucherFromRow,
   fetchMerchantVouchers,
   redeemVoucher,
+  createMerchantVoucher,
+  deleteMerchantVoucher,
 } from './store'
 import * as supabaseModule from './supabase'
 
@@ -634,5 +636,33 @@ describe('redeemVoucher', () => {
   it('throws when the RPC errors', async () => {
     __mocks.rpc.mockResolvedValueOnce({ error: { message: 'fully used' } })
     await expect(redeemVoucher('m1', 'X', 'a@x.com')).rejects.toBeTruthy()
+  })
+})
+
+describe('createMerchantVoucher', () => {
+  it('inserts an uppercased code scoped to the merchant and maps the row back', async () => {
+    __mocks.single.mockResolvedValueOnce({ data: { id: 'v9', code: 'SAVE10', kind: 'percent', amount: 10, max_uses: 100, used_by: [] }, error: null })
+    const result = await createMerchantVoucher({ merchantId: 'm1', code: 'save10', kind: 'percent', amount: 10, maxUses: 100 })
+    expect(__mocks.from).toHaveBeenCalledWith('vouchers')
+    expect(__mocks.insert).toHaveBeenCalledWith({ merchant_id: 'm1', code: 'SAVE10', kind: 'percent', amount: 10, max_uses: 100 })
+    expect(result).toEqual({ id: 'v9', code: 'SAVE10', type: 'percent', value: 10, maxUses: 100, usedBy: [] })
+  })
+  it('defaults max_uses to null and throws on error', async () => {
+    __mocks.single.mockResolvedValueOnce({ data: null, error: { message: 'duplicate' } })
+    await expect(createMerchantVoucher({ merchantId: 'm1', code: 'X', kind: 'fixed', amount: 5 })).rejects.toBeTruthy()
+    expect(__mocks.insert).toHaveBeenCalledWith({ merchant_id: 'm1', code: 'X', kind: 'fixed', amount: 5, max_uses: null })
+  })
+})
+
+describe('deleteMerchantVoucher', () => {
+  it('deletes by id', async () => {
+    __mocks.deleteEq.mockResolvedValueOnce({ error: null })
+    await deleteMerchantVoucher('v9')
+    expect(__mocks.from).toHaveBeenCalledWith('vouchers')
+    expect(__mocks.deleteEq).toHaveBeenCalledWith('id', 'v9')
+  })
+  it('throws on error', async () => {
+    __mocks.deleteEq.mockResolvedValueOnce({ error: { message: 'nope' } })
+    await expect(deleteMerchantVoucher('v9')).rejects.toBeTruthy()
   })
 })
