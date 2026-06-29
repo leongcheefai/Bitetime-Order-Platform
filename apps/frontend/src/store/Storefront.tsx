@@ -4,8 +4,9 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { useToast } from '../ToastContext'
-import { fetchProducts, placeOrder } from '../store'
-import type { Product } from '../types'
+import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote } from '../store'
+import { priceOrder, voucherError } from '../pricing'
+import type { Product, Voucher } from '../types'
 
 interface CartLine {
   id: string
@@ -19,13 +20,14 @@ interface SuccessState {
   items: CartLine[]
   subtotal: number
   fee: number
+  discount: number
   total: number
 }
 
 export default function Storefront() {
   const { merchant: merchantNullable } = useMerchant()
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
-  const { lang, setLang, t } = useSession()
+  const { lang, setLang, t, account } = useSession()
   const viewVariants = usePageVariants()
   const toast = useToast()
 
@@ -39,29 +41,82 @@ export default function Storefront() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<SuccessState | null>(null)
 
+  const [vouchers, setVouchers] = useState<Voucher[]>([])
+  const [voucherInput, setVoucherInput] = useState('')
+  const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null)
+  const [voucherMsg, setVoucherMsg] = useState('')
+
   const merchantId = merchant?.id
 
   useEffect(() => {
     if (!merchantId) return
     fetchProducts(merchantId).then(setProducts)
+    fetchMerchantVouchers(merchantId).then(setVouchers)
   }, [merchantId])
 
   const activeProducts = products.filter(p => p.active)
   const deliveryFee = merchant?.shipping?.WM ?? 8
   const fee = mode === 'delivery' ? deliveryFee : 0
+  // One-per-customer identity: account email when signed in, else the WhatsApp number.
+  const voucherEntry = (account?.email || wa || '').trim().toLowerCase()
 
   const productName = (p: Product) =>
     (lang === 'zh' && p.name_zh) ? p.name_zh : p.name
   const productDescr = (p: Product) =>
     (lang === 'zh' && p.descr_zh) ? p.descr_zh : (p.descr || '')
 
-  const cartItems = activeProducts
-    .filter(p => (cart[p.id] || 0) > 0)
-    .map((p): CartLine => ({ id: p.id, name: p.name, qty: cart[p.id]!, price: p.price }))
-
-  const subtotal = cartItems.reduce((s, i) => s + i.price * i.qty, 0)
-  const total = subtotal + fee
+  // One pricing breakdown drives the summary, the order, and the success view.
+  const bd = priceOrder({
+    products: activeProducts,
+    cart,
+    mode,
+    rates: { WM: deliveryFee, EM: deliveryFee },
+    resolvedShipping: fee,
+    voucher: appliedVoucher,
+  })
+  const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice }))
+  const subtotal = bd.subtotal
+  const discount = bd.discount
+  const total = bd.total
   const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy
+
+  const applyVoucher = () => {
+    const code = voucherInput.trim().toUpperCase()
+    if (!code) return
+    const v = vouchers.find(x => x.code === code)
+    const err = voucherError(v ?? null, {
+      subtotal: bd.subtotal + bd.shipping,
+      userEmail: voucherEntry,
+      now: new Date(),
+      fullyUsed: v ? voucherFullyUsed(v) : false,
+    })
+    if (err) {
+      setAppliedVoucher(null)
+      setVoucherMsg(voucherErrorText(err, v))
+      return
+    }
+    setAppliedVoucher(v!)
+    const label = (v as any).type === 'percent' ? `${(v as any).value}% off` : `RM ${(v as any).value} off`
+    setVoucherMsg(t(`✓ Voucher applied: ${label}`, `✓ 优惠券已应用：${label}`))
+  }
+
+  const removeVoucher = () => {
+    setAppliedVoucher(null)
+    setVoucherInput('')
+    setVoucherMsg('')
+  }
+
+  function voucherErrorText(code: string, v?: Voucher | null): string {
+    switch (code) {
+      case 'invalid': return t('❌ Invalid voucher code.', '❌ 无效的优惠码。')
+      case 'fully_used': return t('❌ This voucher has been fully redeemed.', '❌ 此优惠券已用完。')
+      case 'already_used': return t('❌ You have already used this voucher.', '❌ 您已使用过此优惠券。')
+      case 'not_assigned': return t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。')
+      case 'expired': return t('❌ This voucher has expired.', '❌ 此优惠券已过期。')
+      case 'min_order': return t(`❌ Minimum order of RM ${(v as any)?.minOrder} required.`, `❌ 需要最低消费 RM ${(v as any)?.minOrder}。`)
+      default: return ''
+    }
+  }
 
   const updateQty = (productId: string, delta: number) => {
     setCart(prev => {
@@ -89,7 +144,13 @@ export default function Storefront() {
         items: cartItems,
         total,
       })
-      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, total })
+      if (appliedVoucher) {
+        // Best-effort: failure to record usage must not fail a placed order.
+        await redeemVoucher(merchant.id, appliedVoucher.code, voucherEntry).catch(() => {})
+      }
+      // Best-effort server-side Telegram notify; never blocks a placed order.
+      await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
+      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total })
       toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
       setError(err.message || t('Failed to place order. Please try again.', '下单失败，请重试。'))
@@ -106,6 +167,7 @@ export default function Storefront() {
     setWa('')
     setAddress('')
     setError(null)
+    removeVoucher()
   }
 
   return (
@@ -142,6 +204,12 @@ export default function Storefront() {
               <div className="summary-row">
                 <span>{t('Delivery fee', '送货费')}</span>
                 <span>RM {success.fee.toFixed(2)}</span>
+              </div>
+            )}
+            {success.discount > 0 && (
+              <div className="summary-row">
+                <span>{t('Voucher', '优惠券')}</span>
+                <span>−RM {success.discount.toFixed(2)}</span>
               </div>
             )}
             <div className="summary-row total">
@@ -293,6 +361,37 @@ export default function Storefront() {
 
       <hr className="divider" />
 
+      {/* Voucher */}
+      <div className="section">
+        <div className="section-label">{t('Voucher', '优惠券')}</div>
+        {appliedVoucher ? (
+          <div className="summary-row">
+            <span>{t('Applied', '已应用')}: <strong>{appliedVoucher.code}</strong></span>
+            <button type="button" className="reset-link" onClick={removeVoucher}>
+              {t('Remove', '移除')}
+            </button>
+          </div>
+        ) : (
+          <div className="field" style={{ display: 'flex', gap: '0.5rem' }}>
+            <input
+              type="text"
+              value={voucherInput}
+              onChange={e => setVoucherInput(e.target.value)}
+              placeholder={t('Enter voucher code', '输入优惠码')}
+              style={{ flex: 1 }}
+            />
+            <button type="button" className="radio-opt" onClick={applyVoucher}>
+              {t('Apply', '应用')}
+            </button>
+          </div>
+        )}
+        {voucherMsg && (
+          <p className="mm-sf-voucher-msg" style={{ marginTop: '0.5rem' }}>{voucherMsg}</p>
+        )}
+      </div>
+
+      <hr className="divider" />
+
       {/* Live order summary */}
       <div className="summary-card">
         <div className="summary-title">{t('Order Summary', '订单摘要')}</div>
@@ -318,6 +417,12 @@ export default function Storefront() {
               <div className="summary-row">
                 <span>{t('Delivery fee', '送货费')}</span>
                 <span>RM {fee.toFixed(2)}</span>
+              </div>
+            )}
+            {discount > 0 && (
+              <div className="summary-row">
+                <span>{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
+                <span>−RM {discount.toFixed(2)}</span>
               </div>
             )}
             <div className="summary-row total">

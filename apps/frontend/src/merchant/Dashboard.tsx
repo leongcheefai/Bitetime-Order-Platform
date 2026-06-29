@@ -3,12 +3,14 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import ProductsManager from './ProductsManager'
+import VouchersManager from './VouchersManager'
 import ShopSettings from './ShopSettings'
 import OrdersView from './OrdersView'
 import CustomersView from './CustomersView'
 
 const SECTIONS = [
   { key: 'products',  en: 'Products',  zh: '产品' },
+  { key: 'vouchers',  en: 'Vouchers',  zh: '优惠券' },
   { key: 'settings',  en: 'Settings',  zh: '设置' },
   { key: 'orders',    en: 'Orders',    zh: '订单' },
   { key: 'customers', en: 'Customers', zh: '顾客' },
@@ -44,6 +46,7 @@ export default function Dashboard() {
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={section} variants={variants} initial="initial" animate="animate" exit="exit">
           {section === 'products'  && <ProductsManager />}
+          {section === 'vouchers'  && <VouchersManager />}
           {section === 'settings'  && <ShopSettings />}
           {section === 'orders'    && <OrdersView />}
           {section === 'customers' && <CustomersView />}

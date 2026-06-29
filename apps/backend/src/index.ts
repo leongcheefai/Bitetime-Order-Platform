@@ -5,6 +5,7 @@ import { env } from './env.js'
 import { admin, getUserFromToken } from './supabase.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
 import { upsertBilling, setMerchantStatus, billingFromSubscription } from './billing.js'
+import { notifyOrderPlaced, telegramSend } from './notify.js'
 
 const app = new Hono()
 
@@ -69,6 +70,16 @@ app.post('/api/checkout', async (c) => {
   })
 
   return c.json({ url: session.url })
+})
+
+// ── Order notification — sends Telegram server-side ────────────────────────────
+// The customer is anonymous; abuse is bounded by requiring a real order. The
+// token is read from merchant_secrets (service role) and never reaches the client.
+app.post('/api/notify/order', async (c) => {
+  const { merchantId, orderNumber } = await c.req.json().catch(() => ({}))
+  const result = await notifyOrderPlaced(admin, telegramSend, { merchantId, orderNumber })
+  if (!result.ok) return c.json(result, result.error === 'order not found' ? 404 : 400)
+  return c.json(result)
 })
 
 // ── Stripe webhook — authoritative subscription state ──────────────────────────
