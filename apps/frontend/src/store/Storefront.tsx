@@ -108,10 +108,10 @@ export default function Storefront() {
     setError(null)
   }
 
-  // ── Success view ──────────────────────────────────────────────────────────
-  if (success) {
-    return (
-      <AnimatePresence mode="wait">
+  return (
+    <AnimatePresence mode="wait">
+      {success ? (
+        // ── Success view ──────────────────────────────────────────────────────
         <motion.div key="success" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
         <div className="mm-sf-header">
           <div className="brand mm-sf-brand-left">
@@ -169,14 +169,9 @@ export default function Storefront() {
           </button>
         </div>
         </motion.div>
-      </AnimatePresence>
-    )
-  }
-
-  // ── Order form ────────────────────────────────────────────────────────────
-  return (
-    <AnimatePresence mode="wait">
-      <motion.div key="form" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
+      ) : (
+        // ── Order form ──────────────────────────────────────────────────────
+        <motion.div key="form" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
       {/* Header with lang switch */}
       <div className="mm-sf-header">
         <div className="brand mm-sf-brand-left">
@@ -344,7 +339,8 @@ export default function Storefront() {
       >
         {busy ? t('Placing order…', '提交中…') : t('Place Order', '提交订单')}
       </button>
-      </motion.div>
+        </motion.div>
+      )}
     </AnimatePresence>
   )
 }
