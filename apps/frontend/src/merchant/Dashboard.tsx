@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
 import { useSession } from '../SessionContext'
+import { usePageVariants } from '../motion'
 import ProductsManager from './ProductsManager'
 import ShopSettings from './ShopSettings'
 import OrdersView from './OrdersView'
@@ -15,6 +17,7 @@ const SECTIONS = [
 export default function Dashboard() {
   const { t, merchant } = useSession()
   const [section, setSection] = useState<string>('products')
+  const variants = usePageVariants()
   return (
     <div className="form-wrap form-wrap--wide">
       <div className="mm-dash-header">
@@ -38,10 +41,14 @@ export default function Dashboard() {
           </button>
         ))}
       </nav>
-      {section === 'products'  && <ProductsManager />}
-      {section === 'settings'  && <ShopSettings />}
-      {section === 'orders'    && <OrdersView />}
-      {section === 'customers' && <CustomersView />}
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.div key={section} variants={variants} initial="initial" animate="animate" exit="exit">
+          {section === 'products'  && <ProductsManager />}
+          {section === 'settings'  && <ShopSettings />}
+          {section === 'orders'    && <OrdersView />}
+          {section === 'customers' && <CustomersView />}
+        </motion.div>
+      </AnimatePresence>
     </div>
   )
 }
