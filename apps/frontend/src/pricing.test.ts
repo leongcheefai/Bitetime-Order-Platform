@@ -56,6 +56,16 @@ describe('priceOrder', () => {
     expect(r.total).toBe(25)
   })
 
+  it('resolvedShipping overrides region logic (storefront with no state)', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'delivery', rates: RATES, now: NOW,
+      resolvedShipping: 8,
+    })
+    expect(r.shipping).toBe(8)
+    expect(r.total).toBe(18)
+  })
+
   it('percent voucher discounts items + shipping', () => {
     const r = priceOrder({
       products: [product('a', 100)], cart: { a: 1 },

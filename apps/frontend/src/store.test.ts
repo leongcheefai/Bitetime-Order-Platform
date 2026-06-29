@@ -83,6 +83,9 @@ import {
   fetchMerchantOrders,
   setOrderStatus,
   fetchMerchantCustomers,
+  voucherFromRow,
+  fetchMerchantVouchers,
+  redeemVoucher,
 } from './store'
 import * as supabaseModule from './supabase'
 
@@ -584,5 +587,52 @@ describe('fetchMerchantCustomers', () => {
     expect(result).toHaveLength(1)
     expect(result[0].orderCount).toBe(2)
     expect(result[0].name).toBe('Charlie')
+  })
+})
+
+// ── Multi-tenant vouchers ─────────────────────────────────────────────────────
+
+describe('voucherFromRow', () => {
+  it('maps table columns onto the Voucher shape', () => {
+    expect(voucherFromRow({
+      id: 'v1', code: 'SAVE10', kind: 'percent', amount: '10',
+      max_uses: 50, used_by: ['a@x.com'],
+    })).toEqual({
+      id: 'v1', code: 'SAVE10', type: 'percent', value: 10,
+      maxUses: 50, usedBy: ['a@x.com'],
+    })
+  })
+  it('defaults usedBy to an empty array and tolerates null max_uses', () => {
+    const v = voucherFromRow({ id: 'v2', code: 'X', kind: 'fixed', amount: 5, max_uses: null, used_by: null })
+    expect(v.usedBy).toEqual([])
+    expect(v.maxUses).toBeNull()
+  })
+})
+
+describe('fetchMerchantVouchers', () => {
+  it('returns [] for a missing merchantId without hitting the DB', async () => {
+    expect(await fetchMerchantVouchers('')).toEqual([])
+    expect(__mocks.from).not.toHaveBeenCalled()
+  })
+  it('maps rows scoped to the merchant', async () => {
+    __mocks.eq.mockResolvedValueOnce({ data: [{ id: 'v1', code: 'A', kind: 'fixed', amount: 5, used_by: [] }], error: null })
+    const result = await fetchMerchantVouchers('m1')
+    expect(result).toEqual([{ id: 'v1', code: 'A', type: 'fixed', value: 5, maxUses: null, usedBy: [] }])
+  })
+  it('returns [] on error', async () => {
+    __mocks.eq.mockResolvedValueOnce({ data: null, error: { message: 'boom' } })
+    expect(await fetchMerchantVouchers('m1')).toEqual([])
+  })
+})
+
+describe('redeemVoucher', () => {
+  it('calls the redeem_voucher RPC with a lowercased entry', async () => {
+    __mocks.rpc.mockResolvedValueOnce({ error: null })
+    await redeemVoucher('m1', 'SAVE10', 'ME@X.com')
+    expect(__mocks.rpc).toHaveBeenCalledWith('redeem_voucher', { p_merchant: 'm1', p_code: 'SAVE10', p_entry: 'me@x.com' })
+  })
+  it('throws when the RPC errors', async () => {
+    __mocks.rpc.mockResolvedValueOnce({ error: { message: 'fully used' } })
+    await expect(redeemVoucher('m1', 'X', 'a@x.com')).rejects.toBeTruthy()
   })
 })

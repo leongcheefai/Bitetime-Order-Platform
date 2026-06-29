@@ -447,6 +447,42 @@ export async function deleteVoucher(code: string) {
   return updated;
 }
 
+// ── Multi-tenant vouchers (per-merchant `vouchers` table) ─────────────────────
+// The legacy functions above read a single-tenant `settings` blob. These read
+// the merchant-scoped `vouchers` table and map its columns onto the Voucher
+// shape the pricing module expects.
+
+export function voucherFromRow(row: any): Voucher {
+  return {
+    id: row.id,
+    code: row.code,
+    type: row.kind,                 // 'percent' | 'fixed'
+    value: Number(row.amount),
+    maxUses: row.max_uses ?? null,
+    usedBy: Array.isArray(row.used_by) ? row.used_by : [],
+  } as Voucher;
+}
+
+export async function fetchMerchantVouchers(merchantId: string): Promise<Voucher[]> {
+  if (!merchantId) return [];
+  const { data, error } = await supabase
+    .from('vouchers').select('*').eq('merchant_id', merchantId);
+  if (error) return [];
+  return (data ?? []).map(voucherFromRow);
+}
+
+// Record a redemption. Customers cannot write the vouchers table under RLS, so
+// this goes through a security-definer RPC that enforces max_uses / one-per-
+// customer server-side.
+export async function redeemVoucher(merchantId: string, code: string, entry: string) {
+  const { error } = await supabase.rpc('redeem_voucher', {
+    p_merchant: merchantId,
+    p_code: code,
+    p_entry: (entry || '').toLowerCase(),
+  });
+  if (error) throw error;
+}
+
 // ── Referral program ─────────────────────────────────────────────────────────
 // A member's referral code is the first 8 hex chars of their profile UUID,
 // so the code itself identifies the referrer. Also stored in

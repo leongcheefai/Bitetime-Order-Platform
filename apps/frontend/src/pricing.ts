@@ -30,6 +30,7 @@ export interface PriceInput {
   state?: string | null
   rates: { WM: number; EM: number }
   samedayFee?: number
+  resolvedShipping?: number // caller-resolved flat fee; wins over region logic
   voucher?: Voucher | null
   referral?: { amount: number; enabled: boolean } | null
   extraLines?: PriceLine[]
@@ -67,7 +68,7 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
   if (input.extraLines) lines.push(...input.extraLines)
 
   const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0)
-  const shipping = shippingFee(input.mode, input.state, input.rates, input.samedayFee)
+  const shipping = input.resolvedShipping ?? shippingFee(input.mode, input.state, input.rates, input.samedayFee)
 
   const beforeDiscount = subtotal + shipping
   const discount = voucherDiscount(input.voucher, beforeDiscount)
