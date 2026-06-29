@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
+import { useToast } from '../ToastContext'
 import { fetchProducts, placeOrder } from '../store'
 import type { Product } from '../types'
 
@@ -26,6 +27,7 @@ export default function Storefront() {
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
   const { lang, setLang, t } = useSession()
   const viewVariants = usePageVariants()
+  const toast = useToast()
 
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }
@@ -88,8 +90,10 @@ export default function Storefront() {
         total,
       })
       setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, total })
+      toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
       setError(err.message || t('Failed to place order. Please try again.', '下单失败，请重试。'))
+      toast.error(t('Failed to place order. Please try again.', '下单失败，请重试。'))
     } finally {
       setBusy(false)
     }
