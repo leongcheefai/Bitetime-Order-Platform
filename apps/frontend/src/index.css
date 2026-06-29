@@ -1375,6 +1375,9 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 .skeleton-page-head { display: flex; flex-direction: column; gap: 10px; }
 .skeleton-page-tabs { display: flex; gap: 10px; flex-wrap: wrap; }
 .skeleton-page-body { margin-top: 4px; }
+.skeleton-form .brand { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.skeleton-form-card { display: flex; flex-direction: column; gap: 14px; }
+.skeleton-form-field { display: flex; flex-direction: column; gap: 7px; }
 
 /* ── Toast / Toaster ──────────────────────────────────────────────────────── */
 .toaster { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: var(--z-toast, 9999); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: max-content; max-width: calc(100vw - 2rem); }
