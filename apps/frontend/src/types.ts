@@ -15,11 +15,6 @@ export type OrderStatus = 'new' | 'preparing' | 'ready' | 'completed' | 'cancell
 
 export type Translate = (en: string, zh?: string) => string
 
-export interface LatLng {
-  lat: number
-  lng: number
-}
-
 export interface Merchant {
   id: string
   name: string
@@ -91,18 +86,6 @@ export interface Voucher {
   used?: boolean
   usedBy?: string[]
   maxUses?: number | string | null
-  [key: string]: any
-}
-
-export interface SamedayConfig {
-  enabled?: boolean
-  origin?: string
-  originLat?: number | null
-  originLng?: number | null
-  base?: number
-  perKm?: number
-  maxKm?: number
-  slots?: Array<{ label: string; cutoff: number }>
   [key: string]: any
 }
 
