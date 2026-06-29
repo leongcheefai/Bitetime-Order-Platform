@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'motion/react'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
+import { usePageVariants } from '../motion'
+import { useToast } from '../ToastContext'
 import { fetchProducts, placeOrder } from '../store'
 import type { Product } from '../types'
 
@@ -23,6 +26,8 @@ export default function Storefront() {
   const { merchant: merchantNullable } = useMerchant()
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
   const { lang, setLang, t } = useSession()
+  const viewVariants = usePageVariants()
+  const toast = useToast()
 
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }
@@ -85,8 +90,10 @@ export default function Storefront() {
         total,
       })
       setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, total })
+      toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
       setError(err.message || t('Failed to place order. Please try again.', '下单失败，请重试。'))
+      toast.error(t('Failed to place order. Please try again.', '下单失败，请重试。'))
     } finally {
       setBusy(false)
     }
@@ -104,7 +111,8 @@ export default function Storefront() {
   // ── Success view ──────────────────────────────────────────────────────────
   if (success) {
     return (
-      <div className="form-wrap">
+      <AnimatePresence mode="wait">
+        <motion.div key="success" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
         <div className="mm-sf-header">
           <div className="brand mm-sf-brand-left">
             <h1>{merchant.name}</h1>
@@ -160,13 +168,15 @@ export default function Storefront() {
             {t('Place another order', '再下一单')}
           </button>
         </div>
-      </div>
+        </motion.div>
+      </AnimatePresence>
     )
   }
 
   // ── Order form ────────────────────────────────────────────────────────────
   return (
-    <div className="form-wrap">
+    <AnimatePresence mode="wait">
+      <motion.div key="form" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
       {/* Header with lang switch */}
       <div className="mm-sf-header">
         <div className="brand mm-sf-brand-left">
@@ -334,6 +344,7 @@ export default function Storefront() {
       >
         {busy ? t('Placing order…', '提交中…') : t('Place Order', '提交订单')}
       </button>
-    </div>
+      </motion.div>
+    </AnimatePresence>
   )
 }

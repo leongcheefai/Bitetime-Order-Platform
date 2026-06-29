@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { fetchMerchantCustomers } from '../store'
+import { SkeletonText } from '../components/Loaders'
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '—'
@@ -16,7 +17,7 @@ export default function CustomersView() {
   }, [merchant!.id])
 
   if (customers === null) {
-    return <p className="mm-orders-loading">{t('Loading…', '加载中…')}</p>
+    return <div className="admin-panel"><SkeletonText lines={4} /></div>
   }
 
   if (customers.length === 0) {

@@ -91,6 +91,7 @@
   --z-drawer: 200;         /* slide-in drawer */
   --z-modal: 300;          /* modal dialog */
   --z-modal-popover: 400;  /* dropdown rendered above a modal */
+  --z-toast: 500;          /* transient toast cues, above all overlays */
 
   /* ── Radii: soft & hospitable geometry ─────────────────────────────────── */
   --radius-xs: 4px;

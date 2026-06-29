@@ -3,6 +3,7 @@ import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useSession } from '../SessionContext'
 import PendingScreen from './PendingScreen'
 import Dashboard from './Dashboard'
+import { PageSkeleton } from '../components/Loaders'
 
 export default function MerchantHome() {
   const { slug } = useParams()
@@ -37,7 +38,7 @@ export default function MerchantHome() {
   if (slug) {
     if (role !== 'superadmin') return <Navigate to="/" replace />
     const ready = resolved.slug === slug
-    if (!ready || !merchant) return <div className="form-wrap">{t('Loading shop…', '加载中…')}</div>
+    if (!ready || !merchant) return <PageSkeleton />
     if (resolved.notFound) return <div className="form-wrap"><h2>{t('Shop not found', '找不到店铺')}</h2></div>
     return <Dashboard />
   }
