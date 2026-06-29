@@ -1371,6 +1371,10 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 .spinner { width: 18px; height: 18px; border: 2px solid var(--color-clay-border); border-top-color: var(--color-oxblood); border-radius: 50%; animation: spin 0.7s linear infinite; }
 .spinner-label { font-family: 'DM Sans', sans-serif; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.skeleton-page { display: flex; flex-direction: column; gap: 18px; padding-top: 8px; }
+.skeleton-page-head { display: flex; flex-direction: column; gap: 10px; }
+.skeleton-page-tabs { display: flex; gap: 10px; flex-wrap: wrap; }
+.skeleton-page-body { margin-top: 4px; }
 
 /* ── Toast / Toaster ──────────────────────────────────────────────────────── */
 .toaster { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: var(--z-toast, 9999); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: max-content; max-width: calc(100vw - 2rem); }
