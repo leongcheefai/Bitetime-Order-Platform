@@ -31,7 +31,7 @@ Tests use Vitest (added during the multi-merchant build). Pure logic and `store.
 
 Multi-merchant ordering SaaS. React 19 + Vite + React Router (`react-router-dom` v7). Many independent shops, isolated per tenant by Postgres RLS. No global state library — auth/role/lang live in React context.
 
-`main.tsx` mounts `AppRouter`. **`src/App.tsx` is the legacy single-tenant single-page app — no longer mounted, kept only for reference.** Do not extend it; new work goes through the router tree below.
+`main.tsx` mounts `AppRouter`. The legacy single-tenant single-page app (`src/App.tsx` and its components) has been **deleted**; all work goes through the router tree below.
 
 ### Routing (`src/AppRouter.tsx`)
 
@@ -72,13 +72,13 @@ All Supabase calls go through `store.ts`. Shared domain types (Merchant, Profile
 
 ### Order flow
 
-`Storefront` collects items, delivery mode, date, voucher → `saveOrder()` → sends Telegram notification (per-merchant `tgToken`/`tgChatId`) and optionally EmailJS → confirms order number.
+`Storefront` collects items, delivery mode, voucher → `priceOrder()` for the total → `placeOrder()` (inserts via the `next_order_number` RPC) → `redeemVoucher()` records voucher use → `notifyOrderPlacedRemote()` triggers the backend Telegram send → confirms order number. The Telegram bot token never reaches the browser: the backend (`POST /api/notify/order`) reads it from `merchant_secrets` and sends server-side.
 
 Order numbers: `<PREFIX>-YYYYMMDD-XXXX`. Prefix = first two alphanumerics of the slug, uppercased (`src/orderPrefix.ts`). Daily counter is per-merchant via the DB `next_order_number` function.
 
-### Shipping / postcodes
+### Shipping / pricing
 
-`src/postcodes.ts` maps Malaysian postcodes → city. `lookupPostcode(code)` returns `{ city, state }` or `null`. Rates from per-merchant settings: `WM` (West Malaysia) and `EM` (East Malaysia).
+All order totals come from one pure module, `src/pricing.ts` — `priceOrder()` (shipping region, promo, voucher, referral, rounding) and `voucherError()`. Shipping rates are per-merchant: `WM` (West Malaysia) and `EM` (East Malaysia), with `EM_STATES` selecting the region; a storefront that collects no state passes `resolvedShipping` (flat fee). See `CONTEXT.md → Order pricing`.
 
 ### Localisation
 
