@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { DayPicker } from 'react-day-picker';
 import { format } from 'date-fns';
-import emailjs from '@emailjs/browser';
 import 'react-day-picker/dist/style.css';
 import { lookupPostcode } from '../postcodes';
 import { saveOrder, loadVouchers, markVoucherUsed, voucherFullyUsed, getNextOrderNumber, fetchProductSales, DEFAULTS, fetchProfileByReferralCode, isNewCustomer, loadReferralRewards, saveReferralRewards } from '../store';
 import { quoteSameday } from '../geo';
 import { priceOrder, voucherError, type PriceInput, type VoucherErrorCode } from '../pricing';
+import { notifyOrderPlaced, liveTransport } from '../notifications';
 import type { Lang, Product, Voucher, Settings, SamedayConfig } from '../types';
 import type { User } from '@supabase/supabase-js';
 
@@ -468,35 +468,32 @@ export default function OrderForm({ settings, lang, user, onSuccess, savedAddres
         setPendingGift(null);
       }
 
-      if (user?.email && settings.ejsServiceId && settings.ejsTemplateId && settings.ejsPublicKey) {
-        const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${money(i.price * i.qty)}`).join('\n');
-        const fullAddress = needsAddress
-          ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')
-          : null;
-        const orderDetails = needsAddress
-          ? `${orderSummary}\n\nDelivery address: ${fullAddress}`
-          : orderSummary;
-        emailjs.send(
-          settings.ejsServiceId,
-          settings.ejsTemplateId,
-          {
+      const orderSummary = items.map(i => `${i.name} x ${i.qty} — RM ${money(i.price * i.qty)}`).join('\n');
+      const fullAddress = needsAddress
+        ? [addrLine1, addrLine2, city, postcode, state].filter(Boolean).join(', ')
+        : null;
+      const orderDetails = needsAddress ? `${orderSummary}\n\nDelivery address: ${fullAddress}` : orderSummary;
+
+      // Notify through the seam — best-effort: failures are surfaced, not swallowed,
+      // and never block a placed order.
+      const results = await notifyOrderPlaced(liveTransport, {
+        telegram: { token: settings.tgToken, chatId: settings.tgChatId },
+        email: { serviceId: settings.ejsServiceId, publicKey: settings.ejsPublicKey },
+      }, {
+        telegram: { text: msg },
+        email: (user?.email && settings.ejsTemplateId) ? {
+          templateId: settings.ejsTemplateId,
+          params: {
             to_name: custName,
             to_email: user.email,
             order_number: orderNumber,
             order_summary: orderDetails,
-            order_total: `RM ${money(computeTotal())}`,
+            order_total: `RM ${money(bd.total)}`,
             order_type: mode === 'delivery' ? 'Delivery' : mode === 'sameday' ? `Same-day delivery (${sdSlot})` : 'Self-pickup',
           },
-          settings.ejsPublicKey,
-        ).catch(() => {});
-      }
-
-      // Telegram notify — best-effort, failure does not block order
-      fetch(`https://api.telegram.org/bot${settings.tgToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: settings.tgChatId, text: msg, parse_mode: 'Markdown' }),
-      }).catch(() => {});
+        } : undefined,
+      });
+      results.filter(r => !r.ok).forEach(r => console.warn(`Order notify ${r.channel} failed: ${r.error}`));
 
       onSuccess(orderNumber, { items, total: computeTotal(), mode, slot: mode === 'sameday' ? sdSlot : null, shippingFee: currentShippingFee(), voucher: appliedVoucher ? appliedVoucher.code : null });
     } catch {

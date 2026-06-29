@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import emailjs from '@emailjs/browser';
+import { notifyOrderShipped, liveTransport } from '../notifications';
 import { DayPicker } from 'react-day-picker';
 import { format } from 'date-fns';
 import 'react-day-picker/dist/style.css';
@@ -279,17 +279,20 @@ export default function OrderList({ lang, settings = {} }: OrderListProps) {
     if (!order?.user_id) return;
     const profile = await fetchProfileByUserId(order.user_id);
     if (!profile?.email) return;
-    emailjs.send(
-      settings.ejsServiceId,
-      settings.ejsShippingTemplateId,
-      {
-        to_name: order.customer_name || profile.name || '',
-        to_email: profile.email,
-        order_number: orderNumber,
-        tracking_number: trackingNumber,
+    const results = await notifyOrderShipped(liveTransport, {
+      email: { serviceId: settings.ejsServiceId, publicKey: settings.ejsPublicKey },
+    }, {
+      email: {
+        templateId: settings.ejsShippingTemplateId,
+        params: {
+          to_name: order.customer_name || profile.name || '',
+          to_email: profile.email,
+          order_number: orderNumber,
+          tracking_number: trackingNumber,
+        },
       },
-      settings.ejsPublicKey,
-    ).catch(() => {});
+    });
+    results.filter(r => !r.ok).forEach(r => console.warn(`Shipping notify ${r.channel} failed: ${r.error}`));
   }
 
   async function handleStatusChange(orderNumber: string, newStatus: string) {
