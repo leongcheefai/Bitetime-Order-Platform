@@ -2,19 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Monorepo
+
+pnpm + Turborepo. Two workspaces: `@bitetime/frontend` (`apps/frontend`, Vite+React) and `@bitetime/backend` (`apps/backend`, Hono+Stripe billing — also holds `supabase/`, `tests/`, `scripts/`). `docs/` stays at the repo root. Paths below are relative to `apps/frontend/` unless prefixed.
+
 ## Commands
 
+Run from the repo root; turbo fans out to workspaces. `--filter` targets one.
+
 ```bash
-npm run dev        # start Vite dev server (localhost:5173)
-npm run build      # production build → dist/
-npm run lint       # ESLint check
-npm run preview    # serve dist/ locally
-npm run deploy     # production build (deploy via Vercel)
-npm test           # Vitest unit tests (run once)
-npm run test:rls   # RLS tenant-isolation integration tests (needs local Supabase env vars)
+pnpm dev           # all dev servers (frontend :5173, backend :8787)
+pnpm build         # production build → apps/frontend/dist/
+pnpm lint          # ESLint check
+pnpm deploy        # frontend production build (deploy via Vercel)
+pnpm test          # Vitest unit tests across workspaces
+pnpm --filter @bitetime/frontend preview   # serve built dist/ locally
+pnpm --filter @bitetime/backend dev         # billing server only
+pnpm --filter @bitetime/backend test        # RLS tenant-isolation tests (needs local Supabase env vars)
 ```
 
-Tests use Vitest (added during the multi-merchant build). Pure logic and `store.js` functions have unit tests (`src/*.test.js`); tenant isolation is covered by integration tests in `tests/rls/` that need a running local Supabase (`supabase start`) and its keys as env vars. UI is verified by running the app (run-and-verify), not component tests.
+Tests use Vitest (added during the multi-merchant build). Pure logic and `store.js` functions have unit tests (`apps/frontend/src/*.test.js`); tenant isolation is covered by integration tests in `apps/backend/tests/rls/` that need a running local Supabase (`supabase start`) and its keys as env vars. UI is verified by running the app (run-and-verify), not component tests.
 
 ## Architecture
 
@@ -46,7 +53,7 @@ Sign up with a shop name → auto slug: pinyin transliteration for Chinese names
 
 ### Data layer (`src/store.js`)
 
-All Supabase calls go through `store.js`. Postgres tables (`supabase/migrations/`), all tenant-scoped by RLS:
+All Supabase calls go through `store.js`. Postgres tables (`apps/backend/supabase/migrations/`), all tenant-scoped by RLS:
 
 | Table | Purpose |
 |-------|---------|
@@ -75,4 +82,4 @@ No i18n library. Every string is passed as `t(englishString, chineseString)` whe
 
 ### Deployment
 
-Deployed via Vercel. `npm run deploy` just runs `npm run build`. Vite `base` is `/`.
+Deployed via Vercel; set the project **Root Directory** to `apps/frontend`. `pnpm deploy` runs the frontend `vite build`. Vite `base` is `/`.

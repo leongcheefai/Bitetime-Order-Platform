@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "bitetime-dev",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@bitetime/frontend", "dev"],
       "port": 5173,
       "autoPort": false
     }

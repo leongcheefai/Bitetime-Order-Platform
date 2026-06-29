@@ -7,15 +7,24 @@ isolated per tenant. A platform super-admin approves and suspends merchants.
 Built with Vite + React 19 + React Router, backed by Supabase (Auth + Postgres
 with Row-Level Security). Deployed on Vercel.
 
+## Monorepo
+
+pnpm + Turborepo. Two workspaces:
+
+| Workspace | Path | What |
+|-----------|------|------|
+| `@bitetime/frontend` | `apps/frontend` | Vite + React storefront/dashboard |
+| `@bitetime/backend` | `apps/backend` | Hono + Stripe billing server; also holds `supabase/`, `tests/`, `scripts/` |
+
 ## Quick start
 
 ```bash
-npm install
-npm run dev          # Vite dev server → http://localhost:5173
+pnpm install
+pnpm dev             # turbo runs frontend (→ http://localhost:5173) + backend (→ :8787)
 ```
 
-The app reads Supabase config from env vars (falls back to a hosted project if
-unset). Create `.env.local`:
+The frontend reads Supabase config from env vars (falls back to a hosted project
+if unset). Create `apps/frontend/.env.local`:
 
 ```
 VITE_SUPABASE_URL=<your-supabase-url>
@@ -24,15 +33,23 @@ VITE_SUPABASE_KEY=<your-supabase-publishable-key>
 
 ## Commands
 
+Run from the repo root (turbo fans out to workspaces):
+
 ```bash
-npm run dev        # start Vite dev server (localhost:5173)
-npm run build      # production build → dist/
-npm run preview    # serve dist/ locally
-npm run lint       # ESLint check
-npm run deploy     # production build (deploy via Vercel)
-npm test           # Vitest unit tests (run once)
-npm run test:rls   # RLS tenant-isolation integration tests (needs local Supabase)
-npm run test:watch # Vitest in watch mode
+pnpm dev           # start all dev servers (frontend :5173, backend :8787)
+pnpm build         # production build → apps/frontend/dist/
+pnpm lint          # ESLint check
+pnpm test          # Vitest unit tests across workspaces
+pnpm deploy        # frontend production build (deploy via Vercel)
+```
+
+Target a single workspace with `--filter`:
+
+```bash
+pnpm --filter @bitetime/frontend dev
+pnpm --filter @bitetime/backend dev      # billing server only
+pnpm --filter @bitetime/frontend preview # serve built dist/ locally
+pnpm --filter @bitetime/backend test     # RLS tenant-isolation tests (needs local Supabase)
 ```
 
 ## How it works
@@ -112,34 +129,40 @@ No i18n library. Every string is `t(english, chinese)`; `t` and the `lang`
 RLS tests need a running local Supabase and its keys:
 
 ```bash
+cd apps/backend
 supabase start
-SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... npm run test:rls
+SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... pnpm --filter @bitetime/backend test
 ```
 
-Config (`supabase/config.toml`) uses custom ports (API `55321`, db `55322`) so it
-can coexist with other local instances. Migrations live in `supabase/migrations/`.
+Config (`apps/backend/supabase/config.toml`) uses custom ports (API `55321`, db
+`55322`) so it can coexist with other local instances. Migrations live in
+`apps/backend/supabase/migrations/`.
 
-Promote a user to super-admin with `scripts/promote-superadmin.sh` (or run
-`scripts/promote_superadmin.sql` in the SQL editor).
+Promote a user to super-admin with `apps/backend/scripts/promote-superadmin.sh`
+(or run `apps/backend/scripts/promote_superadmin.sql` in the SQL editor).
 
 ## Project layout
 
 ```
-src/
-  AppRouter.jsx        route table
-  SessionContext.jsx   auth + role + lang
-  MerchantContext.jsx  resolve shop by slug for storefronts
-  RequireRole.jsx      route guard
-  marketing/           landing page
-  merchant/            signup, login, dashboard (orders, products, settings…)
-  store/               customer-facing storefront
-  admin/               super-admin merchant management
-  components/          shared UI (order form, vouchers, lists…)
-  store.js             all Supabase calls
-  slug.js orderPrefix.js orderNumber.js geo.js postcodes.js
-supabase/migrations/   schema, RLS, multitenant DML grants
-tests/rls/             tenant-isolation integration tests
-docs/                  PRD + planning
+apps/frontend/
+  src/
+    AppRouter.jsx        route table
+    SessionContext.jsx   auth + role + lang
+    MerchantContext.jsx  resolve shop by slug for storefronts
+    RequireRole.jsx      route guard
+    marketing/           landing page
+    merchant/            signup, login, dashboard (orders, products, settings…)
+    store/               customer-facing storefront
+    admin/               super-admin merchant management
+    components/          shared UI (order form, vouchers, lists…)
+    store.js             all Supabase calls
+    slug.js orderPrefix.js orderNumber.js geo.js postcodes.js
+apps/backend/
+  src/                   Hono + Stripe billing server
+  supabase/migrations/   schema, RLS, multitenant DML grants
+  tests/rls/             tenant-isolation integration tests
+  scripts/               superadmin promotion helpers
+docs/                    PRD + planning
 ```
 
 > Note: `src/App.jsx` is the legacy single-tenant single-page app. It is no
@@ -147,4 +170,5 @@ docs/                  PRD + planning
 
 ## Deployment
 
-Deployed via Vercel. `npm run deploy` runs the production build; Vite `base` is `/`.
+Deployed via Vercel. `pnpm deploy` runs the frontend production build; Vite `base`
+is `/`. Set the Vercel project **Root Directory** to `apps/frontend`.
