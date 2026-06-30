@@ -6,6 +6,127 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── Brand tokens → Tailwind theme. Values live in tokens.css (canonical).
+   `inline` means utilities emit var(--color-*) and resolve against :root. ── */
+@theme inline {
+  /* Surfaces / neutrals */
+  --color-cream: var(--color-cream);
+  --color-white: var(--color-white);
+  --color-surface-raised: var(--color-surface-raised);
+  --color-surface-high: var(--color-surface-high);
+  --color-surface-sunken: var(--color-surface-sunken);
+  --color-surface-sunken-hover: var(--color-surface-sunken-hover);
+  --color-surface-warm: var(--color-surface-warm);
+  --color-surface-warm-alt: var(--color-surface-warm-alt);
+  --color-surface-cream-soft: var(--color-surface-cream-soft);
+  --color-divider: var(--color-divider);
+
+  /* Ink / text */
+  --color-ink: var(--color-ink);
+  --color-ink-soft: var(--color-ink-soft);
+  --color-ink-faint: var(--color-ink-faint);
+  --color-text-tertiary: var(--color-text-tertiary);
+
+  /* Oxblood */
+  --color-oxblood: var(--color-oxblood);
+  --color-oxblood-deep: var(--color-oxblood-deep);
+  --color-oxblood-deeper: var(--color-oxblood-deeper);
+  --color-oxblood-light: var(--color-oxblood-light);
+  --color-oxblood-tint: var(--color-oxblood-tint);
+  --color-oxblood-tint-soft: var(--color-oxblood-tint-soft);
+
+  /* Rose / clay */
+  --color-rose-muted: var(--color-rose-muted);
+  --color-rose-deep: var(--color-rose-deep);
+  --color-rose-border: var(--color-rose-border);
+  --color-rose-tint: var(--color-rose-tint);
+  --color-rose-pale: var(--color-rose-pale);
+  --color-rose-hover: var(--color-rose-hover);
+  --color-clay-muted: var(--color-clay-muted);
+  --color-clay-border: var(--color-clay-border);
+  --color-clay-rose: var(--color-clay-rose);
+  --color-clay-faint: var(--color-clay-faint);
+  --color-clay-warm: var(--color-clay-warm);
+  --color-clay-pale: var(--color-clay-pale);
+
+  /* Gold (tracking/AWB) */
+  --color-gold-accent: var(--color-gold-accent);
+  --color-gold-deep: var(--color-gold-deep);
+  --color-gold-deeper: var(--color-gold-deeper);
+  --color-gold-border: var(--color-gold-border);
+  --color-gold-bg: var(--color-gold-bg);
+
+  /* Status: success / info / prep / warn / done / danger */
+  --color-success-fg: var(--color-success-fg);
+  --color-success-bg: var(--color-success-bg);
+  --color-success-strong: var(--color-success-strong);
+  --color-success-deep: var(--color-success-deep);
+  --color-success-border: var(--color-success-border);
+  --color-success-bg-soft: var(--color-success-bg-soft);
+  --color-success-bg-alt: var(--color-success-bg-alt);
+  --color-info-fg: var(--color-info-fg);
+  --color-info-bg: var(--color-info-bg);
+  --color-info-blue-fg: var(--color-info-blue-fg);
+  --color-info-blue-bg: var(--color-info-blue-bg);
+  --color-prep-fg: var(--color-prep-fg);
+  --color-prep-bg: var(--color-prep-bg);
+  --color-prep-fg-alt: var(--color-prep-fg-alt);
+  --color-prep-bg-alt: var(--color-prep-bg-alt);
+  --color-warn-fg: var(--color-warn-fg);
+  --color-warn-bg: var(--color-warn-bg);
+  --color-warn-fg-alt: var(--color-warn-fg-alt);
+  --color-warn-bg-alt: var(--color-warn-bg-alt);
+  --color-status-done-fg: var(--color-status-done-fg);
+  --color-danger: var(--color-danger);
+  --color-danger-fg: var(--color-danger-fg);
+  --color-danger-bg: var(--color-danger-bg);
+  --color-danger-border: var(--color-danger-border);
+
+  /* Radii — brand scale (overrides Tailwind defaults) */
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+  --radius-pill: var(--radius-pill);
+  --radius-round: var(--radius-round);
+
+  /* Z-index scale → z-* utilities */
+  --z-index-notif-panel: var(--z-notif-panel);
+  --z-index-sticky: var(--z-sticky);
+  --z-index-dropdown: var(--z-dropdown);
+  --z-index-overlay: var(--z-overlay);
+  --z-index-drawer: var(--z-drawer);
+  --z-index-modal: var(--z-modal);
+  --z-index-modal-popover: var(--z-modal-popover);
+  --z-index-toast: var(--z-toast);
+}
+
+/* shadcn semantic tokens → brand. Overrides base-nova neutral defaults. */
+:root {
+  --background: var(--color-cream);
+  --foreground: var(--color-ink);
+  --card: var(--color-surface-raised);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-surface-high);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-oxblood);
+  --primary-foreground: var(--color-cream);
+  --secondary: var(--color-surface-raised);
+  --secondary-foreground: var(--color-rose-muted);
+  --muted: var(--color-surface-sunken);
+  --muted-foreground: var(--color-rose-muted);
+  --accent: var(--color-surface-sunken);
+  --accent-foreground: var(--color-ink);
+  --destructive: var(--color-danger);
+  --destructive-foreground: var(--color-cream);
+  --border: var(--color-clay-border);
+  --input: var(--color-clay-border);
+  --ring: var(--color-oxblood);
+  --radius: 10px;
+}
+
 /* Global reset lives in @layer base so Tailwind utilities (padding/margin etc.)
    still win — an unlayered `* { padding: 0 }` would override shadcn classes. */
 @layer base {
@@ -1443,9 +1564,84 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 .toast--error { border-color: var(--color-rose-border); background: var(--color-oxblood-tint); color: var(--color-oxblood); }
 .toast--info { border-color: var(--color-clay-border); background: var(--color-cream); color: var(--color-rose-muted); }
 
-@theme inline { --font-heading: 'Lora', serif; --font-sans: 'DM Sans', sans-serif; --color-sidebar-ring: var(--sidebar-ring); --color-sidebar-border: var(--sidebar-border); --color-sidebar-accent-foreground: var(--sidebar-accent-foreground); --color-sidebar-accent: var(--sidebar-accent); --color-sidebar-primary-foreground: var(--sidebar-primary-foreground); --color-sidebar-primary: var(--sidebar-primary); --color-sidebar-foreground: var(--sidebar-foreground); --color-sidebar: var(--sidebar); --color-chart-5: var(--chart-5); --color-chart-4: var(--chart-4); --color-chart-3: var(--chart-3); --color-chart-2: var(--chart-2); --color-chart-1: var(--chart-1); --color-ring: var(--ring); --color-input: var(--input); --color-border: var(--border); --color-destructive: var(--destructive); --color-accent-foreground: var(--accent-foreground); --color-accent: var(--accent); --color-muted-foreground: var(--muted-foreground); --color-muted: var(--muted); --color-secondary-foreground: var(--secondary-foreground); --color-secondary: var(--secondary); --color-primary-foreground: var(--primary-foreground); --color-primary: var(--primary); --color-popover-foreground: var(--popover-foreground); --color-popover: var(--popover); --color-card-foreground: var(--card-foreground); --color-card: var(--card); --color-foreground: var(--foreground); --color-background: var(--background); --radius-sm: calc(var(--radius) * 0.6); --radius-md: calc(var(--radius) * 0.8); --radius-lg: var(--radius); --radius-xl: calc(var(--radius) * 1.4); --radius-2xl: calc(var(--radius) * 1.8); --radius-3xl: calc(var(--radius) * 2.2); --radius-4xl: calc(var(--radius) * 2.6); }
+/* shadcn semantic color bridges → Tailwind utilities (e.g. bg-primary, text-muted-foreground).
+   Radius entries sm–2xl removed here — brand @theme inline (top of file) owns those. */
+@theme inline {
+  --font-heading: 'Lora', serif;
+  --font-sans: 'DM Sans', sans-serif;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  /* radius-3xl/4xl are not in the brand token set — keep shadcn's scale for them */
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
 
-:root { --background: var(--color-cream); --foreground: var(--color-ink); --card: var(--color-surface-raised); --card-foreground: var(--color-ink); --popover: var(--color-surface-high); --popover-foreground: var(--color-ink); --primary: var(--color-oxblood); --primary-foreground: var(--color-cream); --secondary: var(--color-surface-sunken); --secondary-foreground: var(--color-ink); --muted: var(--color-surface-sunken); --muted-foreground: var(--color-rose-muted); --accent: var(--color-oxblood-tint); --accent-foreground: var(--color-oxblood); --destructive: var(--color-oxblood); --border: var(--color-clay-border); --input: var(--color-clay-border); --ring: var(--color-oxblood); --chart-1: oklch(0.87 0 0); --chart-2: oklch(0.556 0 0); --chart-3: oklch(0.439 0 0); --chart-4: oklch(0.371 0 0); --chart-5: oklch(0.269 0 0); --radius: 0.625rem; --sidebar: oklch(0.985 0 0); --sidebar-foreground: oklch(0.145 0 0); --sidebar-primary: oklch(0.205 0 0); --sidebar-primary-foreground: oklch(0.985 0 0); --sidebar-accent: oklch(0.97 0 0); --sidebar-accent-foreground: oklch(0.205 0 0); --sidebar-border: oklch(0.922 0 0); --sidebar-ring: oklch(0.708 0 0); }
+/* Canonical shadcn semantic token values (brand-mapped above in the early :root block).
+   Chart + sidebar tokens kept here as they have no brand counterpart. */
+:root {
+  --background: var(--color-cream);
+  --foreground: var(--color-ink);
+  --card: var(--color-surface-raised);
+  --card-foreground: var(--color-ink);
+  --popover: var(--color-surface-high);
+  --popover-foreground: var(--color-ink);
+  --primary: var(--color-oxblood);
+  --primary-foreground: var(--color-cream);
+  --secondary: var(--color-surface-raised);
+  --secondary-foreground: var(--color-rose-muted);
+  --muted: var(--color-surface-sunken);
+  --muted-foreground: var(--color-rose-muted);
+  --accent: var(--color-surface-sunken);
+  --accent-foreground: var(--color-ink);
+  --destructive: var(--color-danger);
+  --destructive-foreground: var(--color-cream);
+  --border: var(--color-clay-border);
+  --input: var(--color-clay-border);
+  --ring: var(--color-oxblood);
+  --radius: 10px;
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
 
 .dark { --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0); --card: oklch(0.205 0 0); --card-foreground: oklch(0.985 0 0); --popover: oklch(0.205 0 0); --popover-foreground: oklch(0.985 0 0); --primary: oklch(0.922 0 0); --primary-foreground: oklch(0.205 0 0); --secondary: oklch(0.269 0 0); --secondary-foreground: oklch(0.985 0 0); --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0); --accent: oklch(0.269 0 0); --accent-foreground: oklch(0.985 0 0); --destructive: oklch(0.704 0.191 22.216); --border: oklch(1 0 0 / 10%); --input: oklch(1 0 0 / 15%); --ring: oklch(0.556 0 0); --chart-1: oklch(0.87 0 0); --chart-2: oklch(0.556 0 0); --chart-3: oklch(0.439 0 0); --chart-4: oklch(0.371 0 0); --chart-5: oklch(0.269 0 0); --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0); --sidebar-primary: oklch(0.488 0.243 264.376); --sidebar-primary-foreground: oklch(0.985 0 0); --sidebar-accent: oklch(0.269 0 0); --sidebar-accent-foreground: oklch(0.985 0 0); --sidebar-border: oklch(1 0 0 / 10%); --sidebar-ring: oklch(0.556 0 0); }
 
