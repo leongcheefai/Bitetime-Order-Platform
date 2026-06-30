@@ -37,6 +37,7 @@ export default function Dashboard() {
       active={section}
       onSelect={setSection}
       userName={`/s/${merchant!.slug}`}
+      backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
     >
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={section} variants={variants} initial="initial" animate="animate" exit="exit">
