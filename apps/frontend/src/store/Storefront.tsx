@@ -8,6 +8,11 @@ import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, vouche
 import { priceOrder, voucherError } from '../pricing'
 import type { Product, Voucher } from '../types'
 import LanguageSelect from '../components/LanguageSelect'
+import { cn } from '@/lib/utils'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
+import { Textarea } from '../components/ui/textarea'
 
 interface CartLine {
   id: string
@@ -176,273 +181,312 @@ export default function Storefront() {
       {success ? (
         // ── Success view ──────────────────────────────────────────────────────
         <motion.div key="success" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
-        <div className="mm-sf-header">
-          <div className="brand mm-sf-brand-left">
-            <h1>{merchant.name}</h1>
-          </div>
-          <div className="lang-switcher" style={{ marginBottom: 0 }}>
-            <LanguageSelect />
-          </div>
-        </div>
-
-        <div className="success-box">
-          <h2>{t('Order Placed!', '订单已提交！')}</h2>
-          <p>{t('Thank you for your order.', '感谢您的订单。')}</p>
-          <p className="order-number-display">
-            {t('Order number', '订单号')}:<br />
-            <strong>{success.orderNumber}</strong>
-          </p>
-
-          <div className="success-summary">
-            {success.items.map(item => (
-              <div key={item.id} className="summary-row">
-                <span>{item.name} × {item.qty}</span>
-                <span>RM {(item.price * item.qty).toFixed(2)}</span>
-              </div>
-            ))}
-            {success.fee > 0 && (
-              <div className="summary-row">
-                <span>{t('Delivery fee', '送货费')}</span>
-                <span>RM {success.fee.toFixed(2)}</span>
-              </div>
-            )}
-            {success.discount > 0 && (
-              <div className="summary-row">
-                <span>{t('Voucher', '优惠券')}</span>
-                <span>−RM {success.discount.toFixed(2)}</span>
-              </div>
-            )}
-            <div className="summary-row total">
-              <span>{t('Total', '总计')}</span>
-              <span>RM {success.total.toFixed(2)}</span>
+          {/* Header */}
+          <div className="flex items-start justify-between gap-4 mb-8 max-[480px]:flex-col max-[480px]:gap-2">
+            <div>
+              <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">{merchant.name}</h1>
+            </div>
+            <div className="flex justify-end flex-shrink-0 max-[480px]:justify-start">
+              <LanguageSelect />
             </div>
           </div>
 
-          {(merchant.payment_note || merchant.payment_bank) && (
-            <div className="success-info-box">
-              <div className="success-info-title">
-                {t('Payment Instructions', '付款说明')}
-              </div>
-              {merchant.payment_bank && <p>{merchant.payment_bank}</p>}
-              {merchant.payment_note && (
-                <p style={{ whiteSpace: 'pre-line', marginTop: merchant.payment_bank ? '6px' : 0 }}>
-                  {merchant.payment_note}
-                </p>
+          {/* Success content */}
+          <div className="text-center py-12 px-6">
+            <h2 className="font-heading text-[24px] font-medium text-oxblood mb-2">
+              {t('Order Placed!', '订单已提交！')}
+            </h2>
+            <p className="text-[14px] text-rose-muted mb-6 leading-[1.6]">
+              {t('Thank you for your order.', '感谢您的订单。')}
+            </p>
+            <p className="text-[15px] text-oxblood mb-3 tracking-[0.5px]">
+              {t('Order number', '订单号')}:<br />
+              <strong className="font-mono text-[16px]">{success.orderNumber}</strong>
+            </p>
+
+            <div className="max-w-[360px] mx-auto mb-5 text-left px-4 py-3 bg-surface-raised border-[1.5px] border-divider rounded-md">
+              {success.items.map(item => (
+                <div key={item.id} className="summary-row">
+                  <span>{item.name} × {item.qty}</span>
+                  <span>RM {(item.price * item.qty).toFixed(2)}</span>
+                </div>
+              ))}
+              {success.fee > 0 && (
+                <div className="summary-row">
+                  <span>{t('Delivery fee', '送货费')}</span>
+                  <span>RM {success.fee.toFixed(2)}</span>
+                </div>
               )}
+              {success.discount > 0 && (
+                <div className="summary-row">
+                  <span>{t('Voucher', '优惠券')}</span>
+                  <span>−RM {success.discount.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="summary-row total">
+                <span>{t('Total', '总计')}</span>
+                <span>RM {success.total.toFixed(2)}</span>
+              </div>
             </div>
-          )}
 
-          <button type="button" className="reset-link" onClick={handleReset}>
-            {t('Place another order', '再下一单')}
-          </button>
-        </div>
+            {(merchant.payment_note || merchant.payment_bank) && (
+              <div className="max-w-[360px] mx-auto mb-4 text-left px-[14px] py-[10px] bg-surface-raised border-[1.5px] border-divider rounded-md text-[13px] text-ink-faint leading-[1.5]">
+                <div className="font-semibold text-oxblood mb-1">
+                  {t('Payment Instructions', '付款说明')}
+                </div>
+                {merchant.payment_bank && <p>{merchant.payment_bank}</p>}
+                {merchant.payment_note && (
+                  <p className={cn("whitespace-pre-line", merchant.payment_bank && "mt-[6px]")}>
+                    {merchant.payment_note}
+                  </p>
+                )}
+              </div>
+            )}
+
+            <button type="button" className="reset-link" onClick={handleReset}>
+              {t('Place another order', '再下一单')}
+            </button>
+          </div>
         </motion.div>
       ) : (
         // ── Order form ──────────────────────────────────────────────────────
         <motion.div key="form" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
-      {/* Header with lang switch */}
-      <div className="mm-sf-header">
-        <div className="brand mm-sf-brand-left">
-          <h1>{merchant.name}</h1>
-          <p className="tagline">{t('Powered by BiteTime', 'BiteTime 提供技术支持')}</p>
-        </div>
-        <div className="lang-switcher" style={{ marginBottom: 0 }}>
-          <LanguageSelect />
-        </div>
-      </div>
+          {/* Header with lang switch */}
+          <div className="flex items-start justify-between gap-4 mb-8 max-[480px]:flex-col max-[480px]:gap-2">
+            <div>
+              <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">{merchant.name}</h1>
+              <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">
+                {t('Powered by BiteTime', 'BiteTime 提供技术支持')}
+              </p>
+            </div>
+            <div className="flex justify-end flex-shrink-0 max-[480px]:justify-start">
+              <LanguageSelect />
+            </div>
+          </div>
 
-      {/* Product list */}
-      <div className="section">
-        <div className="section-label">{t('Menu', '菜单')}</div>
-        {activeProducts.length === 0 ? (
-          <p className="mm-sf-empty">
-            {t('This shop has no products yet.', '此店暂无商品。')}
-          </p>
-        ) : (
-          <div className="mm-sf-product-list">
-            {activeProducts.map(p => (
-              <div
-                key={p.id}
-                className={`mm-sf-product-card${(cart[p.id] || 0) > 0 ? ' mm-sf-product-card--selected' : ''}`}
-              >
-                <div className="mm-sf-product-info">
-                  <div className="mm-sf-product-name">{productName(p)}</div>
-                  {productDescr(p) && (
-                    <div className="mm-sf-product-descr">{productDescr(p)}</div>
-                  )}
-                  <div className="mm-sf-product-price">
-                    RM {Number(p.price).toFixed(2)} / {p.unit || t('unit', '个')}
+          {/* Product list */}
+          <div className="section">
+            <div className="section-label">{t('Menu', '菜单')}</div>
+            {activeProducts.length === 0 ? (
+              <p className="text-[14px] text-rose-muted italic py-6 text-center">
+                {t('This shop has no products yet.', '此店暂无商品。')}
+              </p>
+            ) : (
+              <div className="flex flex-col gap-[10px]">
+                {activeProducts.map(p => (
+                  <div
+                    key={p.id}
+                    className={cn(
+                      "flex items-center gap-[14px] px-4 py-[14px] bg-surface-raised border-[1.5px] border-clay-border rounded-xl transition-colors",
+                      (cart[p.id] || 0) > 0 && "border-oxblood bg-oxblood-tint"
+                    )}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-medium text-ink">{productName(p)}</div>
+                      {productDescr(p) && (
+                        <div className="text-[12px] text-rose-muted mt-0.5 leading-[1.4]">{productDescr(p)}</div>
+                      )}
+                      <div className="text-[13px] font-medium text-oxblood mt-[5px]">
+                        RM {Number(p.price).toFixed(2)} / {p.unit || t('unit', '个')}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="soft"
+                        size="iconRound"
+                        className="text-[16px]"
+                        onClick={() => updateQty(p.id, -1)}
+                        aria-label={t('Decrease quantity', '减少数量')}
+                      >−</Button>
+                      <span
+                        className="text-[14px] font-medium min-w-[20px] text-center text-ink"
+                        aria-live="polite"
+                        aria-label={t('Quantity', '数量')}
+                      >{cart[p.id] || 0}</span>
+                      <Button
+                        variant="soft"
+                        size="iconRound"
+                        className="text-[16px]"
+                        onClick={() => updateQty(p.id, 1)}
+                        aria-label={t('Increase quantity', '增加数量')}
+                      >+</Button>
+                    </div>
                   </div>
-                </div>
-                <div className="qty-ctrl">
-                  <button
-                    className="qty-btn"
-                    onClick={() => updateQty(p.id, -1)}
-                    aria-label={t('Decrease quantity', '减少数量')}
-                  >−</button>
-                  <span className="qty-val" aria-live="polite" aria-label={t('Quantity', '数量')}>{cart[p.id] || 0}</span>
-                  <button
-                    className="qty-btn"
-                    onClick={() => updateQty(p.id, 1)}
-                    aria-label={t('Increase quantity', '增加数量')}
-                  >+</button>
-                </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
-        )}
-      </div>
 
-      <hr className="divider" />
+          <hr className="divider" />
 
-      {/* Fulfilment */}
-      <div className="section">
-        <div className="section-label">{t('Fulfilment', '配送方式')}</div>
-        <div className="radio-row" role="group" aria-label={t('Fulfilment method', '配送方式')}>
-          <button
-            type="button"
-            className="radio-opt"
-            aria-pressed={mode === 'pickup'}
-            onClick={() => setMode('pickup')}
-          >
-            {t('Pickup', '自取')}
-          </button>
-          <button
-            type="button"
-            className="radio-opt"
-            aria-pressed={mode === 'delivery'}
-            onClick={() => setMode('delivery')}
-          >
-            {t('Delivery', '送货')} (+RM {Number(deliveryFee).toFixed(2)})
-          </button>
-        </div>
-        {mode === 'delivery' && (
-          <div className="field" style={{ marginTop: '0.75rem' }}>
-            <label htmlFor="sf-address">{t('Delivery address', '送货地址')}</label>
-            <textarea
-              id="sf-address"
-              className="mm-sf-textarea"
-              value={address}
-              onChange={e => setAddress(e.target.value)}
-              rows={3}
-              placeholder={t('Enter your full address…', '请输入完整地址…')}
-            />
-          </div>
-        )}
-      </div>
-
-      <hr className="divider" />
-
-      {/* Customer details */}
-      <div className="section">
-        <div className="section-label">{t('Your Details', '您的资料')}</div>
-        <div className="field" style={{ marginBottom: '0.75rem' }}>
-          <label htmlFor="sf-name">{t('Name', '姓名')} *</label>
-          <input
-            id="sf-name"
-            type="text"
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder={t('Full name', '全名')}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="sf-wa">{t('WhatsApp', 'WhatsApp')} *</label>
-          <input
-            id="sf-wa"
-            type="tel"
-            value={wa}
-            onChange={e => setWa(e.target.value)}
-            placeholder={t('e.g. 601X-XXXXXXX', '例：601X-XXXXXXX')}
-          />
-        </div>
-      </div>
-
-      <hr className="divider" />
-
-      {/* Voucher */}
-      <div className="section">
-        <div className="section-label">{t('Voucher', '优惠券')}</div>
-        {appliedVoucher ? (
-          <div className="summary-row">
-            <span>{t('Applied', '已应用')}: <strong>{appliedVoucher.code}</strong></span>
-            <button type="button" className="reset-link" onClick={removeVoucher}>
-              {t('Remove', '移除')}
-            </button>
-          </div>
-        ) : (
-          <div className="field" style={{ display: 'flex', gap: '0.5rem' }}>
-            <input
-              type="text"
-              value={voucherInput}
-              onChange={e => setVoucherInput(e.target.value)}
-              placeholder={t('Enter voucher code', '输入优惠码')}
-              style={{ flex: 1 }}
-            />
-            <button type="button" className="radio-opt" onClick={applyVoucher}>
-              {t('Apply', '应用')}
-            </button>
-          </div>
-        )}
-        {voucherMsg && (
-          <p className="mm-sf-voucher-msg" style={{ marginTop: '0.5rem' }}>{voucherMsg}</p>
-        )}
-      </div>
-
-      <hr className="divider" />
-
-      {/* Live order summary */}
-      <div className="summary-card">
-        <div className="summary-title">{t('Order Summary', '订单摘要')}</div>
-        {cartItems.length === 0 ? (
-          <p className="empty-msg">{t('No items selected yet.', '尚未选择任何商品。')}</p>
-        ) : (
-          <>
-            {cartItems.map(item => {
-              const prod = activeProducts.find(p => p.id === item.id)
-              const displayName = (lang === 'zh' && prod?.name_zh) ? prod.name_zh : item.name
-              return (
-                <div key={item.id} className="summary-row">
-                  <span>{displayName} × {item.qty}</span>
-                  <span>RM {(item.price * item.qty).toFixed(2)}</span>
-                </div>
-              )
-            })}
-            <div className="summary-row">
-              <span>{t('Subtotal', '小计')}</span>
-              <span>RM {subtotal.toFixed(2)}</span>
+          {/* Fulfilment */}
+          <div className="section">
+            <div className="section-label">{t('Fulfilment', '配送方式')}</div>
+            <div className="flex gap-[10px]" role="group" aria-label={t('Fulfilment method', '配送方式')}>
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 border rounded-md py-[10px] px-[14px] cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
+                  mode === 'pickup'
+                    ? "border-[1.5px] border-oxblood bg-oxblood-tint text-oxblood font-medium"
+                    : "border-clay-border bg-surface-raised text-ink"
+                )}
+                aria-pressed={mode === 'pickup'}
+                onClick={() => setMode('pickup')}
+              >
+                {t('Pickup', '自取')}
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  "flex-1 border rounded-md py-[10px] px-[14px] cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
+                  mode === 'delivery'
+                    ? "border-[1.5px] border-oxblood bg-oxblood-tint text-oxblood font-medium"
+                    : "border-clay-border bg-surface-raised text-ink"
+                )}
+                aria-pressed={mode === 'delivery'}
+                onClick={() => setMode('delivery')}
+              >
+                {t('Delivery', '送货')} (+RM {Number(deliveryFee).toFixed(2)})
+              </button>
             </div>
             {mode === 'delivery' && (
-              <div className="summary-row">
-                <span>{t('Delivery fee', '送货费')}</span>
-                <span>RM {fee.toFixed(2)}</span>
+              <div className="flex flex-col gap-1.5 mt-3">
+                <Label htmlFor="sf-address">{t('Delivery address', '送货地址')}</Label>
+                <Textarea
+                  id="sf-address"
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  rows={3}
+                  placeholder={t('Enter your full address…', '请输入完整地址…')}
+                  className="resize-vertical min-h-[72px]"
+                />
               </div>
             )}
-            {discount > 0 && (
-              <div className="summary-row">
-                <span>{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
-                <span>−RM {discount.toFixed(2)}</span>
-              </div>
-            )}
-            <div className="summary-row total">
-              <span>{t('Total', '总计')}</span>
-              <span>RM {total.toFixed(2)}</span>
+          </div>
+
+          <hr className="divider" />
+
+          {/* Customer details */}
+          <div className="section">
+            <div className="section-label">{t('Your Details', '您的资料')}</div>
+            <div className="flex flex-col gap-1.5 mb-3">
+              <Label htmlFor="sf-name">{t('Name', '姓名')} *</Label>
+              <Input
+                id="sf-name"
+                type="text"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder={t('Full name', '全名')}
+              />
             </div>
-          </>
-        )}
-      </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="sf-wa">{t('WhatsApp', 'WhatsApp')} *</Label>
+              <Input
+                id="sf-wa"
+                type="tel"
+                value={wa}
+                onChange={e => setWa(e.target.value)}
+                placeholder={t('e.g. 601X-XXXXXXX', '例：601X-XXXXXXX')}
+              />
+            </div>
+          </div>
 
-      {error && (
-        <div className="mm-sf-error">{error}</div>
-      )}
+          <hr className="divider" />
 
-      <button
-        className="submit-btn"
-        disabled={!canSubmit}
-        onClick={handleSubmit}
-      >
-        {busy ? t('Placing order…', '提交中…') : t('Place Order', '提交订单')}
-      </button>
+          {/* Voucher */}
+          <div className="section">
+            <div className="section-label">{t('Voucher', '优惠券')}</div>
+            {appliedVoucher ? (
+              <div className="summary-row">
+                <span>{t('Applied', '已应用')}: <strong>{appliedVoucher.code}</strong></span>
+                <button type="button" className="reset-link" onClick={removeVoucher}>
+                  {t('Remove', '移除')}
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  value={voucherInput}
+                  onChange={e => setVoucherInput(e.target.value)}
+                  placeholder={t('Enter voucher code', '输入优惠码')}
+                  className="flex-1"
+                />
+                <button
+                  type="button"
+                  className="border border-clay-border rounded-md py-[10px] px-[14px] cursor-pointer text-[14px] font-sans text-ink text-center bg-surface-raised transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2 whitespace-nowrap"
+                  onClick={applyVoucher}
+                >
+                  {t('Apply', '应用')}
+                </button>
+              </div>
+            )}
+            {voucherMsg && (
+              <p className="mt-2 text-[13px]">{voucherMsg}</p>
+            )}
+          </div>
+
+          <hr className="divider" />
+
+          {/* Live order summary */}
+          <div className="bg-oxblood-tint border border-rose-border rounded-xl py-4 px-5 mb-6">
+            <div className="font-heading text-[14px] font-medium text-oxblood mb-[10px]">
+              {t('Order Summary', '订单摘要')}
+            </div>
+            {cartItems.length === 0 ? (
+              <p className="text-[13px] text-text-tertiary italic">
+                {t('No items selected yet.', '尚未选择任何商品。')}
+              </p>
+            ) : (
+              <>
+                {cartItems.map(item => {
+                  const prod = activeProducts.find(p => p.id === item.id)
+                  const displayName = (lang === 'zh' && prod?.name_zh) ? prod.name_zh : item.name
+                  return (
+                    <div key={item.id} className="summary-row">
+                      <span>{displayName} × {item.qty}</span>
+                      <span>RM {(item.price * item.qty).toFixed(2)}</span>
+                    </div>
+                  )
+                })}
+                <div className="summary-row">
+                  <span>{t('Subtotal', '小计')}</span>
+                  <span>RM {subtotal.toFixed(2)}</span>
+                </div>
+                {mode === 'delivery' && (
+                  <div className="summary-row">
+                    <span>{t('Delivery fee', '送货费')}</span>
+                    <span>RM {fee.toFixed(2)}</span>
+                  </div>
+                )}
+                {discount > 0 && (
+                  <div className="summary-row">
+                    <span>{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
+                    <span>−RM {discount.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="summary-row total">
+                  <span>{t('Total', '总计')}</span>
+                  <span>RM {total.toFixed(2)}</span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {error && (
+            <div className="text-[13px] text-danger bg-rose-pale border border-danger-border rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+              {error}
+            </div>
+          )}
+
+          <Button
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+            className="disabled:opacity-60 active:scale-[0.99]"
+          >
+            {busy ? t('Placing order…', '提交中…') : t('Place Order', '提交订单')}
+          </Button>
         </motion.div>
       )}
     </AnimatePresence>
