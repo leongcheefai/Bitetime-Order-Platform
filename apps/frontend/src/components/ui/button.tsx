@@ -23,9 +23,12 @@ const buttonVariants = cva(
         // .del-btn — rose-tinted destructive (border-rose, oxblood-tint bg)
         destructive:
           "border border-rose-border bg-oxblood-tint text-oxblood hover:bg-rose-hover",
-        // .invoice-btn — white bg / clay-rose text, inverts on hover
+        // .invoice-btn — white bg / clay-rose text, inverts on hover + self-encodes geometry (use size="none")
         invoice:
-          "border border-rose-border bg-white text-clay-rose font-semibold hover:bg-clay-rose hover:text-white hover:border-clay-rose",
+          "w-full px-[14px] py-[10px] text-[13px] rounded-sm border border-rose-border bg-white text-clay-rose font-semibold hover:bg-clay-rose hover:text-white hover:border-clay-rose",
+        // .qty-btn — cream bg, clay border, oxblood text (use size="iconRound")
+        soft:
+          "border border-clay-border bg-cream text-oxblood hover:bg-surface-warm-alt",
         // Text-style link button
         link:
           "text-oxblood underline-offset-4 hover:underline",
@@ -46,14 +49,17 @@ const buttonVariants = cva(
         // Note: .lang-btn uses py-[5px] + bg-surface-raised; screens must override those
         pill:
           "px-[14px] py-[7px] text-[13px] rounded-pill",
-        // .hamburger-btn / .notif-bell — 36×36 px square, md radius, 1.5 px clay border
-        // NOTE: size itself encodes border + hover so variant choice does not affect appearance
+        // .hamburger-btn / .notif-bell — 36×36 px square, md radius (dimension only)
+        // Pair with variant="outline" for the 1.5px clay border + hover surface-sunken appearance
         icon:
-          "size-9 rounded-md border-[1.5px] border-clay-border bg-transparent text-rose-muted hover:bg-surface-sunken hover:border-clay-muted hover:text-ink",
-        // .qty-btn — 26×26 px round icon button (circle)
-        // Note: .del-btn is 30 px; screens must pass className="size-[30px]"
+          "size-9 rounded-md",
+        // .qty-btn / .del-btn — 26×26 px round icon button (dimension only)
+        // Pair with variant="soft" for qty-btn; variant="destructive" + className="size-[30px]" for del-btn
         iconRound:
           "size-[26px] rounded-round",
+        // Geometry-neutral: suppresses defaultVariants.size so variant="invoice" controls all geometry
+        none:
+          "",
       },
     },
     defaultVariants: {
