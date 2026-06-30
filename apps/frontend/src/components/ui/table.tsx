@@ -4,6 +4,8 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+// Themed to `.customer-table` — oxblood headers, clay/rose borders, brand hover.
+
 function Table({ className, ...props }: React.ComponentProps<"table">) {
   return (
     <div
@@ -23,7 +25,8 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      // Header rows get the rose-border bottom divider (1.5px via th)
+      className={cn("[&_tr]:border-b [&_tr]:border-rose-border", className)}
       {...props}
     />
   )
@@ -44,7 +47,7 @@ function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
     <tfoot
       data-slot="table-footer"
       className={cn(
-        "border-t bg-muted/50 font-medium [&>tr]:last:border-b-0",
+        "border-t border-clay-border bg-surface-sunken font-medium [&>tr]:last:border-b-0",
         className
       )}
       {...props}
@@ -57,7 +60,8 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
     <tr
       data-slot="table-row"
       className={cn(
-        "border-b transition-colors hover:bg-muted/50 has-aria-expanded:bg-muted/50 data-[state=selected]:bg-muted",
+        // `.customer-table td` border + hover wash
+        "border-b border-surface-warm-alt transition-colors hover:bg-oxblood-tint has-aria-expanded:bg-oxblood-tint data-[state=selected]:bg-oxblood-tint-soft",
         className
       )}
       {...props}
@@ -70,7 +74,8 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-2 text-left align-middle font-medium whitespace-nowrap text-foreground [&:has([role=checkbox])]:pr-0",
+        // `.customer-table th` — 10px oxblood uppercase, 6px 10px padding
+        "px-2.5 py-[6px] text-left align-middle text-[10px] font-medium text-oxblood uppercase tracking-[0.08em] whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -83,7 +88,8 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
     <td
       data-slot="table-cell"
       className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
+        // `.customer-table td` — 9px 10px padding, ink text
+        "px-2.5 py-[9px] align-middle text-ink whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className
       )}
       {...props}
@@ -98,7 +104,7 @@ function TableCaption({
   return (
     <caption
       data-slot="table-caption"
-      className={cn("mt-4 text-sm text-muted-foreground", className)}
+      className={cn("mt-4 text-sm text-rose-muted", className)}
       {...props}
     />
   )
