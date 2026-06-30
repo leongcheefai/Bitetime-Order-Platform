@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { ArrowLeft } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { signOut } from '../store'
 import LanguageSelect from './LanguageSelect'
@@ -14,6 +16,7 @@ interface DashboardShellProps {
   active: string
   onSelect: (key: string) => void
   userName?: string
+  backTo?: { href: string; label: string }
   children: ReactNode
 }
 
@@ -21,7 +24,7 @@ interface DashboardShellProps {
 // Responsive: 210px sidebar on desktop, 64px icon-only on mobile (≤ 640px).
 // data-layout-flush triggers body:has([data-layout-flush]) in index.css
 // (removes body padding + stretches body flex to full viewport height).
-export default function DashboardShell({ logo, title, role, nav, active, onSelect, userName, children }: DashboardShellProps) {
+export default function DashboardShell({ logo, title, role, nav, active, onSelect, userName, backTo, children }: DashboardShellProps) {
   const { t } = useSession()
   return (
     <div data-layout-flush="" className="flex gap-0 min-h-screen w-full">
@@ -63,6 +66,30 @@ export default function DashboardShell({ logo, title, role, nav, active, onSelec
           'flex-1 py-3 flex flex-col overflow-y-auto min-h-0 overscroll-contain',
           'max-sm:py-3 max-sm:px-2',
         )}>
+          {backTo && (
+            <Link
+              to={backTo.href}
+              title={backTo.label}
+              className={cn(
+                'group relative flex items-center gap-[10px] w-full',
+                'px-5 py-[13px] mb-1',
+                'max-sm:justify-center max-sm:px-[10px] max-sm:py-[10px] max-sm:gap-0',
+                '[@media(pointer:coarse)]:py-3.5',
+                'border-0 rounded-none bg-transparent text-left no-underline',
+                'text-[13px] font-sans font-medium tracking-[0.01em] text-rose-muted',
+                'cursor-pointer transition-[background,color] duration-150',
+                'hover:bg-surface-sunken-hover hover:text-oxblood',
+              )}
+            >
+              <span
+                className="flex-shrink-0 w-5 flex items-center justify-center max-sm:w-auto max-sm:text-[18px]"
+                aria-hidden="true"
+              >
+                <ArrowLeft size={18} strokeWidth={1.75} />
+              </span>
+              <span className="max-sm:hidden">{backTo.label}</span>
+            </Link>
+          )}
           {nav.map(n => (
             <button
               key={n.key}
