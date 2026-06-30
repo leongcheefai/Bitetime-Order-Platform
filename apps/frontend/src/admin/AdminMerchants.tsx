@@ -24,13 +24,13 @@ export default function AdminMerchants() {
   }
 
   if (!rows) return (
-    <p className="empty-msg pt-4">{t('Loading…', '加载中…')}</p>
+    <p className="text-[13px] text-text-tertiary italic pt-4">{t('Loading…', '加载中…')}</p>
   )
 
   return (
     <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
       {rows.length === 0 ? (
-        <p className="empty-msg">{t('No merchants yet.', '暂无商家。')}</p>
+        <p className="text-[13px] text-text-tertiary italic">{t('No merchants yet.', '暂无商家。')}</p>
       ) : (
         <Table className="text-[13px]">
           <TableHeader>

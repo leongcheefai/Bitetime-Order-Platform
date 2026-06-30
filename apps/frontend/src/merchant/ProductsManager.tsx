@@ -50,7 +50,7 @@ export default function ProductsManager() {
           {t('Your products', '您的产品')}
         </h3>
         {rows.length === 0 ? (
-          <p className="empty-msg">{t('No products yet — add your first below.', '还没有产品 — 在下方添加。')}</p>
+          <p className="text-[13px] text-text-tertiary italic">{t('No products yet — add your first below.', '还没有产品 — 在下方添加。')}</p>
         ) : (
           <div className="flex flex-col gap-2">
             {rows.map((p: any) => (

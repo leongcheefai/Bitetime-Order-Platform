@@ -77,7 +77,7 @@ export function RevenueBarChart({ data, revenueLabel, ordersLabel }: {
 // ── Donut chart ──────────────────────────────────────────────────────────────
 export function DonutCard({ data }: { data: { name: string; value: number }[] }) {
   const total = data.reduce((s, d) => s + d.value, 0)
-  if (total <= 0) return <p className="empty-msg">—</p>
+  if (total <= 0) return <p className="text-[13px] text-text-tertiary italic">—</p>
   return (
     <div className="flex flex-col gap-3">
       {/* A single 100% slice renders as a degenerate zero-arc in recharts, so draw it as a plain CSS ring. */}
@@ -108,7 +108,7 @@ export function DonutCard({ data }: { data: { name: string; value: number }[] })
 
 // ── Breakdown list (label + bar + value) ─────────────────────────────────────
 export function BreakdownList({ rows }: { rows: { label: string; value: string; pct: number }[] }) {
-  if (rows.length === 0) return <p className="empty-msg">—</p>
+  if (rows.length === 0) return <p className="text-[13px] text-text-tertiary italic">—</p>
   return (
     <ul className="m-0 flex list-none flex-col gap-[10px] p-0">
       {rows.map((r, i) => (

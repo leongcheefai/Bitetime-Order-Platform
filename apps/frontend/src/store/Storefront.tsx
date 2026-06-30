@@ -206,26 +206,26 @@ export default function Storefront() {
 
             <div className="max-w-[360px] mx-auto mb-5 text-left px-4 py-3 bg-surface-raised border-[1.5px] border-divider rounded-md">
               {success.items.map(item => (
-                <div key={item.id} className="summary-row">
-                  <span>{item.name} × {item.qty}</span>
-                  <span>RM {(item.price * item.qty).toFixed(2)}</span>
+                <div key={item.id} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                  <span className="shrink-0">{item.name} × {item.qty}</span>
+                  <span className="text-right">RM {(item.price * item.qty).toFixed(2)}</span>
                 </div>
               ))}
               {success.fee > 0 && (
-                <div className="summary-row">
-                  <span>{t('Delivery fee', '送货费')}</span>
-                  <span>RM {success.fee.toFixed(2)}</span>
+                <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                  <span className="shrink-0">{t('Delivery fee', '送货费')}</span>
+                  <span className="text-right">RM {success.fee.toFixed(2)}</span>
                 </div>
               )}
               {success.discount > 0 && (
-                <div className="summary-row">
-                  <span>{t('Voucher', '优惠券')}</span>
-                  <span>−RM {success.discount.toFixed(2)}</span>
+                <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                  <span className="shrink-0">{t('Voucher', '优惠券')}</span>
+                  <span className="text-right">−RM {success.discount.toFixed(2)}</span>
                 </div>
               )}
-              <div className="summary-row total">
-                <span>{t('Total', '总计')}</span>
-                <span>RM {success.total.toFixed(2)}</span>
+              <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
+                <span className="shrink-0">{t('Total', '总计')}</span>
+                <span className="text-right">RM {success.total.toFixed(2)}</span>
               </div>
             </div>
 
@@ -243,7 +243,7 @@ export default function Storefront() {
               </div>
             )}
 
-            <button type="button" className="reset-link" onClick={handleReset}>
+            <button type="button" className="text-[13px] text-rose-muted cursor-pointer underline mt-5 inline-block" onClick={handleReset}>
               {t('Place another order', '再下一单')}
             </button>
           </div>
@@ -265,8 +265,8 @@ export default function Storefront() {
           </div>
 
           {/* Product list */}
-          <div className="section">
-            <div className="section-label">{t('Menu', '菜单')}</div>
+          <div className="mb-7">
+            <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Menu', '菜单')}</div>
             {activeProducts.length === 0 ? (
               <p className="text-[14px] text-rose-muted italic py-6 text-center">
                 {t('This shop has no products yet.', '此店暂无商品。')}
@@ -317,11 +317,11 @@ export default function Storefront() {
             )}
           </div>
 
-          <hr className="divider" />
+          <hr className="border-0 border-t border-clay-border my-6" />
 
           {/* Fulfilment */}
-          <div className="section">
-            <div className="section-label">{t('Fulfilment', '配送方式')}</div>
+          <div className="mb-7">
+            <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Fulfilment', '配送方式')}</div>
             <div className="flex gap-[10px]" role="group" aria-label={t('Fulfilment method', '配送方式')}>
               <button
                 type="button"
@@ -365,11 +365,11 @@ export default function Storefront() {
             )}
           </div>
 
-          <hr className="divider" />
+          <hr className="border-0 border-t border-clay-border my-6" />
 
           {/* Customer details */}
-          <div className="section">
-            <div className="section-label">{t('Your Details', '您的资料')}</div>
+          <div className="mb-7">
+            <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Your Details', '您的资料')}</div>
             <div className="flex flex-col gap-1.5 mb-3">
               <Label htmlFor="sf-name">{t('Name', '姓名')} *</Label>
               <Input
@@ -392,15 +392,15 @@ export default function Storefront() {
             </div>
           </div>
 
-          <hr className="divider" />
+          <hr className="border-0 border-t border-clay-border my-6" />
 
           {/* Voucher */}
-          <div className="section">
-            <div className="section-label">{t('Voucher', '优惠券')}</div>
+          <div className="mb-7">
+            <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Voucher', '优惠券')}</div>
             {appliedVoucher ? (
-              <div className="summary-row">
-                <span>{t('Applied', '已应用')}: <strong>{appliedVoucher.code}</strong></span>
-                <button type="button" className="reset-link" onClick={removeVoucher}>
+              <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                <span className="shrink-0">{t('Applied', '已应用')}: <strong>{appliedVoucher.code}</strong></span>
+                <button type="button" className="text-[13px] text-rose-muted cursor-pointer underline mt-5 inline-block" onClick={removeVoucher}>
                   {t('Remove', '移除')}
                 </button>
               </div>
@@ -427,7 +427,7 @@ export default function Storefront() {
             )}
           </div>
 
-          <hr className="divider" />
+          <hr className="border-0 border-t border-clay-border my-6" />
 
           {/* Live order summary */}
           <div className="bg-oxblood-tint border border-rose-border rounded-xl py-4 px-5 mb-6">
@@ -444,31 +444,31 @@ export default function Storefront() {
                   const prod = activeProducts.find(p => p.id === item.id)
                   const displayName = (lang === 'zh' && prod?.name_zh) ? prod.name_zh : item.name
                   return (
-                    <div key={item.id} className="summary-row">
-                      <span>{displayName} × {item.qty}</span>
-                      <span>RM {(item.price * item.qty).toFixed(2)}</span>
+                    <div key={item.id} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                      <span className="shrink-0">{displayName} × {item.qty}</span>
+                      <span className="text-right">RM {(item.price * item.qty).toFixed(2)}</span>
                     </div>
                   )
                 })}
-                <div className="summary-row">
-                  <span>{t('Subtotal', '小计')}</span>
-                  <span>RM {subtotal.toFixed(2)}</span>
+                <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                  <span className="shrink-0">{t('Subtotal', '小计')}</span>
+                  <span className="text-right">RM {subtotal.toFixed(2)}</span>
                 </div>
                 {mode === 'delivery' && (
-                  <div className="summary-row">
-                    <span>{t('Delivery fee', '送货费')}</span>
-                    <span>RM {fee.toFixed(2)}</span>
+                  <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                    <span className="shrink-0">{t('Delivery fee', '送货费')}</span>
+                    <span className="text-right">RM {fee.toFixed(2)}</span>
                   </div>
                 )}
                 {discount > 0 && (
-                  <div className="summary-row">
-                    <span>{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
-                    <span>−RM {discount.toFixed(2)}</span>
+                  <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                    <span className="shrink-0">{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
+                    <span className="text-right">−RM {discount.toFixed(2)}</span>
                   </div>
                 )}
-                <div className="summary-row total">
-                  <span>{t('Total', '总计')}</span>
-                  <span>RM {total.toFixed(2)}</span>
+                <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
+                  <span className="shrink-0">{t('Total', '总计')}</span>
+                  <span className="text-right">RM {total.toFixed(2)}</span>
                 </div>
               </>
             )}

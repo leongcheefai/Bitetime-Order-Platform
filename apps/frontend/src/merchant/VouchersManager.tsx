@@ -75,7 +75,7 @@ export default function VouchersManager() {
           {t('Your vouchers', '您的优惠券')}
         </h3>
         {rows.length === 0 ? (
-          <p className="empty-msg">{t('No vouchers yet — create your first below.', '还没有优惠券 — 在下方创建。')}</p>
+          <p className="text-[13px] text-text-tertiary italic">{t('No vouchers yet — create your first below.', '还没有优惠券 — 在下方创建。')}</p>
         ) : (
           <div className="flex flex-col gap-2">
             {rows.map((v: Voucher) => (

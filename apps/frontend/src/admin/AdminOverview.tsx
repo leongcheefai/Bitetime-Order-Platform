@@ -60,7 +60,7 @@ export default function AdminOverview() {
         </ChartPanel>
         <ChartPanel title={t('Recent sign-ups', '最近注册')}>
           {stats.recent.length === 0
-            ? <p className="empty-msg">{t('No merchants yet.', '暂无商家。')}</p>
+            ? <p className="text-[13px] text-text-tertiary italic">{t('No merchants yet.', '暂无商家。')}</p>
             : <BreakdownList rows={stats.recent.map(m => ({
                 label: m.name,
                 value: statusLabel(m.status),

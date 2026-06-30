@@ -36,7 +36,7 @@ export function SkeletonText({ lines = 3 }: { lines?: number }) {
 // Full-page placeholder shaped like the merchant dashboard (title + tab row +
 // content) so a guarded/resolving page fills the viewport instead of showing a
 // lonely spinner.
-// NOTE: form-wrap, form-wrap--wide, admin-panel are shared classes — kept in index.css.
+// NOTE: form-wrap, form-wrap--wide are shared classes — kept in index.css.
 export function PageSkeleton() {
   return (
     <div className="form-wrap form-wrap--wide flex flex-col gap-[18px] pt-2" aria-hidden="true">
@@ -49,7 +49,7 @@ export function PageSkeleton() {
           <Skeleton key={i} width="84px" height="2.1rem" radius="var(--radius-pill)" />
         ))}
       </div>
-      <div className="admin-panel mt-1">
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border mt-1">
         <SkeletonText lines={5} />
       </div>
     </div>

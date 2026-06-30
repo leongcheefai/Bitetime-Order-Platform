@@ -38,7 +38,7 @@ export default function ShopSettings() {
 
   return (
     <form onSubmit={save}>
-      <div className="admin-panel">
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
         <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
           {t('Shipping rates', '运费')}
         </h3>
@@ -54,7 +54,7 @@ export default function ShopSettings() {
         </div>
       </div>
 
-      <div className="admin-panel">
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
         <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
           {t('Payment', '付款')}
         </h3>
@@ -70,7 +70,7 @@ export default function ShopSettings() {
         </div>
       </div>
 
-      <div className="admin-panel">
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
         <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
           {t('Order notifications', '订单通知')}
         </h3>

@@ -25,9 +25,9 @@ export default function PendingScreen() {
 
   return (
     <div className="w-[420px] max-w-[calc(100vw-2rem)] pt-8">
-      <div className="brand">
-        <h1>BiteTime</h1>
-        <p className="tagline">{t('Merchant Portal', '商家入口')}</p>
+      <div className="text-center mb-10">
+        <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">BiteTime</h1>
+        <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">{t('Merchant Portal', '商家入口')}</p>
       </div>
       <Card className="rounded-pill px-8 pt-8 pb-7 gap-0">
         {hasPlan ? (
@@ -69,9 +69,9 @@ export default function PendingScreen() {
           </>
         )}
         {merchant?.slug && (
-          <p className="mm-store-url mt-4">
+          <p className="text-[13px] text-rose-muted mt-4">
             {t('Store URL', '店铺网址')}:{' '}
-            <a href={`/s/${merchant.slug}`}>/s/{merchant.slug}</a>
+            <a href={`/s/${merchant.slug}`} className="text-oxblood no-underline font-medium hover:underline">/s/{merchant.slug}</a>
           </p>
         )}
       </Card>

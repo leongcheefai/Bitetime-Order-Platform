@@ -64,9 +64,9 @@ export default function SignupScreen() {
 
   return (
     <div className="w-[420px] max-w-[calc(100vw-2rem)] pt-8">
-      <div className="brand">
-        <h1>BiteTime</h1>
-        <p className="tagline">{t('Merchant Portal', '商家入口')}</p>
+      <div className="text-center mb-10">
+        <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">BiteTime</h1>
+        <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">{t('Merchant Portal', '商家入口')}</p>
       </div>
       <Card className="rounded-pill px-8 pt-8 pb-7 gap-0">
         <h2 className="font-heading text-[20px] font-medium text-oxblood mb-1">{t('Start your shop', '开店')}</h2>
@@ -75,7 +75,7 @@ export default function SignupScreen() {
         {/* Plan banner: oxblood-tint bg, rose-border, md radius */}
         <div className="flex items-baseline flex-wrap gap-2 px-[13px] py-[10px] mb-[14px] bg-oxblood-tint border border-rose-border rounded-md">
           <span className="font-semibold text-oxblood text-[14px]">{planName} · {cycleName}</span>
-          <span className="[font-family:'Lora',serif] text-ink text-[15px]">RM {perMo}{t('/mo', '/月')}</span>
+          <span className="font-heading text-ink text-[15px]">RM {perMo}{t('/mo', '/月')}</span>
           {plan === 'basic' && (
             <Badge variant="default" className="ml-auto py-[2px] tracking-[0.03em]">
               {t('7-day free trial', '7 天免费试用')}

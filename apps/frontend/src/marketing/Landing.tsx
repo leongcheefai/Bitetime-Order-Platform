@@ -92,8 +92,7 @@ export default function Landing() {
           <a href="#pricing" className={navLink}>
             {t('Pricing', '价格')}
           </a>
-          {/* lang-switcher: keep shared class; !mb-0 overrides .lang-switcher { margin-bottom: 1.25rem } */}
-          <div className="lang-switcher !mb-0">
+          <div className="flex justify-end gap-1.5">
             <LanguageSelect />
           </div>
           {loading ? null : account ? (

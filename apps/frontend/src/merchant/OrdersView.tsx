@@ -70,12 +70,12 @@ export default function OrdersView() {
   }
 
   if (orders === null) {
-    return <div className="admin-panel"><SkeletonText lines={4} /></div>
+    return <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border"><SkeletonText lines={4} /></div>
   }
 
   if (orders.length === 0) {
     return (
-      <div className="admin-panel text-center text-rose-muted text-sm">
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border text-center text-rose-muted text-sm">
         <p>{t('No orders yet.', '暂无订单。')}</p>
       </div>
     )
@@ -87,7 +87,7 @@ export default function OrdersView() {
         const badge = STATUS_BADGE[o.status || 'new'] ?? { variant: 'infoBlue' as const }
         return (
           // admin-panel provides bg/border/rounded/width; !py-4 overrides py 1.25rem→1rem
-          <div key={o.id} className="admin-panel !py-4 flex flex-col gap-[10px]">
+          <div key={o.id} className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border !py-4 flex flex-col gap-[10px]">
 
             {/* ── Header: order number · time · status badge ── */}
             <div className="flex items-center gap-[10px] flex-wrap">
