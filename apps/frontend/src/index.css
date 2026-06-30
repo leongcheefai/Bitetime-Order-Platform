@@ -166,9 +166,7 @@ body { font-family: 'DM Sans', sans-serif; background: var(--color-cream); color
 input::placeholder, textarea::placeholder { color: var(--color-text-tertiary); opacity: 1; }
 .form-wrap { max-width: 600px; width: calc(100vw - 2rem); }
 .form-wrap--wide { max-width: 900px; }
-.form-wrap--owner { max-width: 1100px; }
 body:has(.form-wrap--wide) { padding-left: 0.5rem; padding-right: 0.5rem; }
-body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 
 /* Flush full-height sidebar rail: no body padding, hugs the
    left viewport edge — the dashboard shell opts in via [data-layout-flush]. */
