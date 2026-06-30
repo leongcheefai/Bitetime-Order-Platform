@@ -24,7 +24,7 @@ export default function PendingScreen() {
   }
 
   return (
-    <div className="auth-wrap">
+    <div className="w-[420px] max-w-[calc(100vw-2rem)] pt-8">
       <div className="brand">
         <h1>BiteTime</h1>
         <p className="tagline">{t('Merchant Portal', '商家入口')}</p>
@@ -36,8 +36,8 @@ export default function PendingScreen() {
             <span className="inline-flex items-center gap-[5px] px-3 py-[4px] rounded-pill bg-warn-bg text-warn-fg text-[12px] font-semibold tracking-[0.04em] mb-4">
               ⏳ {t('Almost there', '即将完成')}
             </span>
-            <h2 className="auth-title">{t('Finish setting up your shop', '完成店铺设置')}</h2>
-            <p className="auth-subtitle">
+            <h2 className="font-heading text-[20px] font-medium text-oxblood mb-1">{t('Finish setting up your shop', '完成店铺设置')}</h2>
+            <p className="text-[13px] text-rose-muted mb-6">
               <strong>{merchant?.name}</strong>{' '}
               {t(
                 'is ready — complete payment to activate it.',
@@ -58,8 +58,8 @@ export default function PendingScreen() {
             <span className="inline-flex items-center gap-[5px] px-3 py-[4px] rounded-pill bg-warn-bg text-warn-fg text-[12px] font-semibold tracking-[0.04em] mb-4">
               ⏳ {t('Pending review', '待审核')}
             </span>
-            <h2 className="auth-title">{t('Your shop is under review', '您的店铺正在审核中')}</h2>
-            <p className="auth-subtitle">
+            <h2 className="font-heading text-[20px] font-medium text-oxblood mb-1">{t('Your shop is under review', '您的店铺正在审核中')}</h2>
+            <p className="text-[13px] text-rose-muted mb-6">
               <strong>{merchant?.name}</strong>{' '}
               {t(
                 "is awaiting platform approval. You'll be able to manage it once approved.",

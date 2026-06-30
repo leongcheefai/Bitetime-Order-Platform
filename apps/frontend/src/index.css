@@ -338,12 +338,6 @@ body:has(.user-layout) { padding: 1.25rem; }
 .how-to-step { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--color-rose-muted); line-height: 1.5; }
 .how-to-step .step-num { background: var(--color-oxblood); color: var(--color-cream); font-size: 10px; font-weight: 500; border-radius: var(--radius-round); width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
 
-.auth-wrap { width: 420px; max-width: calc(100vw - 2rem); padding-top: 2rem; }
-.auth-title { font-family: 'Lora', serif; font-size: 20px; font-weight: 500; color: var(--color-oxblood); margin-bottom: 0.25rem; }
-.auth-subtitle { font-size: 13px; color: var(--color-rose-muted); margin-bottom: 1.5rem; }
-.auth-fields { display: flex; flex-direction: column; gap: 12px; margin-bottom: 1.25rem; }
-.auth-switch { font-size: 13px; color: var(--color-rose-muted); text-align: center; margin-top: 1rem; }
-.auth-switch a { color: var(--color-oxblood); cursor: pointer; text-decoration: underline; }
 .auth-greeting { font-size: 13px; color: var(--color-rose-muted); text-align: right; margin-bottom: 1rem; }
 .auth-greeting span { color: var(--color-oxblood); font-weight: 500; }
 .auth-greeting a { color: var(--color-rose-muted); cursor: pointer; text-decoration: underline; margin-left: 8px; font-size: 12px; }

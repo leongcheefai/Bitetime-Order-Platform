@@ -63,14 +63,14 @@ export default function SignupScreen() {
   }
 
   return (
-    <div className="auth-wrap">
+    <div className="w-[420px] max-w-[calc(100vw-2rem)] pt-8">
       <div className="brand">
         <h1>BiteTime</h1>
         <p className="tagline">{t('Merchant Portal', '商家入口')}</p>
       </div>
       <Card className="rounded-pill px-8 pt-8 pb-7 gap-0">
-        <h2 className="auth-title">{t('Start your shop', '开店')}</h2>
-        <p className="auth-subtitle">{t('Create your merchant account to get started.', '创建商家账号以开始使用。')}</p>
+        <h2 className="font-heading text-[20px] font-medium text-oxblood mb-1">{t('Start your shop', '开店')}</h2>
+        <p className="text-[13px] text-rose-muted mb-6">{t('Create your merchant account to get started.', '创建商家账号以开始使用。')}</p>
 
         {/* Plan banner: oxblood-tint bg, rose-border, md radius */}
         <div className="flex items-baseline flex-wrap gap-2 px-[13px] py-[10px] mb-[14px] bg-oxblood-tint border border-rose-border rounded-md">
@@ -95,7 +95,7 @@ export default function SignupScreen() {
           </div>
         )}
         <form onSubmit={onSubmit}>
-          <div className="auth-fields">
+          <div className="flex flex-col gap-3 mb-5">
             <div className="field">
               <Label htmlFor="signup-1">{t('Shop name', '店铺名称')}</Label>
               <Input id="signup-1" value={name} onChange={e => setName(e.target.value)} required placeholder={t('e.g. Sunny Bakes', '如：阳光烘焙')} />
@@ -121,8 +121,8 @@ export default function SignupScreen() {
                 : t('Continue to payment', '前往付款')}
           </Button>
         </form>
-        <p className="auth-switch">
-          <Link to="/merchant/login">{t('Already have a shop? Log in', '已有店铺？登录')}</Link>
+        <p className="text-[13px] text-rose-muted text-center mt-4">
+          <Link to="/merchant/login" className="text-oxblood cursor-pointer underline">{t('Already have a shop? Log in', '已有店铺？登录')}</Link>
         </p>
       </Card>
     </div>
