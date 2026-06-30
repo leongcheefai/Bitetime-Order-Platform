@@ -55,9 +55,14 @@ export default function AdminMerchants() {
                   >/s/{m.slug}</a>
                 </TableCell>
                 <TableCell className="p-3">
-                  <Badge variant={
-                    m.status === 'active' ? 'success' :
-                    m.status === 'pending' ? 'warn' : 'danger'
+                  {/* className overrides match .mm-badge--{status} exactly (px-[10px], no border;
+                      active uses success-bg-soft/deep, not the success variant's success-bg/fg) */}
+                  <Badge className={
+                    'px-[10px] border-transparent ' + (
+                      m.status === 'active' ? 'bg-success-bg-soft text-success-deep' :
+                      m.status === 'pending' ? 'bg-warn-bg text-warn-fg' :
+                      'bg-danger-bg text-danger-fg'
+                    )
                   }>{m.status}</Badge>
                 </TableCell>
                 <TableCell className="p-3">
