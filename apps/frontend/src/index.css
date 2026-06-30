@@ -338,10 +338,6 @@ body:has(.user-layout) { padding: 1.25rem; }
 .how-to-step { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--color-rose-muted); line-height: 1.5; }
 .how-to-step .step-num { background: var(--color-oxblood); color: var(--color-cream); font-size: 10px; font-weight: 500; border-radius: var(--radius-round); width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
 
-.auth-greeting { font-size: 13px; color: var(--color-rose-muted); text-align: right; margin-bottom: 1rem; }
-.auth-greeting span { color: var(--color-oxblood); font-weight: 500; }
-.auth-greeting a { color: var(--color-rose-muted); cursor: pointer; text-decoration: underline; margin-left: 8px; font-size: 12px; }
-
 .user-controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
 .customer-list-panel { background: var(--color-surface-raised); border: 1.5px solid var(--color-rose-border); border-radius: var(--radius-2xl); padding: 1.25rem; margin-bottom: 2rem; }
