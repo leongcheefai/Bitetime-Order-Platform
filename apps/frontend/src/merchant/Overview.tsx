@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ReceiptText, Wallet, Users, TrendingUp } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, fetchProducts, fetchMerchantCustomers, fetchMerchantVouchers } from '../store'
 import { SkeletonText } from '../components/Loaders'
@@ -6,6 +7,7 @@ import { StatCard, ChartPanel, RevenueBarChart, DonutCard, BreakdownList } from 
 import { computeMerchantStats, type MerchantStats } from './overviewStats'
 
 const money = (n: number) => 'RM ' + n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+const STAT_ICON = { size: 15, strokeWidth: 1.75 }
 
 export default function Overview() {
   const { t, merchant } = useSession()
@@ -45,10 +47,10 @@ export default function Overview() {
   return (
     <div className="dashboard-panel">
       <div className="dash-stat-grid dash-stat-grid--4">
-        <StatCard label={t('Total orders', '总订单')} value={String(stats.totalOrders)} delta={stats.ordersDelta} icon="🧾" />
-        <StatCard label={t('Revenue', '营收')} value={money(stats.revenue)} delta={stats.revenueDelta} icon="💰" />
-        <StatCard label={t('Customers', '顾客')} value={String(stats.customerCount)} icon="👥" />
-        <StatCard label={t('Avg order', '平均订单')} value={money(stats.avgOrder)} icon="📈" />
+        <StatCard label={t('Total orders', '总订单')} value={String(stats.totalOrders)} delta={stats.ordersDelta} icon={<ReceiptText {...STAT_ICON} />} />
+        <StatCard label={t('Revenue', '营收')} value={money(stats.revenue)} delta={stats.revenueDelta} icon={<Wallet {...STAT_ICON} />} />
+        <StatCard label={t('Customers', '顾客')} value={String(stats.customerCount)} icon={<Users {...STAT_ICON} />} />
+        <StatCard label={t('Avg order', '平均订单')} value={money(stats.avgOrder)} icon={<TrendingUp {...STAT_ICON} />} />
       </div>
 
       <ChartPanel title={t('Revenue — last 12 days', '营收 — 近12天')}>

@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useSession } from '../SessionContext'
 import { signOut } from '../store'
 
-export interface NavItem { key: string; label: string; icon: string }
+export interface NavItem { key: string; label: string; icon: ReactNode }
 
 interface DashboardShellProps {
   logo: string

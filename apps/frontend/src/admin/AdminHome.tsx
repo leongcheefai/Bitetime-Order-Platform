@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
+import { LayoutDashboard, Store } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import AdminOverview from './AdminOverview'
 import AdminMerchants from './AdminMerchants'
 
+const ICON = { size: 18, strokeWidth: 1.75 }
 const SECTIONS = [
-  { key: 'overview',  en: 'Overview',  zh: '概览', icon: '📊' },
-  { key: 'merchants', en: 'Merchants', zh: '商家', icon: '🏪' },
+  { key: 'overview',  en: 'Overview',  zh: '概览', icon: <LayoutDashboard {...ICON} /> },
+  { key: 'merchants', en: 'Merchants', zh: '商家', icon: <Store {...ICON} /> },
 ]
 
 export default function AdminHome() {

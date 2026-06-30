@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
+import { LayoutDashboard, ReceiptText, Cake, Ticket, Users, Settings } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import Overview from './Overview'
 import ProductsManager from './ProductsManager'
@@ -10,13 +11,14 @@ import ShopSettings from './ShopSettings'
 import OrdersView from './OrdersView'
 import CustomersView from './CustomersView'
 
+const ICON = { size: 18, strokeWidth: 1.75 }
 const SECTIONS = [
-  { key: 'overview',  en: 'Overview',  zh: '概览', icon: '📊' },
-  { key: 'orders',    en: 'Orders',    zh: '订单', icon: '🧾' },
-  { key: 'products',  en: 'Products',  zh: '产品', icon: '🍰' },
-  { key: 'vouchers',  en: 'Vouchers',  zh: '优惠券', icon: '🎟️' },
-  { key: 'customers', en: 'Customers', zh: '顾客', icon: '👥' },
-  { key: 'settings',  en: 'Settings',  zh: '设置', icon: '⚙️' },
+  { key: 'overview',  en: 'Overview',  zh: '概览',  icon: <LayoutDashboard {...ICON} /> },
+  { key: 'orders',    en: 'Orders',    zh: '订单',  icon: <ReceiptText {...ICON} /> },
+  { key: 'products',  en: 'Products',  zh: '产品',  icon: <Cake {...ICON} /> },
+  { key: 'vouchers',  en: 'Vouchers',  zh: '优惠券', icon: <Ticket {...ICON} /> },
+  { key: 'customers', en: 'Customers', zh: '顾客',  icon: <Users {...ICON} /> },
+  { key: 'settings',  en: 'Settings',  zh: '设置',  icon: <Settings {...ICON} /> },
 ]
 
 export default function Dashboard() {
