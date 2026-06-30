@@ -4,33 +4,56 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+  "group/button inline-flex shrink-0 items-center justify-center gap-2 border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap [font-family:'DM_Sans',sans-serif] transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        // .submit-btn / .save-btn / .auth-btn / .voucher-apply-btn — oxblood primary fill
+        default:
+          "bg-oxblood text-cream hover:bg-oxblood-deep",
+        // .cust-account-btn / .lang-btn — clay-border outline pill
         outline:
-          "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:hover:bg-input/50",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)] aria-expanded:bg-secondary aria-expanded:text-secondary-foreground",
+          "border-[1.5px] border-clay-border bg-transparent text-rose-muted hover:bg-surface-sunken hover:text-ink",
+        // .add-btn / .admin-toggle button — dashed clay border
+        dashed:
+          "border border-dashed border-clay-border bg-transparent text-rose-muted hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint",
+        // Generic ghost — no border, subtle hover
         ghost:
-          "hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:hover:bg-muted/50",
+          "bg-transparent text-rose-muted hover:bg-surface-sunken hover:text-ink",
+        // .del-btn — rose-tinted destructive (border-rose, oxblood-tint bg)
         destructive:
-          "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 hover:underline",
+          "border border-rose-border bg-oxblood-tint text-oxblood hover:bg-rose-hover",
+        // .invoice-btn — white bg / clay-rose text, inverts on hover
+        invoice:
+          "border border-rose-border bg-white text-clay-rose font-semibold hover:bg-clay-rose hover:text-white hover:border-clay-rose",
+        // Text-style link button
+        link:
+          "text-oxblood underline-offset-4 hover:underline",
       },
       size: {
+        // .submit-btn — full-width, 14 px pad all sides, 15 px text, lg radius (12 px), letter-spacing
         default:
-          "h-8 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-9 gap-1.5 px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-8",
-        "icon-xs":
-          "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
-        "icon-sm":
-          "size-7 rounded-[min(var(--radius-md),12px)] in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-9",
+          "w-full p-[14px] text-[15px] rounded-lg tracking-[0.01em]",
+        // .save-btn — full-width, 10 px pad all sides, 14 px text, md radius (10 px)
+        // Note: .auth-btn uses padding: 12 px; screens should pass className="py-3" override
+        md:
+          "w-full p-[10px] text-sm rounded-md",
+        // .voucher-apply-btn — inline, 18 px H / 10 px V, 14 px text, md radius
+        // Note: .add-btn uses py-[7px] px-[14px] w-full rounded-sm; screens must override
+        sm:
+          "px-[18px] py-[10px] text-sm rounded-md",
+        // .cust-account-btn — pill, 14 px H / 7 px V, 13 px text, pill radius (20 px)
+        // Note: .lang-btn uses py-[5px] + bg-surface-raised; screens must override those
+        pill:
+          "px-[14px] py-[7px] text-[13px] rounded-pill",
+        // .hamburger-btn / .notif-bell — 36×36 px square, md radius, 1.5 px clay border
+        // NOTE: size itself encodes border + hover so variant choice does not affect appearance
+        icon:
+          "size-9 rounded-md border-[1.5px] border-clay-border bg-transparent text-rose-muted hover:bg-surface-sunken hover:border-clay-muted hover:text-ink",
+        // .qty-btn — 26×26 px round icon button (circle)
+        // Note: .del-btn is 30 px; screens must pass className="size-[30px]"
+        iconRound:
+          "size-[26px] rounded-round",
       },
     },
     defaultVariants: {
