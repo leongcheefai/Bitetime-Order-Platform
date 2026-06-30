@@ -36,11 +36,11 @@ const buttonVariants = cva(
       size: {
         // .submit-btn — full-width, 14 px pad all sides, 15 px text, lg radius (12 px), letter-spacing
         default:
-          "w-full p-[14px] text-[15px] rounded-lg tracking-[0.01em]",
+          "w-full p-[14px] text-[15px] rounded-lg tracking-[0.01em] pointer-coarse:min-h-11",
         // .save-btn — full-width, 10 px pad all sides, 14 px text, md radius (10 px)
         // Note: .auth-btn uses padding: 12 px; screens should pass className="py-3" override
         md:
-          "w-full p-[10px] text-sm rounded-md",
+          "w-full p-[10px] text-sm rounded-md pointer-coarse:min-h-11",
         // .voucher-apply-btn — inline, 18 px H / 10 px V, 14 px text, md radius
         // Note: .add-btn uses py-[7px] px-[14px] w-full rounded-sm; screens must override
         sm:
