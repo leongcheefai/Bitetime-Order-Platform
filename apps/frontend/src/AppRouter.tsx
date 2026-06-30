@@ -12,7 +12,7 @@ import { Spinner } from './components/Loaders'
 // Route-level code splitting: each surface ships its own chunk, so a storefront
 // customer never downloads merchant/admin/signup code (signup pulls in the heavy
 // pinyin-pro dictionary — kept out of the customer path).
-const AdminMerchants = lazy(() => import('./admin/AdminMerchants'))
+const AdminHome = lazy(() => import('./admin/AdminHome'))
 const Landing = lazy(() => import('./marketing/Landing'))
 const SignupScreen = lazy(() => import('./merchant/SignupScreen'))
 const LoginScreen = lazy(() => import('./merchant/LoginScreen'))
@@ -85,8 +85,8 @@ function AnimatedRoutes() {
             <Route path="/merchant/login" element={<LoginScreen />} />
             <Route path="/merchant" element={<RequireRole role="merchant"><MerchantHome /></RequireRole>} />
             <Route path="/merchant/:slug" element={<RequireRole role="superadmin"><MerchantHome /></RequireRole>} />
-            <Route path="/admin/merchants" element={<RequireRole role="superadmin"><AdminMerchants /></RequireRole>} />
-            <Route path="/admin" element={<RequireRole role="superadmin"><AdminMerchants /></RequireRole>} />
+            <Route path="/admin/merchants" element={<RequireRole role="superadmin"><AdminHome /></RequireRole>} />
+            <Route path="/admin" element={<RequireRole role="superadmin"><AdminHome /></RequireRole>} />
           </Routes>
         </PageTransition>
       </AnimatePresence>

@@ -16,12 +16,14 @@
     "@emailjs/browser": "^4.4.1",
     "@supabase/supabase-js": "^2.107.0",
     "date-fns": "^4.4.0",
+    "lucide-react": "^1.22.0",
     "motion": "^12.42.0",
     "pinyin-pro": "^3.28.1",
     "react": "^19.2.6",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.18.0"
+    "react-router-dom": "^7.18.0",
+    "recharts": "^3.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

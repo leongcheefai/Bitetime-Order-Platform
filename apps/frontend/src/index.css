@@ -69,15 +69,12 @@ body:has(.user-layout) { padding: 1.25rem; }
 
 .sidebar-nav { flex: 1; padding: 0.75rem 0; display: flex; flex-direction: column; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
 .sidebar-nav-item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 1.25rem; border: none; border-radius: 0; background: none; color: var(--color-ink-soft); font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; font-weight: 500; text-align: left; letter-spacing: 0.01em; transition: background 0.15s, color 0.15s; }
-.sidebar-nav-item::after { content: '→'; font-size: 13px; color: var(--color-clay-border); margin-left: auto; padding-left: 8px; transition: transform 0.15s, color 0.15s; }
 .sidebar-nav-item::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; background: var(--color-oxblood); border-radius: 0 2px 2px 0; transform: scaleY(0); transition: transform 0.15s; }
 .sidebar-nav-item:hover { background: var(--color-surface-sunken-hover); color: var(--color-oxblood); }
-.sidebar-nav-item:hover::after { color: var(--color-oxblood); transform: translateX(4px); }
 .sidebar-nav-item:hover::before { transform: scaleY(1); }
 .sidebar-nav-item.active { background: var(--color-oxblood-tint); color: var(--color-oxblood); font-weight: 600; }
 .sidebar-nav-item.active::before { transform: scaleY(1); }
-.sidebar-nav-item.active::after { color: var(--color-oxblood); }
-.sidebar-nav-icon { font-size: 15px; flex-shrink: 0; width: 20px; text-align: center; }
+.sidebar-nav-icon { flex-shrink: 0; width: 20px; display: flex; align-items: center; justify-content: center; }
 
 .sidebar-footer { padding: 1rem 1.25rem 1.5rem; border-top: 1px solid var(--color-divider); }
 .sidebar-user-name { font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -501,6 +498,55 @@ body:has(.user-layout) { padding: 1.25rem; }
 .dash-product-bar-wrap { flex: 1; height: 8px; background: var(--color-surface-sunken); border-radius: var(--radius-xs); overflow: hidden; }
 .dash-product-bar { height: 100%; background: var(--color-oxblood); border-radius: var(--radius-xs); min-width: 4px; }
 .dash-product-qty { font-size: 12px; color: var(--color-rose-muted); width: 52px; text-align: right; flex-shrink: 0; }
+
+/* ── Flup-style overview dashboard ───────────────────────────────────────── */
+/* Flush full-height sidebar rail: no body padding, no rounded corners, hugs the
+   left viewport edge — only the dashboard shell opts in via .user-layout--flush. */
+body:has(.user-layout--flush) { padding: 0; align-items: stretch; }
+.user-layout--flush { gap: 0; min-height: 100vh; width: 100%; }
+.user-layout--flush .user-sidebar { position: sticky; top: 0; height: 100vh; border-radius: 0; border-width: 0 1.5px 0 0; box-shadow: 2px 0 12px rgba(122, 16, 40, 0.06); }
+.user-main--dash { max-width: none; padding: 1.75rem 2rem 4rem; }
+
+.dash-stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.dash-stat-label { display: inline-flex; align-items: center; }
+.dash-stat-icon { display: inline-flex; margin-right: 6px; color: var(--color-clay-muted); }
+.dash-stat-value-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.dash-stat-delta { font-size: 11px; font-weight: 600; white-space: nowrap; }
+.dash-stat-delta--up { color: var(--color-success-strong); }
+.dash-stat-delta--down { color: var(--color-danger); }
+
+.dash-section-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0.85rem; }
+.dash-section-title { font-family: 'Lora', serif; font-size: 14px; font-weight: 500; color: var(--color-oxblood); }
+
+.dash-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+
+.dash-donut { display: flex; flex-direction: column; gap: 0.75rem; }
+.dash-donut-single { width: 160px; height: 160px; border-radius: var(--radius-round); border-style: solid; border-width: 28px; margin: 0.5rem auto; }
+.dash-donut-legend { list-style: none; display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; }
+.dash-donut-legend li { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.dash-donut-dot { width: 9px; height: 9px; border-radius: var(--radius-round); flex-shrink: 0; }
+.dash-donut-name { color: var(--color-ink); min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-donut-pct { color: var(--color-rose-muted); font-weight: 600; flex-shrink: 0; }
+
+.dash-breakdown { list-style: none; display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; }
+.dash-breakdown li { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.dash-breakdown-label { color: var(--color-ink); flex: 0 0 32%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-breakdown-track { flex: 1; height: 8px; background: var(--color-surface-sunken); border-radius: var(--radius-xs); overflow: hidden; }
+.dash-breakdown-fill { display: block; height: 100%; border-radius: var(--radius-xs); min-width: 3px; }
+.dash-breakdown-value { color: var(--color-rose-muted); font-weight: 600; width: 72px; text-align: right; flex-shrink: 0; white-space: nowrap; }
+
+.sidebar-lang { display: flex; gap: 5px; margin-bottom: 8px; }
+.sidebar-lang-btn { flex: 1; padding: 4px 0; border: 1px solid var(--color-clay-border); border-radius: var(--radius-sm); background: none; color: var(--color-rose-muted); font-size: 11px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; }
+.sidebar-lang-btn:hover { border-color: var(--color-oxblood); color: var(--color-oxblood); }
+.sidebar-lang-btn.active { background: var(--color-oxblood); color: var(--color-cream); border-color: var(--color-oxblood); }
+
+@media (max-width: 900px) {
+  .dash-stat-grid--4 { grid-template-columns: 1fr 1fr; }
+  .dash-two-col { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .dash-stat-grid--4 { grid-template-columns: 1fr; }
+}
 
 .dash-status-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .dash-status-pill { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: var(--radius-pill); }
