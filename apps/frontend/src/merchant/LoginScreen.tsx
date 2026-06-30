@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { signIn } from '../store'
 import { useSession } from '../SessionContext'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 
 export default function LoginScreen() {
   const { t, refreshMerchant } = useSession()
@@ -23,29 +27,33 @@ export default function LoginScreen() {
         <h1>BiteTime</h1>
         <p className="tagline">{t('Merchant Portal', '商家入口')}</p>
       </div>
-      <div className="auth-card">
+      <Card className="rounded-pill px-8 pt-8 pb-7 gap-0">
         <h2 className="auth-title">{t('Merchant login', '商家登录')}</h2>
         <p className="auth-subtitle">{t('Sign in to manage your shop.', '登录以管理您的店铺。')}</p>
-        {msg && <div className="mm-auth-note">{msg}</div>}
+        {msg && (
+          <div className="text-[13px] text-ink-soft bg-oxblood-tint border border-rose-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+            {msg}
+          </div>
+        )}
         <form onSubmit={onSubmit}>
           <div className="auth-fields">
             <div className="field">
-              <label htmlFor="login-1">{t('Email', '邮箱')}</label>
-              <input id="login-1" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+              <Label htmlFor="login-1">{t('Email', '邮箱')}</Label>
+              <Input id="login-1" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
             <div className="field">
-              <label htmlFor="login-2">{t('Password', '密码')}</label>
-              <input id="login-2" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+              <Label htmlFor="login-2">{t('Password', '密码')}</Label>
+              <Input id="login-2" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
           </div>
-          <button className="auth-btn" disabled={busy}>
+          <Button variant="default" size="md" className="py-3" disabled={busy}>
             {busy ? t('Logging in…', '登录中…') : t('Log in', '登录')}
-          </button>
+          </Button>
         </form>
         <p className="auth-switch">
           <Link to="/merchant/signup">{t('New here? Start your shop', '新用户？开店')}</Link>
         </p>
-      </div>
+      </Card>
     </div>
   )
 }

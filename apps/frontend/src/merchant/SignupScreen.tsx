@@ -3,6 +3,11 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { signUp, signIn, createMerchant, startCheckout } from '../store'
 import { toSlugBase } from '../slug'
 import { useSession } from '../SessionContext'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
 
 const PLANS = ['basic', 'pro']
 const CYCLES = ['monthly', 'yearly']
@@ -63,53 +68,63 @@ export default function SignupScreen() {
         <h1>BiteTime</h1>
         <p className="tagline">{t('Merchant Portal', '商家入口')}</p>
       </div>
-      <div className="auth-card">
+      <Card className="rounded-pill px-8 pt-8 pb-7 gap-0">
         <h2 className="auth-title">{t('Start your shop', '开店')}</h2>
         <p className="auth-subtitle">{t('Create your merchant account to get started.', '创建商家账号以开始使用。')}</p>
 
-        <div className="mm-signup-plan">
-          <span className="mm-signup-plan-label">{planName} · {cycleName}</span>
-          <span className="mm-signup-plan-price">RM {perMo}{t('/mo', '/月')}</span>
+        {/* Plan banner: oxblood-tint bg, rose-border, md radius */}
+        <div className="flex items-baseline flex-wrap gap-2 px-[13px] py-[10px] mb-[14px] bg-oxblood-tint border border-rose-border rounded-md">
+          <span className="font-semibold text-oxblood text-[14px]">{planName} · {cycleName}</span>
+          <span className="[font-family:'Lora',serif] text-ink text-[15px]">RM {perMo}{t('/mo', '/月')}</span>
           {plan === 'basic' && (
-            <span className="mm-signup-plan-trial">{t('7-day free trial', '7 天免费试用')}</span>
+            <Badge variant="default" className="ml-auto py-[2px] tracking-[0.03em]">
+              {t('7-day free trial', '7 天免费试用')}
+            </Badge>
           )}
         </div>
 
         {canceled && (
-          <div className="mm-auth-note">
+          <div className="text-[13px] text-ink-soft bg-oxblood-tint border border-rose-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {t('Checkout was canceled. Complete your details to try again.',
                '结账已取消。完善信息后可再次尝试。')}
           </div>
         )}
-        {msg && <div className="mm-auth-note">{msg}</div>}
+        {msg && (
+          <div className="text-[13px] text-ink-soft bg-oxblood-tint border border-rose-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+            {msg}
+          </div>
+        )}
         <form onSubmit={onSubmit}>
           <div className="auth-fields">
             <div className="field">
-              <label htmlFor="signup-1">{t('Shop name', '店铺名称')}</label>
-              <input id="signup-1" value={name} onChange={e => setName(e.target.value)} required placeholder={t('e.g. Sunny Bakes', '如：阳光烘焙')} />
+              <Label htmlFor="signup-1">{t('Shop name', '店铺名称')}</Label>
+              <Input id="signup-1" value={name} onChange={e => setName(e.target.value)} required placeholder={t('e.g. Sunny Bakes', '如：阳光烘焙')} />
             </div>
-            <p className="mm-slug-preview">{t('Your store URL', '店铺网址')}: /s/{slugPreview}</p>
+            {/* Store-URL preview: sunken bg, monospace, sm radius */}
+            <p className="text-[12px] text-rose-muted px-[10px] py-[5px] bg-surface-sunken rounded-sm font-mono tracking-[0.3px] leading-[1.5]">
+              {t('Your store URL', '店铺网址')}: /s/{slugPreview}
+            </p>
             <div className="field">
-              <label htmlFor="signup-2">{t('Email', '邮箱')}</label>
-              <input id="signup-2" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+              <Label htmlFor="signup-2">{t('Email', '邮箱')}</Label>
+              <Input id="signup-2" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
             <div className="field">
-              <label htmlFor="signup-3">{t('Password', '密码')}</label>
-              <input id="signup-3" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
+              <Label htmlFor="signup-3">{t('Password', '密码')}</Label>
+              <Input id="signup-3" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
             </div>
           </div>
-          <button type="submit" className="auth-btn" disabled={busy}>
+          <Button type="submit" variant="default" size="md" className="py-3" disabled={busy}>
             {busy
               ? t('Creating…', '创建中…')
               : plan === 'basic'
                 ? t('Start free trial', '开始免费试用')
                 : t('Continue to payment', '前往付款')}
-          </button>
+          </Button>
         </form>
         <p className="auth-switch">
           <Link to="/merchant/login">{t('Already have a shop? Log in', '已有店铺？登录')}</Link>
         </p>
-      </div>
+      </Card>
     </div>
   )
 }

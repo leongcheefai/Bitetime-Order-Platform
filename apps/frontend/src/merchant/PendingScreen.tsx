@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useSession } from '../SessionContext'
 import { startCheckout } from '../store'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 
 export default function PendingScreen() {
   const { t, merchant } = useSession()
@@ -27,10 +29,13 @@ export default function PendingScreen() {
         <h1>BiteTime</h1>
         <p className="tagline">{t('Merchant Portal', '商家入口')}</p>
       </div>
-      <div className="auth-card">
+      <Card className="rounded-pill px-8 pt-8 pb-7 gap-0">
         {hasPlan ? (
           <>
-            <span className="mm-pending-badge">⏳ {t('Almost there', '即将完成')}</span>
+            {/* Pending badge: warn colours, pill, mb-4 */}
+            <span className="inline-flex items-center gap-[5px] px-3 py-[4px] rounded-pill bg-warn-bg text-warn-fg text-[12px] font-semibold tracking-[0.04em] mb-4">
+              ⏳ {t('Almost there', '即将完成')}
+            </span>
             <h2 className="auth-title">{t('Finish setting up your shop', '完成店铺设置')}</h2>
             <p className="auth-subtitle">
               <strong>{merchant?.name}</strong>{' '}
@@ -39,14 +44,20 @@ export default function PendingScreen() {
                 '已就绪——完成付款即可激活。'
               )}
             </p>
-            {err && <div className="mm-auth-note">{err}</div>}
-            <button type="button" className="auth-btn" onClick={completePayment} disabled={busy}>
+            {err && (
+              <div className="text-[13px] text-ink-soft bg-oxblood-tint border border-rose-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+                {err}
+              </div>
+            )}
+            <Button type="button" variant="default" size="md" className="py-3" onClick={completePayment} disabled={busy}>
               {busy ? t('Redirecting…', '跳转中…') : t('Complete payment', '完成付款')}
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <span className="mm-pending-badge">⏳ {t('Pending review', '待审核')}</span>
+            <span className="inline-flex items-center gap-[5px] px-3 py-[4px] rounded-pill bg-warn-bg text-warn-fg text-[12px] font-semibold tracking-[0.04em] mb-4">
+              ⏳ {t('Pending review', '待审核')}
+            </span>
             <h2 className="auth-title">{t('Your shop is under review', '您的店铺正在审核中')}</h2>
             <p className="auth-subtitle">
               <strong>{merchant?.name}</strong>{' '}
@@ -58,12 +69,12 @@ export default function PendingScreen() {
           </>
         )}
         {merchant?.slug && (
-          <p className="mm-store-url" style={{ marginTop: '1rem' }}>
+          <p className="mm-store-url mt-4">
             {t('Store URL', '店铺网址')}:{' '}
             <a href={`/s/${merchant.slug}`}>/s/{merchant.slug}</a>
           </p>
         )}
-      </div>
+      </Card>
     </div>
   )
 }
