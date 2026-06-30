@@ -19,20 +19,11 @@ export default function AdminMerchants() {
   }
 
   if (!rows) return (
-    <div className="form-wrap">
-      <p className="empty-msg" style={{ paddingTop: '2rem', textAlign: 'center' }}>
-        {t('Loading…', '加载中…')}
-      </p>
-    </div>
+    <p className="empty-msg" style={{ paddingTop: '1rem' }}>{t('Loading…', '加载中…')}</p>
   )
 
   return (
-    <div className="form-wrap form-wrap--wide">
-      <div className="brand">
-        <h1>{t('Merchants', '商家')}</h1>
-        <p className="tagline">{t('Platform admin', '平台管理')}</p>
-      </div>
-      <div className="admin-panel">
+    <div className="admin-panel">
         {rows.length === 0 ? (
           <p className="empty-msg">{t('No merchants yet.', '暂无商家。')}</p>
         ) : (
@@ -97,6 +88,5 @@ export default function AdminMerchants() {
           </div>
         )}
       </div>
-    </div>
   )
 }

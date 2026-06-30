@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
+import DashboardShell, { type NavItem } from '../components/DashboardShell'
+import Overview from './Overview'
 import ProductsManager from './ProductsManager'
 import VouchersManager from './VouchersManager'
 import ShopSettings from './ShopSettings'
@@ -9,49 +11,41 @@ import OrdersView from './OrdersView'
 import CustomersView from './CustomersView'
 
 const SECTIONS = [
-  { key: 'products',  en: 'Products',  zh: '产品' },
-  { key: 'vouchers',  en: 'Vouchers',  zh: '优惠券' },
-  { key: 'settings',  en: 'Settings',  zh: '设置' },
-  { key: 'orders',    en: 'Orders',    zh: '订单' },
-  { key: 'customers', en: 'Customers', zh: '顾客' },
+  { key: 'overview',  en: 'Overview',  zh: '概览', icon: '📊' },
+  { key: 'orders',    en: 'Orders',    zh: '订单', icon: '🧾' },
+  { key: 'products',  en: 'Products',  zh: '产品', icon: '🍰' },
+  { key: 'vouchers',  en: 'Vouchers',  zh: '优惠券', icon: '🎟️' },
+  { key: 'customers', en: 'Customers', zh: '顾客', icon: '👥' },
+  { key: 'settings',  en: 'Settings',  zh: '设置', icon: '⚙️' },
 ]
 
 export default function Dashboard() {
-  const { t, merchant } = useSession()
-  const [section, setSection] = useState<string>('products')
+  const { t, merchant, role } = useSession()
+  const [section, setSection] = useState<string>('overview')
   const variants = usePageVariants()
+
+  const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
+
   return (
-    <div className="form-wrap form-wrap--wide">
-      <div className="mm-dash-header">
-        <h1 className="mm-dash-shop-name">{merchant!.name}</h1>
-        <p className="mm-store-url">
-          {t('Store', '店铺')}:{' '}
-          <a href={`/s/${merchant!.slug}`} target="_blank" rel="noopener noreferrer">
-            /s/{merchant!.slug}
-          </a>
-        </p>
-      </div>
-      <nav className="mm-dash-nav">
-        {SECTIONS.map(s => (
-          <button
-            key={s.key}
-            type="button"
-            className={`mm-dash-tab${section === s.key ? ' active' : ''}`}
-            onClick={() => setSection(s.key)}
-          >
-            {t(s.en, s.zh)}
-          </button>
-        ))}
-      </nav>
+    <DashboardShell
+      logo="BiteTime"
+      title={merchant!.name}
+      role={role === 'superadmin' ? t('Viewing as shop', '以店铺身份查看') : t('Merchant', '商家')}
+      nav={nav}
+      active={section}
+      onSelect={setSection}
+      userName={`/s/${merchant!.slug}`}
+    >
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={section} variants={variants} initial="initial" animate="animate" exit="exit">
+          {section === 'overview'  && <Overview />}
+          {section === 'orders'    && <OrdersView />}
           {section === 'products'  && <ProductsManager />}
           {section === 'vouchers'  && <VouchersManager />}
-          {section === 'settings'  && <ShopSettings />}
-          {section === 'orders'    && <OrdersView />}
           {section === 'customers' && <CustomersView />}
+          {section === 'settings'  && <ShopSettings />}
         </motion.div>
       </AnimatePresence>
-    </div>
+    </DashboardShell>
   )
 }
