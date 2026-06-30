@@ -187,31 +187,7 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 .notif-item-title { font-size: 13px; font-weight: 600; color: var(--color-ink); }
 .notif-item-body { font-size: 12px; color: var(--color-rose-muted); margin-top: 2px; }
 
-/* ── User layout ─────────────────────────────────────────────────────────── */
-body:has(.user-layout) { padding: 1.25rem; }
-.user-layout { display: flex; min-height: calc(100vh - 2.5rem); gap: 1.25rem; align-items: flex-start; width: 100%; }
 
-.user-sidebar { width: 210px; flex-shrink: 0; background: var(--color-surface-sunken); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-pill); display: flex; flex-direction: column; padding: 0; position: sticky; top: 0; height: calc(100vh - 2.5rem); overflow: hidden; box-shadow: 0 2px 12px rgba(122,16,40,0.07); }
-.sidebar-brand { padding: 1.75rem 1.25rem 1.25rem; border-bottom: 1px solid var(--color-divider); }
-.sidebar-logo { font-family: 'Lora', serif; font-size: 22px; font-weight: 500; color: var(--color-oxblood); letter-spacing: 0.5px; }
-.sidebar-title { font-family: 'Lora', serif; font-size: 13px; color: var(--color-rose-muted); margin-top: 2px; }
-.sidebar-role { font-size: 10px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.12em; margin-top: 4px; }
-
-.sidebar-nav { flex: 1; padding: 0.75rem 0; display: flex; flex-direction: column; overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
-.sidebar-nav-item { position: relative; display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 1.25rem; border: none; border-radius: 0; background: none; color: var(--color-ink-soft); font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; font-weight: 500; text-align: left; letter-spacing: 0.01em; transition: background 0.15s, color 0.15s; }
-.sidebar-nav-item::before { content: ''; position: absolute; left: 0; top: 20%; bottom: 20%; width: 3px; background: var(--color-oxblood); border-radius: 0 2px 2px 0; transform: scaleY(0); transition: transform 0.15s; }
-.sidebar-nav-item:hover { background: var(--color-surface-sunken-hover); color: var(--color-oxblood); }
-.sidebar-nav-item:hover::before { transform: scaleY(1); }
-.sidebar-nav-item.active { background: var(--color-oxblood-tint); color: var(--color-oxblood); font-weight: 600; }
-.sidebar-nav-item.active::before { transform: scaleY(1); }
-.sidebar-nav-icon { flex-shrink: 0; width: 20px; display: flex; align-items: center; justify-content: center; }
-
-.sidebar-footer { padding: 1rem 1.25rem 1.5rem; border-top: 1px solid var(--color-divider); }
-.sidebar-user-name { font-size: 12px; color: var(--color-text-tertiary); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sidebar-signout { background: none; border: 1px solid var(--color-clay-border); border-radius: var(--radius-sm); color: var(--color-rose-muted); font-size: 12px; font-family: 'DM Sans', sans-serif; padding: 6px 12px; cursor: pointer; width: 100%; transition: all 0.15s; }
-.sidebar-signout:hover { background: var(--color-surface-sunken-hover); color: var(--color-ink); border-color: var(--color-clay-muted); }
-
-.user-main { flex: 1; min-width: 0; padding: 2rem 2rem 4rem; max-width: 680px; }
 
 .preview-back-pill { display: inline-block; margin-bottom: 1.25rem; padding: 6px 14px; background: var(--color-oxblood); color: var(--color-cream); border-radius: var(--radius-pill); font-size: 12px; font-weight: 500; cursor: pointer; transition: background 0.15s; }
 .preview-back-pill:hover { background: var(--color-oxblood-deep); }
@@ -468,21 +444,6 @@ body:has(.user-layout) { padding: 1.25rem; }
   .product-row-header .desc-head { display: none; }
 }
 
-@media (max-width: 640px) {
-  .user-sidebar { width: 64px; }
-  .sidebar-brand { padding: 1rem 0; text-align: center; }
-  .sidebar-title, .sidebar-role { display: none; }
-  .sidebar-logo { font-size: 16px; }
-  .sidebar-nav { padding: 0.75rem 0.5rem; }
-  .sidebar-nav-item { justify-content: center; padding: 10px; gap: 0; }
-  .sidebar-nav-item::after { display: none; }
-  .sidebar-nav-item span:last-child { display: none; }
-  .sidebar-nav-icon { width: auto; font-size: 18px; }
-  .sidebar-footer { padding: 0.75rem 0.5rem; }
-  .sidebar-user-name { display: none; }
-  .sidebar-signout { font-size: 10px; padding: 6px 4px; }
-  .user-main { padding: 1rem 1rem 3rem; }
-}
 
 /* ── Customer order status badge ─────────────────────────────────────────── */
 .cust-status-badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: var(--radius-pill); white-space: nowrap; flex-shrink: 0; }
@@ -616,12 +577,9 @@ body:has(.user-layout) { padding: 1.25rem; }
 .dash-product-qty { font-size: 12px; color: var(--color-rose-muted); width: 52px; text-align: right; flex-shrink: 0; }
 
 /* ── Flup-style overview dashboard ───────────────────────────────────────── */
-/* Flush full-height sidebar rail: no body padding, no rounded corners, hugs the
-   left viewport edge — only the dashboard shell opts in via .user-layout--flush. */
-body:has(.user-layout--flush) { padding: 0; align-items: stretch; }
-.user-layout--flush { gap: 0; min-height: 100vh; width: 100%; }
-.user-layout--flush .user-sidebar { position: sticky; top: 0; height: 100vh; border-radius: 0; border-width: 0 1.5px 0 0; box-shadow: 2px 0 12px rgba(122, 16, 40, 0.06); }
-.user-main--dash { max-width: none; padding: 1.75rem 2rem 4rem; }
+/* Flush full-height sidebar rail: no body padding, hugs the
+   left viewport edge — the dashboard shell opts in via [data-layout-flush]. */
+body:has([data-layout-flush]) { padding: 0; align-items: stretch; }
 
 .dash-stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
 .dash-stat-label { display: inline-flex; align-items: center; }
@@ -651,10 +609,6 @@ body:has(.user-layout--flush) { padding: 0; align-items: stretch; }
 .dash-breakdown-fill { display: block; height: 100%; border-radius: var(--radius-xs); min-width: 3px; }
 .dash-breakdown-value { color: var(--color-rose-muted); font-weight: 600; width: 72px; text-align: right; flex-shrink: 0; white-space: nowrap; }
 
-.sidebar-lang { display: flex; gap: 5px; margin-bottom: 8px; }
-.sidebar-lang-btn { flex: 1; padding: 4px 0; border: 1px solid var(--color-clay-border); border-radius: var(--radius-sm); background: none; color: var(--color-rose-muted); font-size: 11px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: all 0.15s; }
-.sidebar-lang-btn:hover { border-color: var(--color-oxblood); color: var(--color-oxblood); }
-.sidebar-lang-btn.active { background: var(--color-oxblood); color: var(--color-cream); border-color: var(--color-oxblood); }
 
 @media (max-width: 900px) {
   .dash-stat-grid--4 { grid-template-columns: 1fr 1fr; }
@@ -907,9 +861,6 @@ a.mm-store-url--link:hover { text-decoration: underline; }
 /* Saved confirmation message (oxblood, not raw black) */
 .mm-save-msg { font-size: 13px; color: var(--color-oxblood); font-weight: 500; text-align: center; margin-top: 8px; min-height: 18px; }
 
-/* Storefront shell loading / not-found / placeholder states */
-.mm-storefront-state { text-align: center; padding: 2rem 0 3rem; }
-.mm-storefront-state p { color: var(--color-rose-muted); font-size: 14px; line-height: 1.6; margin-top: 6px; }
 
 /* Responsive — stack product actions, compress tabs */
 @media (max-width: 480px) {
@@ -986,8 +937,7 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   .radio-opt { min-height: 44px; }
   .del-btn { width: 44px; height: 44px; }
   .hamburger-btn, .notif-bell { width: 44px; height: 44px; }
-  .add-btn, .save-btn, .sidebar-signout, .voucher-remove-btn, .voucher-apply-btn { min-height: 44px; }
-  .sidebar-nav-item { padding-top: 14px; padding-bottom: 14px; }
+  .add-btn, .save-btn, .voucher-remove-btn, .voucher-apply-btn { min-height: 44px; }
 }
 
 /* ── Admin merchants: per-shop portal links ────────────────────────────────── */
@@ -999,24 +949,10 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   .mm-open-link { min-height: 36px; display: inline-flex; align-items: center; }
 }
 
-.skeleton { display: block; background: linear-gradient(90deg, var(--color-cream) 25%, var(--color-surface-raised) 50%, var(--color-cream) 75%); background-size: 936px 100%; animation: shimmer 1.4s linear infinite; }
-.skeleton-text { display: flex; flex-direction: column; gap: 8px; }
-.spinner-wrap { display: inline-flex; align-items: center; gap: 10px; color: var(--color-rose-muted); font-size: 14px; }
-.spinner { width: 18px; height: 18px; border: 2px solid var(--color-clay-border); border-top-color: var(--color-oxblood); border-radius: 50%; animation: spin 0.7s linear infinite; }
-.spinner-label { font-family: 'DM Sans', sans-serif; }
+/* @keyframes shimmer (above, line 140) and @keyframes spin (below) are kept —
+   both are referenced by Tailwind arbitrary animate-[…] utilities in Loaders.tsx. */
 @keyframes spin { to { transform: rotate(360deg); } }
-.skeleton-page { display: flex; flex-direction: column; gap: 18px; padding-top: 8px; }
-.skeleton-page-head { display: flex; flex-direction: column; gap: 10px; }
-.skeleton-page-tabs { display: flex; gap: 10px; flex-wrap: wrap; }
-.skeleton-page-body { margin-top: 4px; }
-.loading-center { width: 100%; min-height: 50vh; display: flex; align-items: center; justify-content: center; }
 
-/* ── Toast / Toaster ──────────────────────────────────────────────────────── */
-.toaster { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: var(--z-toast, 9999); display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; width: max-content; max-width: calc(100vw - 2rem); }
-.toast { pointer-events: auto; cursor: pointer; border: 1px solid var(--color-clay-border); border-radius: var(--radius-pill); padding: 10px 18px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; box-shadow: 0 6px 20px rgba(43,10,16,0.14); background: var(--color-surface-raised); color: var(--color-ink); text-align: center; }
-.toast--success { border-color: var(--color-clay-border); background: var(--color-surface-raised); color: var(--color-ink); }
-.toast--error { border-color: var(--color-rose-border); background: var(--color-oxblood-tint); color: var(--color-oxblood); }
-.toast--info { border-color: var(--color-clay-border); background: var(--color-cream); color: var(--color-rose-muted); }
 
 /* shadcn semantic color bridges → Tailwind utilities (e.g. bg-primary, text-muted-foreground).
    Radius entries sm–2xl removed here — brand @theme inline (top of file) owns those. */
