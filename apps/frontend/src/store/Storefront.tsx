@@ -405,17 +405,17 @@ export default function Storefront() {
                 </button>
               </div>
             ) : (
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <Input
                   type="text"
                   value={voucherInput}
                   onChange={e => setVoucherInput(e.target.value)}
                   placeholder={t('Enter voucher code', '输入优惠码')}
-                  className="flex-1"
+                  className="w-full"
                 />
                 <button
                   type="button"
-                  className="flex-1 border border-clay-border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-ink text-center bg-surface-raised transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2 whitespace-nowrap"
+                  className="w-full border border-clay-border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-ink text-center bg-surface-raised transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2 whitespace-nowrap"
                   onClick={applyVoucher}
                 >
                   {t('Apply', '应用')}
