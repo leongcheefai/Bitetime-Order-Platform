@@ -207,10 +207,8 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 .admin-toggle button:hover { border-color: var(--color-oxblood); color: var(--color-oxblood); }
 
 .admin-panel { background: var(--color-surface-raised); border: 1.5px solid var(--color-rose-border); border-radius: var(--radius-2xl); padding: 1.25rem; margin-bottom: 2rem; width: 100%; box-sizing: border-box; }
-.admin-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: var(--color-oxblood); margin-bottom: 1rem; display: flex; align-items: center; gap: 8px; }
 .admin-section { margin-bottom: 1.25rem; }
 .admin-tab-content { width: 100%; }
-.admin-section-label { font-size: 11px; font-weight: 500; color: var(--color-oxblood); text-transform: uppercase; letter-spacing: 0.09em; margin-bottom: 0.6rem; }
 
 .product-list { display: flex; flex-direction: column; gap: 8px; }
 .product-row { display: grid; grid-template-columns: 1fr 1fr 80px 80px 36px 32px; gap: 6px; align-items: center; }
@@ -226,19 +224,6 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 .add-btn { margin-top: 8px; background: none; border: 1px dashed var(--color-clay-border); border-radius: var(--radius-sm); padding: 7px 14px; font-size: 13px; color: var(--color-rose-muted); cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; width: 100%; }
 .add-btn:hover { border-color: var(--color-oxblood); color: var(--color-oxblood); background: var(--color-oxblood-tint); }
 
-.admin-fields { display: flex; flex-direction: column; gap: 8px; }
-.admin-field { display: grid; grid-template-columns: 1fr 100px; gap: 6px; align-items: center; }
-.admin-field label { font-size: 13px; color: var(--color-rose-muted); }
-.admin-field input { padding: 7px 10px; border: 1px solid var(--color-clay-border); border-radius: var(--radius-sm); font-size: 13px; background: var(--color-cream); color: var(--color-ink); font-family: 'DM Sans', sans-serif; }
-.admin-field input:focus { outline: none; border-color: var(--color-oxblood); box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
-.admin-field.full { grid-template-columns: 1fr; }
-.admin-field.full input { width: 100%; }
-.admin-field select { padding: 7px 32px 7px 10px; border: 1px solid var(--color-clay-border); border-radius: var(--radius-sm); font-size: 13px; background: var(--color-cream); color: var(--color-ink); font-family: 'DM Sans', sans-serif; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A4F55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; cursor: pointer; }
-.admin-field select:focus { outline: none; border-color: var(--color-oxblood); box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
-.admin-field--stack { display: flex; flex-direction: column; gap: 4px; min-width: 200px; align-items: flex-start; }
-.admin-field--stack select { width: 100%; }
-.save-btn { width: 100%; padding: 10px; background: var(--color-oxblood); color: var(--color-cream); border: none; border-radius: var(--radius-md); font-size: 14px; font-weight: 500; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; margin-top: 4px; }
-.save-btn:hover { background: var(--color-oxblood-deep); }
 .save-msg { font-size: 12px; color: var(--color-rose-muted); text-align: center; margin-top: 6px; min-height: 16px; }
 
 .section { margin-bottom: 1.75rem; }
@@ -328,12 +313,6 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 
 /* ── Customer settings ───────────────────────────────────────────────────── */
 .cust-settings { display: flex; flex-direction: column; gap: 1.5rem; }
-.settings-section { background: var(--color-surface-raised); border: 1.5px solid var(--color-clay-border); border-radius: var(--radius-2xl); padding: 1.25rem; }
-.settings-section--history { padding: 1.25rem 0.5rem 0.75rem; }
-.settings-section--history .settings-section-title { padding-left: 0.75rem; }
-.settings-section--history .order-history-list { margin-top: 0.75rem; }
-.settings-section-title { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: var(--color-oxblood); margin-bottom: 4px; }
-.settings-hint { font-size: 13px; color: var(--color-rose-muted); }
 
 /* ── Order history accordion ─────────────────────────────────────────────── */
 .order-history-list { display: flex; flex-direction: column; gap: 8px; margin-top: 1rem; }
@@ -790,8 +769,6 @@ a.mm-store-url--link:hover { text-decoration: underline; }
 .mm-table tbody tr:hover td { background: var(--color-oxblood-tint); }
 .mm-table .mm-table-actions { text-align: right; white-space: nowrap; }
 
-/* Saved confirmation message (oxblood, not raw black) */
-.mm-save-msg { font-size: 13px; color: var(--color-oxblood); font-weight: 500; text-align: center; margin-top: 8px; min-height: 18px; }
 
 
 /* Responsive — compress tabs */
@@ -800,9 +777,6 @@ a.mm-store-url--link:hover { text-decoration: underline; }
 }
 
 
-/* Kept: admin-field-select still referenced by ShopSettings / AdminMerchants migration path */
-.admin-field-select { padding: 7px 32px 7px 10px; border: 1px solid var(--color-clay-border); border-radius: var(--radius-sm); font-size: 13px; background: var(--color-cream); color: var(--color-ink); font-family: 'DM Sans', sans-serif; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A4F55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; cursor: pointer; min-width: 140px; }
-.admin-field-select:focus { outline: none; border-color: var(--color-oxblood); box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
 
 /* ── Marketing Landing Page (.mm-land-*) ─────────────────────────────────── */
 body:has(.mm-land) { padding: 0; align-items: stretch; }
@@ -824,7 +798,7 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   .radio-opt { min-height: 44px; }
   .del-btn { width: 44px; height: 44px; }
   .hamburger-btn, .notif-bell { width: 44px; height: 44px; }
-  .add-btn, .save-btn, .voucher-remove-btn, .voucher-apply-btn { min-height: 44px; }
+  .add-btn, .voucher-remove-btn, .voucher-apply-btn { min-height: 44px; }
 }
 
 /* ── Admin merchants: per-shop portal links ────────────────────────────────── */
