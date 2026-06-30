@@ -20,14 +20,14 @@ const STATUS_LABELS: Record<string, { en: string; zh: string }> = {
 //   preparing → warn-bg-alt / warn-fg-alt    → no named variant; className override
 //   ready     → success-bg-soft / success-deep → no named variant; className override
 //   completed → prep-bg-alt / prep-fg-alt    → no named variant; className override
-//   cancelled → danger-bg / danger-fg        → danger variant (exact match)
+//   cancelled → danger-bg / danger-fg        → className override (danger variant adds a border the original lacked)
 type BadgeConfig = { variant?: 'infoBlue' | 'danger'; className?: string }
 const STATUS_BADGE: Record<string, BadgeConfig> = {
   new:       { variant: 'infoBlue' },
   preparing: { className: 'bg-warn-bg-alt text-warn-fg-alt border-transparent' },
   ready:     { className: 'bg-success-bg-soft text-success-deep border-transparent' },
   completed: { className: 'bg-prep-bg-alt text-prep-fg-alt border-transparent' },
-  cancelled: { variant: 'danger' },
+  cancelled: { className: 'bg-danger-bg text-danger-fg border-transparent' },
 }
 
 // mm-order-label equivalent: 11px semibold uppercase, letter-spacing 0.06em, rose-muted, shrink-0
