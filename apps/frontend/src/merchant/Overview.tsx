@@ -34,19 +34,19 @@ export default function Overview() {
   } as Record<string, string>)[s] ?? s
 
   if (!stats) return (
-    <div className="dashboard-panel">
-      <div className="dash-stat-grid dash-stat-grid--4">
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-4 gap-[10px] max-[900px]:grid-cols-2 max-[520px]:grid-cols-1">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="dash-stat-card"><SkeletonText lines={2} /></div>
+          <div key={i} className="rounded-xl border-[1.5px] border-rose-border bg-surface-raised px-5 py-4"><SkeletonText lines={2} /></div>
         ))}
       </div>
-      <div className="dash-section"><SkeletonText lines={6} /></div>
+      <div className="rounded-xl border-[1.5px] border-rose-border bg-surface-raised px-5 py-4"><SkeletonText lines={6} /></div>
     </div>
   )
 
   return (
-    <div className="dashboard-panel">
-      <div className="dash-stat-grid dash-stat-grid--4">
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-4 gap-[10px] max-[900px]:grid-cols-2 max-[520px]:grid-cols-1">
         <StatCard label={t('Total orders', '总订单')} value={String(stats.totalOrders)} delta={stats.ordersDelta} icon={<ReceiptText {...STAT_ICON} />} />
         <StatCard label={t('Revenue', '营收')} value={money(stats.revenue)} delta={stats.revenueDelta} icon={<Wallet {...STAT_ICON} />} />
         <StatCard label={t('Customers', '顾客')} value={String(stats.customerCount)} icon={<Users {...STAT_ICON} />} />
@@ -57,7 +57,7 @@ export default function Overview() {
         <RevenueBarChart data={stats.daily} revenueLabel={t('Revenue', '营收')} ordersLabel={t('Orders', '订单')} />
       </ChartPanel>
 
-      <div className="dash-two-col">
+      <div className="grid grid-cols-2 gap-5 max-[900px]:grid-cols-1">
         <ChartPanel title={t('Revenue by product', '产品营收')}>
           <DonutCard data={stats.productRevenue} />
         </ChartPanel>
