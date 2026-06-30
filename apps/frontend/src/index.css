@@ -320,14 +320,6 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 .customer-count { font-size: 12px; color: var(--color-rose-muted); margin-bottom: 0.75rem; }
 .customer-list-status { font-size: 13px; color: var(--color-rose-muted); font-style: italic; }
 .customer-list-error { color: var(--color-danger); font-style: normal; }
-.customer-table-wrap { overflow-x: auto; }
-.customer-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.customer-table th { font-size: 10px; font-weight: 500; color: var(--color-oxblood); text-transform: uppercase; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1.5px solid var(--color-rose-border); text-align: left; white-space: nowrap; }
-.customer-table td { padding: 9px 10px; border-bottom: 1px solid var(--color-surface-warm-alt); color: var(--color-ink); vertical-align: middle; }
-.customer-table tbody tr:last-child td { border-bottom: none; }
-.customer-table tbody tr:hover td { background: var(--color-oxblood-tint); }
-.customer-table td:first-child { color: var(--color-text-tertiary); font-size: 12px; width: 32px; }
-
 /* ── Customer tab nav ─────────────────────────────────────────────────────── */
 .cust-tab-nav { display: flex; gap: 8px; margin-bottom: 1.75rem; background: var(--color-surface-sunken); border-radius: var(--radius-xl); padding: 5px; }
 .cust-tab { flex: 1; padding: 9px 12px; border: none; border-radius: var(--radius-md); background: none; font-size: 14px; font-family: 'DM Sans', sans-serif; color: var(--color-rose-muted); cursor: pointer; font-weight: 500; transition: all 0.15s; }
@@ -808,26 +800,9 @@ a.mm-store-url--link:hover { text-decoration: underline; }
 }
 
 
-/* ── Merchant Orders view — shared helpers (OrdersView + CustomersView) ──── */
-.mm-orders-empty { text-align: center; color: var(--color-rose-muted); font-size: 14px; }
-
-.mm-order-wa { color: var(--color-oxblood); text-decoration: none; font-weight: 500; }
-.mm-order-wa:hover { text-decoration: underline; }
-
 /* Kept: admin-field-select still referenced by ShopSettings / AdminMerchants migration path */
 .admin-field-select { padding: 7px 32px 7px 10px; border: 1px solid var(--color-clay-border); border-radius: var(--radius-sm); font-size: 13px; background: var(--color-cream); color: var(--color-ink); font-family: 'DM Sans', sans-serif; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A4F55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; cursor: pointer; min-width: 140px; }
 .admin-field-select:focus { outline: none; border-color: var(--color-oxblood); box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
-
-/* ── Merchant Customers view (.mm-customers-*) ──────────────────────────── */
-.mm-customers-wrap { padding: 0; overflow: hidden; }
-.mm-customers-table-wrap { overflow-x: auto; }
-.mm-customers-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.mm-customers-table th { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-oxblood); padding: 10px 14px; border-bottom: 1.5px solid var(--color-rose-border); text-align: left; white-space: nowrap; }
-.mm-customers-table td { padding: 12px 14px; border-bottom: 1px solid var(--color-surface-warm-alt); color: var(--color-ink); vertical-align: middle; }
-.mm-customers-table tbody tr:last-child td { border-bottom: none; }
-.mm-customers-table tbody tr:hover td { background: var(--color-oxblood-tint); }
-.mm-customers-count { font-weight: 600; color: var(--color-oxblood); text-align: center; }
-
 
 /* ── Marketing Landing Page (.mm-land-*) ─────────────────────────────────── */
 body:has(.mm-land) { padding: 0; align-items: stretch; }

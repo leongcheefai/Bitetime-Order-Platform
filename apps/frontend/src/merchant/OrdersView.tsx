@@ -75,7 +75,7 @@ export default function OrdersView() {
 
   if (orders.length === 0) {
     return (
-      <div className="admin-panel mm-orders-empty">
+      <div className="admin-panel text-center text-rose-muted text-sm">
         <p>{t('No orders yet.', '暂无订单。')}</p>
       </div>
     )
@@ -114,7 +114,8 @@ export default function OrdersView() {
                     href={`https://wa.me/${o.customer_wa.replace(/\D/g, '')}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mm-order-wa"
+                    // pixel-match of .mm-order-wa + :hover
+                    className="text-oxblood no-underline font-medium hover:underline"
                   >
                     {o.customer_wa}
                   </a>
