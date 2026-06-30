@@ -294,19 +294,19 @@ export default function Storefront() {
                       <Button
                         variant="soft"
                         size="iconRound"
-                        className="text-[16px]"
+                        className="text-[16px] pointer-coarse:size-11 pointer-coarse:text-[18px]"
                         onClick={() => updateQty(p.id, -1)}
                         aria-label={t('Decrease quantity', '减少数量')}
                       >−</Button>
                       <span
-                        className="text-[14px] font-medium min-w-[20px] text-center text-ink"
+                        className="text-[14px] font-medium min-w-[20px] pointer-coarse:min-w-[28px] text-center text-ink"
                         aria-live="polite"
                         aria-label={t('Quantity', '数量')}
                       >{cart[p.id] || 0}</span>
                       <Button
                         variant="soft"
                         size="iconRound"
-                        className="text-[16px]"
+                        className="text-[16px] pointer-coarse:size-11 pointer-coarse:text-[18px]"
                         onClick={() => updateQty(p.id, 1)}
                         aria-label={t('Increase quantity', '增加数量')}
                       >+</Button>
@@ -326,7 +326,7 @@ export default function Storefront() {
               <button
                 type="button"
                 className={cn(
-                  "flex-1 border rounded-md py-[10px] px-[14px] cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
+                  "flex-1 border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
                   mode === 'pickup'
                     ? "border-[1.5px] border-oxblood bg-oxblood-tint text-oxblood font-medium"
                     : "border-clay-border bg-surface-raised text-ink"
@@ -339,7 +339,7 @@ export default function Storefront() {
               <button
                 type="button"
                 className={cn(
-                  "flex-1 border rounded-md py-[10px] px-[14px] cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
+                  "flex-1 border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
                   mode === 'delivery'
                     ? "border-[1.5px] border-oxblood bg-oxblood-tint text-oxblood font-medium"
                     : "border-clay-border bg-surface-raised text-ink"
@@ -359,7 +359,7 @@ export default function Storefront() {
                   onChange={e => setAddress(e.target.value)}
                   rows={3}
                   placeholder={t('Enter your full address…', '请输入完整地址…')}
-                  className="resize-vertical min-h-[72px]"
+                  className="resize-y min-h-[72px]"
                 />
               </div>
             )}
@@ -415,7 +415,7 @@ export default function Storefront() {
                 />
                 <button
                   type="button"
-                  className="border border-clay-border rounded-md py-[10px] px-[14px] cursor-pointer text-[14px] font-sans text-ink text-center bg-surface-raised transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2 whitespace-nowrap"
+                  className="flex-1 border border-clay-border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-ink text-center bg-surface-raised transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2 whitespace-nowrap"
                   onClick={applyVoucher}
                 >
                   {t('Apply', '应用')}
