@@ -23,19 +23,23 @@ export default function AdminOverview() {
   } as Record<string, string>)[s] ?? s
 
   if (!stats) return (
-    <div className="dashboard-panel">
-      <div className="dash-stat-grid dash-stat-grid--4">
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 min-[520px]:grid-cols-2 min-[900px]:grid-cols-4 gap-[10px]">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="dash-stat-card"><SkeletonText lines={2} /></div>
+          <div key={i} className="bg-surface-raised border-[1.5px] border-rose-border rounded-xl py-4 px-5">
+            <SkeletonText lines={2} />
+          </div>
         ))}
       </div>
-      <div className="dash-section"><SkeletonText lines={6} /></div>
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-xl py-4 px-5">
+        <SkeletonText lines={6} />
+      </div>
     </div>
   )
 
   return (
-    <div className="dashboard-panel">
-      <div className="dash-stat-grid dash-stat-grid--4">
+    <div className="flex flex-col gap-5">
+      <div className="grid grid-cols-1 min-[520px]:grid-cols-2 min-[900px]:grid-cols-4 gap-[10px]">
         <StatCard label={t('Total merchants', '商家总数')} value={String(stats.total)} icon={<Store {...STAT_ICON} />} />
         <StatCard label={t('Active', '已激活')} value={String(stats.active)} icon={<CircleCheck {...STAT_ICON} />} />
         <StatCard label={t('Pending', '待审核')} value={String(stats.pending)} icon={<Clock {...STAT_ICON} />} />
@@ -50,7 +54,7 @@ export default function AdminOverview() {
         />
       </ChartPanel>
 
-      <div className="dash-two-col">
+      <div className="grid grid-cols-1 min-[900px]:grid-cols-2 gap-5">
         <ChartPanel title={t('Merchants by status', '商家状态')}>
           <DonutCard data={stats.statusBreakdown.map(s => ({ name: statusLabel(s.status), value: s.count }))} />
         </ChartPanel>

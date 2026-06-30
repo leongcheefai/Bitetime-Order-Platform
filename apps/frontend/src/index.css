@@ -522,13 +522,9 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
 .date-picker-popup .rdp-outside .rdp-day_button { color: var(--color-clay-pale); }
 
 /* ── Sales Dashboard ─────────────────────────────────────────────────────── */
-.dashboard-panel { display: flex; flex-direction: column; gap: 1.25rem; }
-.dash-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.dash-stat-card { background: var(--color-surface-raised); border: 1.5px solid var(--color-rose-border); border-radius: var(--radius-xl); padding: 1rem 1.25rem; }
 .dash-stat-accent { background: var(--color-oxblood-tint); border-color: var(--color-oxblood); }
 .dash-stat-sub { font-size: 11px; color: var(--color-text-tertiary); margin-top: 3px; }
 
-.dash-section { background: var(--color-surface-raised); border: 1.5px solid var(--color-rose-border); border-radius: var(--radius-xl); padding: 1rem 1.25rem; }
 
 .dash-bar-chart { display: flex; align-items: flex-end; gap: 8px; height: 140px; padding-top: 4px; }
 .dash-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; height: 100%; }
@@ -550,18 +546,6 @@ body:has(.form-wrap--owner) { padding-left: 0.5rem; padding-right: 0.5rem; }
    left viewport edge — the dashboard shell opts in via [data-layout-flush]. */
 body:has([data-layout-flush]) { padding: 0; align-items: stretch; }
 
-.dash-stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
-
-.dash-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
-
-
-@media (max-width: 900px) {
-  .dash-stat-grid--4 { grid-template-columns: 1fr 1fr; }
-  .dash-two-col { grid-template-columns: 1fr; }
-}
-@media (max-width: 520px) {
-  .dash-stat-grid--4 { grid-template-columns: 1fr; }
-}
 
 .dash-status-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
 .dash-status-pill { display: flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: var(--radius-pill); }
@@ -725,50 +709,11 @@ body:has(.sticky-total-bar) .form-wrap { padding-bottom: 80px; }
 .mm-badge--active    { background: var(--color-success-bg-soft); color: var(--color-success-deep); }
 .mm-badge--suspended { background: var(--color-danger-bg); color: var(--color-danger-fg); }
 
-/* Admin table action buttons */
-.mm-act-btn {
-  padding: 4px 12px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--color-clay-border);
-  background: var(--color-surface-raised);
-  color: var(--color-rose-muted);
-  font-size: 12px;
-  font-family: 'DM Sans', sans-serif;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-.mm-act-btn + .mm-act-btn { margin-left: 4px; }
-.mm-act-btn:hover:not(:disabled) { border-color: var(--color-oxblood); color: var(--color-oxblood); background: var(--color-oxblood-tint); }
-.mm-act-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.mm-act-btn--primary { background: var(--color-oxblood); color: var(--color-cream); border-color: var(--color-oxblood); }
-.mm-act-btn--primary:hover:not(:disabled) { background: var(--color-oxblood-deep); border-color: var(--color-oxblood-deep); color: var(--color-cream); }
 
 /* Store URL / slug helper line */
 .mm-store-url { font-size: 13px; color: var(--color-rose-muted); }
 .mm-store-url a { color: var(--color-oxblood); text-decoration: none; font-weight: 500; }
 .mm-store-url a:hover { text-decoration: underline; }
-a.mm-store-url--link { color: var(--color-oxblood); text-decoration: none; font-weight: 500; }
-a.mm-store-url--link:hover { text-decoration: underline; }
-
-/* Admin merchant table */
-.mm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.mm-table th {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--color-oxblood);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 8px 12px;
-  border-bottom: 1.5px solid var(--color-rose-border);
-  text-align: left;
-  white-space: nowrap;
-}
-.mm-table td { padding: 12px; border-bottom: 1px solid var(--color-surface-warm-alt); color: var(--color-ink); vertical-align: middle; }
-.mm-table tbody tr:last-child td { border-bottom: none; }
-.mm-table tbody tr:hover td { background: var(--color-oxblood-tint); }
-.mm-table .mm-table-actions { text-align: right; white-space: nowrap; }
-
 
 
 /* Responsive — compress tabs */
@@ -801,14 +746,6 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   .add-btn, .voucher-remove-btn, .voucher-apply-btn { min-height: 44px; }
 }
 
-/* ── Admin merchants: per-shop portal links ────────────────────────────────── */
-.mm-open-links { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-.mm-open-link { padding: 4px 10px; border: 1px solid var(--color-clay-border); border-radius: var(--radius-pill); color: var(--color-rose-muted); font-size: 11px; font-weight: 600; text-decoration: none; white-space: nowrap; transition: all 0.15s; }
-.mm-open-link:hover { background: var(--color-oxblood-tint); color: var(--color-oxblood); }
-
-@media (pointer: coarse) {
-  .mm-open-link { min-height: 36px; display: inline-flex; align-items: center; }
-}
 
 /* @keyframes shimmer (above, line 140) and @keyframes spin (below) are kept —
    both are referenced by Tailwind arbitrary animate-[…] utilities in Loaders.tsx. */
