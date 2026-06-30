@@ -96,7 +96,7 @@ export default function SignupScreen() {
         )}
         <form onSubmit={onSubmit}>
           <div className="flex flex-col gap-3 mb-5">
-            <div className="field">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="signup-1">{t('Shop name', '店铺名称')}</Label>
               <Input id="signup-1" value={name} onChange={e => setName(e.target.value)} required placeholder={t('e.g. Sunny Bakes', '如：阳光烘焙')} />
             </div>
@@ -104,11 +104,11 @@ export default function SignupScreen() {
             <p className="text-[12px] text-rose-muted px-[10px] py-[5px] bg-surface-sunken rounded-sm font-mono tracking-[0.3px] leading-[1.5]">
               {t('Your store URL', '店铺网址')}: /s/{slugPreview}
             </p>
-            <div className="field">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="signup-2">{t('Email', '邮箱')}</Label>
               <Input id="signup-2" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
-            <div className="field">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="signup-3">{t('Password', '密码')}</Label>
               <Input id="signup-3" type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
             </div>

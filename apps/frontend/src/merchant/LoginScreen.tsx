@@ -37,11 +37,11 @@ export default function LoginScreen() {
         )}
         <form onSubmit={onSubmit}>
           <div className="flex flex-col gap-3 mb-5">
-            <div className="field">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="login-1">{t('Email', '邮箱')}</Label>
               <Input id="login-1" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
             </div>
-            <div className="field">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="login-2">{t('Password', '密码')}</Label>
               <Input id="login-2" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
