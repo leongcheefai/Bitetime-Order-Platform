@@ -42,7 +42,7 @@ const badgeVariants = cva(
           "bg-warn-bg text-warn-fg border-transparent",
         // Maps to `.status-completed` — done/taupe
         done:
-          "bg-surface-warm text-status-done-fg border-transparent",
+          "bg-surface-sunken text-status-done-fg border-transparent",
         // Maps to `.status-cancelled` / `.cust-status-cancelled`
         danger:
           "bg-danger-bg text-danger-fg border-danger-border",

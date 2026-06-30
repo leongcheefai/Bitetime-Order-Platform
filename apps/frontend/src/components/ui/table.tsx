@@ -26,7 +26,7 @@ function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
     <thead
       data-slot="table-header"
       // Header rows get the rose-border bottom divider (1.5px via th)
-      className={cn("[&_tr]:border-b [&_tr]:border-rose-border", className)}
+      className={cn("[&_tr]:border-b-[1.5px] [&_tr]:border-rose-border", className)}
       {...props}
     />
   )

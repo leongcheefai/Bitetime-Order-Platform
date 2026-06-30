@@ -31,7 +31,7 @@ function Input({
         "aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20",
         "file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-ink",
         // compact: .product-row input / .admin-field input
-        "data-[variant=compact]:px-2.5 data-[variant=compact]:py-[7px] data-[variant=compact]:text-[13px] data-[variant=compact]:bg-cream",
+        "data-[variant=compact]:px-2.5 data-[variant=compact]:py-[7px] data-[variant=compact]:text-[13px] data-[variant=compact]:bg-cream data-[variant=compact]:rounded-sm",
         className
       )}
       {...props}
