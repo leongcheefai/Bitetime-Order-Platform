@@ -747,40 +747,6 @@ body:has(.sticky-total-bar) .form-wrap { padding-bottom: 80px; }
 .mm-dash-tab.active { background: var(--color-oxblood); color: var(--color-cream); }
 .mm-dash-tab:disabled { opacity: 0.40; cursor: default; font-size: 13px; color: var(--color-rose-muted); }
 
-/* Merchant product list */
-.mm-product-list { display: flex; flex-direction: column; gap: 8px; }
-.mm-product-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  background: var(--color-cream);
-  border: 1.5px solid var(--color-clay-border);
-  border-radius: var(--radius-lg);
-  transition: border-color 0.15s;
-}
-.mm-product-row--hidden { opacity: 0.5; }
-.mm-product-info { flex: 1; min-width: 0; }
-.mm-product-name { font-size: 14px; font-weight: 500; color: var(--color-ink); }
-.mm-product-zh { color: var(--color-rose-muted); font-weight: 400; }
-.mm-product-hidden-tag { font-style: italic; font-size: 12px; color: var(--color-text-tertiary); }
-.mm-product-meta { font-size: 12px; color: var(--color-rose-muted); margin-top: 2px; }
-.mm-product-actions { display: flex; gap: 6px; flex-shrink: 0; }
-
-/* Small pill action buttons — products and admin table */
-.mm-pill-btn {
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
-  border: 1.5px solid var(--color-clay-border);
-  background: var(--color-surface-raised);
-  color: var(--color-rose-muted);
-  font-size: 12px;
-  font-family: 'DM Sans', sans-serif;
-  cursor: pointer;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-.mm-pill-btn:hover { border-color: var(--color-oxblood); color: var(--color-oxblood); background: var(--color-oxblood-tint); }
 
 /* Merchant status badges — background tint, no border stripe */
 .mm-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: var(--radius-pill); white-space: nowrap; }
@@ -836,10 +802,8 @@ a.mm-store-url--link:hover { text-decoration: underline; }
 .mm-save-msg { font-size: 13px; color: var(--color-oxblood); font-weight: 500; text-align: center; margin-top: 8px; min-height: 18px; }
 
 
-/* Responsive — stack product actions, compress tabs */
+/* Responsive — compress tabs */
 @media (max-width: 480px) {
-  .mm-product-row { flex-wrap: wrap; }
-  .mm-product-actions { width: 100%; justify-content: flex-end; }
   .mm-dash-tab { flex: 0 1 auto; font-size: 13px; padding: 8px 10px; }
 }
 

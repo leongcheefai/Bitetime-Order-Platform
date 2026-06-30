@@ -3,9 +3,21 @@ import { useSession } from '../SessionContext'
 import { useToast } from '../ToastContext'
 import { fetchMerchantVouchers, createMerchantVoucher, deleteMerchantVoucher } from '../store'
 import { SkeletonText } from '../components/Loaders'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 import type { Voucher } from '../types'
 
 const BLANK = { code: '', kind: 'percent', amount: '', maxUses: '' }
+
+// Self-contained select classes — pixel-match of .admin-field select in .admin-field.full context
+const SELECT_CLS =
+  'w-full py-[7px] pl-[10px] pr-[32px] border border-clay-border rounded-sm text-[13px] ' +
+  'bg-cream text-ink font-sans appearance-none bg-no-repeat cursor-pointer ' +
+  'focus:outline-none focus:border-oxblood focus:shadow-[0_0_0_2px_rgba(122,16,40,0.1)]'
+
+// Chevron SVG data-URI — matches the one in .admin-field select
+const CHEVRON_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A4F55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`
 
 export default function VouchersManager() {
   const { t, merchant } = useSession()
@@ -50,29 +62,41 @@ export default function VouchersManager() {
   }
 
   if (!rows) return (
-    <div className="admin-panel">
+    <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
       <SkeletonText lines={4} />
     </div>
   )
 
   return (
     <div>
-      <div className="admin-panel">
-        <h3 className="admin-title">{t('Your vouchers', '您的优惠券')}</h3>
+      {/* Your vouchers panel */}
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
+        <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
+          {t('Your vouchers', '您的优惠券')}
+        </h3>
         {rows.length === 0 ? (
           <p className="empty-msg">{t('No vouchers yet — create your first below.', '还没有优惠券 — 在下方创建。')}</p>
         ) : (
-          <div className="mm-product-list">
+          <div className="flex flex-col gap-2">
             {rows.map((v: Voucher) => (
-              <div key={(v as any).id} className="mm-product-row">
-                <div className="mm-product-info">
-                  <div className="mm-product-name">{v.code}</div>
-                  <div className="mm-product-meta">{valueLabel(v)} · {usesLabel(v)}</div>
+              <div
+                key={(v as any).id}
+                className="flex items-center gap-3 px-[14px] py-[10px] bg-cream border-[1.5px] border-clay-border rounded-lg transition-colors max-[480px]:flex-wrap"
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="text-[14px] font-medium text-ink">{v.code}</div>
+                  <div className="text-[12px] text-rose-muted mt-0.5">{valueLabel(v)} · {usesLabel(v)}</div>
                 </div>
-                <div className="mm-product-actions">
-                  <button type="button" className="mm-pill-btn" onClick={() => remove((v as any).id)}>
+                <div className="flex gap-[6px] shrink-0 max-[480px]:w-full max-[480px]:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="none"
+                    className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
+                    onClick={() => remove((v as any).id)}
+                  >
                     {t('Delete', '删除')}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -80,22 +104,30 @@ export default function VouchersManager() {
         )}
       </div>
 
-      <div className="admin-panel">
-        <h3 className="admin-title">{t('Create a voucher', '创建优惠券')}</h3>
+      {/* Create a voucher panel */}
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
+        <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
+          {t('Create a voucher', '创建优惠券')}
+        </h3>
         <form onSubmit={save}>
-          <div className="admin-fields">
-            <div className="admin-field full">
-              <label htmlFor="vm-code">{t('Code', '优惠码')}</label>
-              <input id="vm-code"
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="vm-code">{t('Code', '优惠码')}</Label>
+              <Input
+                id="vm-code"
+                variant="compact"
                 value={form.code}
                 onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
                 required
                 placeholder={t('e.g. SAVE10', '如：SAVE10')}
               />
             </div>
-            <div className="admin-field full">
-              <label htmlFor="vm-kind">{t('Type', '类型')}</label>
-              <select id="vm-kind"
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="vm-kind">{t('Type', '类型')}</Label>
+              <select
+                id="vm-kind"
+                className={SELECT_CLS}
+                style={{ backgroundImage: CHEVRON_SVG, backgroundPosition: 'right 10px center' }}
                 value={form.kind}
                 onChange={e => setForm({ ...form, kind: e.target.value })}
               >
@@ -103,11 +135,13 @@ export default function VouchersManager() {
                 <option value="fixed">{t('Fixed amount (RM)', '固定金额 (RM)')}</option>
               </select>
             </div>
-            <div className="admin-field full">
-              <label htmlFor="vm-amount">
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="vm-amount">
                 {form.kind === 'percent' ? t('Percent off', '折扣百分比') : t('Amount off (RM)', '折扣金额 (RM)')}
-              </label>
-              <input id="vm-amount"
+              </Label>
+              <Input
+                id="vm-amount"
+                variant="compact"
                 type="number"
                 step={form.kind === 'percent' ? '1' : '0.01'}
                 value={form.amount}
@@ -116,9 +150,11 @@ export default function VouchersManager() {
                 placeholder={form.kind === 'percent' ? '10' : '5.00'}
               />
             </div>
-            <div className="admin-field full">
-              <label htmlFor="vm-max">{t('Max total uses (blank = unlimited)', '最大使用次数（留空 = 不限）')}</label>
-              <input id="vm-max"
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="vm-max">{t('Max total uses (blank = unlimited)', '最大使用次数（留空 = 不限）')}</Label>
+              <Input
+                id="vm-max"
+                variant="compact"
                 type="number"
                 step="1"
                 value={form.maxUses}
@@ -127,9 +163,9 @@ export default function VouchersManager() {
               />
             </div>
           </div>
-          <button type="submit" className="save-btn" style={{ marginTop: '12px' }} disabled={busy}>
+          <Button type="submit" size="md" className="mt-3" disabled={busy}>
             {busy ? t('Saving…', '保存中…') : t('Create voucher', '创建优惠券')}
-          </button>
+          </Button>
         </form>
       </div>
     </div>
