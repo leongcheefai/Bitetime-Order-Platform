@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret } from '../store'
+import { Button } from '../components/ui/button'
+import { Input } from '../components/ui/input'
+import { Label } from '../components/ui/label'
 
 export default function ShopSettings() {
   const { t, merchant, refreshMerchant } = useSession()
@@ -35,53 +38,59 @@ export default function ShopSettings() {
 
   return (
     <form onSubmit={save}>
-      <div className="admin-panel">
-        <h3 className="admin-title">{t('Shipping rates', '运费')}</h3>
-        <div className="admin-fields">
-          <div className="admin-field full">
-            <label htmlFor="shop-1">{t('West Malaysia (RM)', '西马运费 (RM)')}</label>
-            <input id="shop-1" type="number" step="0.01" value={wm} onChange={e => setWm(e.target.value)} />
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
+        <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
+          {t('Shipping rates', '运费')}
+        </h3>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-1">{t('West Malaysia (RM)', '西马运费 (RM)')}</Label>
+            <Input id="shop-1" type="number" step="0.01" value={wm} onChange={e => setWm(e.target.value)} variant="compact" />
           </div>
-          <div className="admin-field full">
-            <label htmlFor="shop-2">{t('East Malaysia (RM)', '东马运费 (RM)')}</label>
-            <input id="shop-2" type="number" step="0.01" value={em} onChange={e => setEm(e.target.value)} />
-          </div>
-        </div>
-      </div>
-
-      <div className="admin-panel">
-        <h3 className="admin-title">{t('Payment', '付款')}</h3>
-        <div className="admin-fields">
-          <div className="admin-field full">
-            <label htmlFor="shop-3">{t('Bank / payment details', '银行/付款信息')}</label>
-            <input id="shop-3" value={bank} onChange={e => setBank(e.target.value)} />
-          </div>
-          <div className="admin-field full">
-            <label htmlFor="shop-4">{t('Payment note (shown to customers)', '付款备注（顾客可见）')}</label>
-            <input id="shop-4" value={note} onChange={e => setNote(e.target.value)} />
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-2">{t('East Malaysia (RM)', '东马运费 (RM)')}</Label>
+            <Input id="shop-2" type="number" step="0.01" value={em} onChange={e => setEm(e.target.value)} variant="compact" />
           </div>
         </div>
       </div>
 
-      <div className="admin-panel">
-        <h3 className="admin-title">{t('Order notifications', '订单通知')}</h3>
-        <p className="admin-section-label" style={{ marginBottom: '0.75rem' }}>Telegram</p>
-        <div className="admin-fields">
-          <div className="admin-field full">
-            <label htmlFor="shop-5">{t('Bot token', '机器人令牌')}</label>
-            <input id="shop-5" value={tgToken} onChange={e => setTgToken(e.target.value)} />
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
+        <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
+          {t('Payment', '付款')}
+        </h3>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-3">{t('Bank / payment details', '银行/付款信息')}</Label>
+            <Input id="shop-3" value={bank} onChange={e => setBank(e.target.value)} variant="compact" />
           </div>
-          <div className="admin-field full">
-            <label htmlFor="shop-6">{t('Chat ID', '聊天 ID')}</label>
-            <input id="shop-6" value={tgChat} onChange={e => setTgChat(e.target.value)} />
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-4">{t('Payment note (shown to customers)', '付款备注（顾客可见）')}</Label>
+            <Input id="shop-4" value={note} onChange={e => setNote(e.target.value)} variant="compact" />
           </div>
         </div>
       </div>
 
-      <button type="submit" className="save-btn" disabled={busy}>
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
+        <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
+          {t('Order notifications', '订单通知')}
+        </h3>
+        <p className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">Telegram</p>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-5">{t('Bot token', '机器人令牌')}</Label>
+            <Input id="shop-5" value={tgToken} onChange={e => setTgToken(e.target.value)} variant="compact" />
+          </div>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-6">{t('Chat ID', '聊天 ID')}</Label>
+            <Input id="shop-6" value={tgChat} onChange={e => setTgChat(e.target.value)} variant="compact" />
+          </div>
+        </div>
+      </div>
+
+      <Button type="submit" size="md" className="mt-1" disabled={busy}>
         {busy ? t('Saving…', '保存中…') : t('Save settings', '保存设置')}
-      </button>
-      {msg && <p className="mm-save-msg">{msg}</p>}
+      </Button>
+      {msg && <p className="text-[13px] text-oxblood font-medium text-center mt-2 min-h-[18px]">{msg}</p>}
     </form>
   )
 }

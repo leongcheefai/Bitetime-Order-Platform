@@ -3,6 +3,7 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts'
 import type { ReactNode } from 'react'
+import { cn } from '@/lib/utils'
 
 // Brand-derived palette (oxblood family + gold + semantic accents from tokens.css).
 const CHART_COLORS = ['#7A1028', '#C9A030', '#B86B6B', '#5A1A7A', '#1A7A3A', '#0C5460', '#A07820']
@@ -25,12 +26,12 @@ export function StatCard({ label, value, delta, icon }: {
   label: string; value: string; delta?: { pct: number; dir: 'up' | 'down' | 'flat' }; icon?: ReactNode
 }) {
   return (
-    <div className="dash-stat-card">
-      <div className="dash-stat-label">{icon && <span className="dash-stat-icon" aria-hidden="true">{icon}</span>}{label}</div>
-      <div className="dash-stat-value-row">
-        <span className="dash-stat-value">{value}</span>
+    <div className="rounded-xl border-[1.5px] border-rose-border bg-surface-raised px-5 py-4">
+      <div className="mb-1 inline-flex items-center text-[10px] font-medium uppercase tracking-[0.09em] text-text-tertiary">{icon && <span className="mr-1.5 inline-flex text-clay-muted" aria-hidden="true">{icon}</span>}{label}</div>
+      <div className="flex flex-wrap items-baseline gap-2">
+        <span className="font-heading text-[22px] font-medium leading-[1.2] text-oxblood">{value}</span>
         {delta && delta.dir !== 'flat' && (
-          <span className={`dash-stat-delta dash-stat-delta--${delta.dir}`}>
+          <span className={cn('whitespace-nowrap text-[11px] font-semibold', delta.dir === 'up' ? 'text-success-strong' : 'text-danger')}>
             {delta.dir === 'up' ? '▲' : '▼'} {Math.abs(delta.pct)}%
           </span>
         )}
@@ -42,9 +43,9 @@ export function StatCard({ label, value, delta, icon }: {
 // ── Panel wrapper ────────────────────────────────────────────────────────────
 export function ChartPanel({ title, legend, children }: { title: string; legend?: ReactNode; children: ReactNode }) {
   return (
-    <div className="dash-section">
-      <div className="dash-section-head">
-        <h3 className="dash-section-title">{title}</h3>
+    <div className="rounded-xl border-[1.5px] border-rose-border bg-surface-raised px-5 py-4">
+      <div className="mb-[0.85rem] flex items-center justify-between gap-2">
+        <h3 className="font-heading text-sm font-medium text-oxblood">{title}</h3>
         {legend}
       </div>
       {children}
@@ -76,12 +77,12 @@ export function RevenueBarChart({ data, revenueLabel, ordersLabel }: {
 // ── Donut chart ──────────────────────────────────────────────────────────────
 export function DonutCard({ data }: { data: { name: string; value: number }[] }) {
   const total = data.reduce((s, d) => s + d.value, 0)
-  if (total <= 0) return <p className="empty-msg">—</p>
+  if (total <= 0) return <p className="text-[13px] text-text-tertiary italic">—</p>
   return (
-    <div className="dash-donut">
+    <div className="flex flex-col gap-3">
       {/* A single 100% slice renders as a degenerate zero-arc in recharts, so draw it as a plain CSS ring. */}
       {data.length === 1 ? (
-        <div className="dash-donut-single" style={{ borderColor: CHART_COLORS[0] }} />
+        <div className="mx-auto my-2 h-40 w-40 rounded-full border-[28px] border-solid" style={{ borderColor: CHART_COLORS[0] }} />
       ) : (
         <ResponsiveContainer width="100%" height={200}>
           <PieChart>
@@ -92,12 +93,12 @@ export function DonutCard({ data }: { data: { name: string; value: number }[] })
           </PieChart>
         </ResponsiveContainer>
       )}
-      <ul className="dash-donut-legend">
+      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
         {data.map((d, i) => (
-          <li key={d.name}>
-            <span className="dash-donut-dot" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
-            <span className="dash-donut-name">{d.name}</span>
-            <span className="dash-donut-pct">{Math.round((d.value / total) * 100)}%</span>
+          <li key={d.name} className="flex items-center gap-2 text-xs">
+            <span className="h-[9px] w-[9px] shrink-0 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+            <span className="min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-ink">{d.name}</span>
+            <span className="shrink-0 font-semibold text-rose-muted">{Math.round((d.value / total) * 100)}%</span>
           </li>
         ))}
       </ul>
@@ -107,16 +108,16 @@ export function DonutCard({ data }: { data: { name: string; value: number }[] })
 
 // ── Breakdown list (label + bar + value) ─────────────────────────────────────
 export function BreakdownList({ rows }: { rows: { label: string; value: string; pct: number }[] }) {
-  if (rows.length === 0) return <p className="empty-msg">—</p>
+  if (rows.length === 0) return <p className="text-[13px] text-text-tertiary italic">—</p>
   return (
-    <ul className="dash-breakdown">
+    <ul className="m-0 flex list-none flex-col gap-[10px] p-0">
       {rows.map((r, i) => (
-        <li key={r.label}>
-          <span className="dash-breakdown-label">{r.label}</span>
-          <span className="dash-breakdown-track">
-            <span className="dash-breakdown-fill" style={{ width: `${r.pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
+        <li key={r.label} className="flex items-center gap-[10px] text-xs">
+          <span className="flex-[0_0_32%] overflow-hidden text-ellipsis whitespace-nowrap text-ink">{r.label}</span>
+          <span className="h-2 flex-1 overflow-hidden rounded-xs bg-surface-sunken">
+            <span className="block h-full min-w-[3px] rounded-xs" style={{ width: `${r.pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
           </span>
-          <span className="dash-breakdown-value">{r.value}</span>
+          <span className="w-18 shrink-0 whitespace-nowrap text-right font-semibold text-rose-muted">{r.value}</span>
         </li>
       ))}
     </ul>

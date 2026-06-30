@@ -20,22 +20,30 @@ const MerchantHome = lazy(() => import('./merchant/MerchantHome'))
 const Storefront = lazy(() => import('./store/Storefront'))
 
 function RouteFallback() {
-  return <div className="loading-center"><Spinner label="Loading…" /></div>
+  return (
+    <div className="w-full min-h-[50vh] flex items-center justify-center">
+      <Spinner label="Loading…" />
+    </div>
+  )
 }
 
 function StorefrontShell() {
   const { merchant, loading, notFound } = useMerchant()
 
-  if (loading) return <div className="loading-center"><Spinner label="Loading shop…" /></div>
+  if (loading) return (
+    <div className="w-full min-h-[50vh] flex items-center justify-center">
+      <Spinner label="Loading shop…" />
+    </div>
+  )
 
   if (notFound) return (
-    <div className="form-wrap mm-storefront-state">
-      <div className="brand">
-        <h1>BiteTime</h1>
-        <p className="tagline">Shop not found</p>
+    <div className="form-wrap text-center pt-8 pb-12">
+      <div className="text-center mb-10">
+        <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">BiteTime</h1>
+        <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">Shop not found</p>
       </div>
-      <div className="admin-panel" style={{ textAlign: 'left' }}>
-        <p style={{ color: 'var(--color-rose-muted)', fontSize: 14 }}>
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border text-left">
+        <p className="text-rose-muted text-[14px] leading-[1.6] mt-1.5">
           This shop doesn't exist or may have moved.
         </p>
       </div>
@@ -45,13 +53,13 @@ function StorefrontShell() {
   if (!merchant) return null
 
   if (merchant.status !== 'active') return (
-    <div className="form-wrap mm-storefront-state">
-      <div className="brand">
-        <h1>BiteTime</h1>
-        <p className="tagline">{merchant.name}</p>
+    <div className="form-wrap text-center pt-8 pb-12">
+      <div className="text-center mb-10">
+        <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">BiteTime</h1>
+        <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">{merchant.name}</p>
       </div>
-      <div className="admin-panel" style={{ textAlign: 'left' }}>
-        <p style={{ color: 'var(--color-rose-muted)', fontSize: 14 }}>
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border text-left">
+        <p className="text-rose-muted text-[14px] leading-[1.6] mt-1.5">
           This shop isn't available right now.
         </p>
       </div>
