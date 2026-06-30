@@ -844,37 +844,15 @@ a.mm-store-url--link:hover { text-decoration: underline; }
 }
 
 
-/* ── Merchant Orders view (.mm-order-*) ─────────────────────────────────── */
-.mm-orders-wrap { display: flex; flex-direction: column; gap: 12px; }
-.mm-orders-loading { color: var(--color-rose-muted); font-size: 14px; padding: 1.5rem 0; text-align: center; }
+/* ── Merchant Orders view — shared helpers (OrdersView + CustomersView) ──── */
 .mm-orders-empty { text-align: center; color: var(--color-rose-muted); font-size: 14px; }
 
-.mm-order-card { padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: 10px; }
-
-.mm-order-header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.mm-order-number { font-family: 'Lora', serif; font-size: 15px; font-weight: 500; color: var(--color-oxblood); }
-.mm-order-time   { font-size: 12px; color: var(--color-text-tertiary); margin-left: auto; white-space: nowrap; }
-
-.mm-order-body { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--color-ink); }
-.mm-order-customer { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.mm-order-items { display: flex; gap: 8px; flex-wrap: wrap; }
-.mm-order-meta { display: flex; gap: 16px; flex-wrap: wrap; }
-.mm-order-address { display: flex; gap: 8px; flex-wrap: wrap; }
-
-.mm-order-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--color-rose-muted); flex-shrink: 0; }
 .mm-order-wa { color: var(--color-oxblood); text-decoration: none; font-weight: 500; }
 .mm-order-wa:hover { text-decoration: underline; }
 
-.mm-order-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid var(--color-surface-sunken); }
+/* Kept: admin-field-select still referenced by ShopSettings / AdminMerchants migration path */
 .admin-field-select { padding: 7px 32px 7px 10px; border: 1px solid var(--color-clay-border); border-radius: var(--radius-sm); font-size: 13px; background: var(--color-cream); color: var(--color-ink); font-family: 'DM Sans', sans-serif; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A4F55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; cursor: pointer; min-width: 140px; }
 .admin-field-select:focus { outline: none; border-color: var(--color-oxblood); box-shadow: 0 0 0 2px rgba(122,16,40,0.1); }
-
-/* Order status badges */
-.mm-badge--order-new       { background: var(--color-info-blue-bg); color: var(--color-info-blue-fg); }
-.mm-badge--order-preparing { background: var(--color-warn-bg-alt); color: var(--color-warn-fg-alt); }
-.mm-badge--order-ready     { background: var(--color-success-bg-soft); color: var(--color-success-deep); }
-.mm-badge--order-completed { background: var(--color-prep-bg-alt); color: var(--color-prep-fg-alt); }
-.mm-badge--order-cancelled { background: var(--color-danger-bg); color: var(--color-danger-fg); }
 
 /* ── Merchant Customers view (.mm-customers-*) ──────────────────────────── */
 .mm-customers-wrap { padding: 0; overflow: hidden; }
@@ -886,10 +864,6 @@ a.mm-store-url--link:hover { text-decoration: underline; }
 .mm-customers-table tbody tr:hover td { background: var(--color-oxblood-tint); }
 .mm-customers-count { font-weight: 600; color: var(--color-oxblood); text-align: center; }
 
-@media (max-width: 600px) {
-  .mm-order-time { margin-left: 0; }
-  .mm-order-meta { gap: 10px; }
-}
 
 /* ── Marketing Landing Page (.mm-land-*) ─────────────────────────────────── */
 body:has(.mm-land) { padding: 0; align-items: stretch; }
