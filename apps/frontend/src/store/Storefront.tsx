@@ -7,6 +7,7 @@ import { useToast } from '../ToastContext'
 import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote } from '../store'
 import { priceOrder, voucherError } from '../pricing'
 import type { Product, Voucher } from '../types'
+import LanguageSelect from '../components/LanguageSelect'
 
 interface CartLine {
   id: string
@@ -27,7 +28,7 @@ interface SuccessState {
 export default function Storefront() {
   const { merchant: merchantNullable } = useMerchant()
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
-  const { lang, setLang, t, account } = useSession()
+  const { lang, t, account } = useSession()
   const viewVariants = usePageVariants()
   const toast = useToast()
 
@@ -180,8 +181,7 @@ export default function Storefront() {
             <h1>{merchant.name}</h1>
           </div>
           <div className="lang-switcher" style={{ marginBottom: 0 }}>
-            <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
-            <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} aria-pressed={lang === 'zh'} onClick={() => setLang('zh')}>中文</button>
+            <LanguageSelect />
           </div>
         </div>
 
@@ -247,8 +247,7 @@ export default function Storefront() {
           <p className="tagline">{t('Powered by BiteTime', 'BiteTime 提供技术支持')}</p>
         </div>
         <div className="lang-switcher" style={{ marginBottom: 0 }}>
-          <button className={`lang-btn${lang === 'en' ? ' active' : ''}`} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>EN</button>
-          <button className={`lang-btn${lang === 'zh' ? ' active' : ''}`} aria-pressed={lang === 'zh'} onClick={() => setLang('zh')}>中文</button>
+          <LanguageSelect />
         </div>
       </div>
 

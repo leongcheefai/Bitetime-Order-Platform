@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSession } from '../SessionContext'
 import { signOut } from '../store'
+import LanguageSelect from '../components/LanguageSelect'
 
 export default function Landing() {
-  const { t, lang, setLang, account, role, loading } = useSession()
+  const { t, account, role, loading } = useSession()
   const [menuOpen, setMenuOpen] = useState(false)
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'yearly'
 
@@ -63,16 +64,7 @@ export default function Landing() {
             {t('Pricing', '价格')}
           </a>
           <div className="lang-switcher mm-land-lang">
-            <button
-              className={`lang-btn${lang === 'en' ? ' active' : ''}`}
-              aria-pressed={lang === 'en'}
-              onClick={() => setLang('en')}
-            >EN</button>
-            <button
-              className={`lang-btn${lang === 'zh' ? ' active' : ''}`}
-              aria-pressed={lang === 'zh'}
-              onClick={() => setLang('zh')}
-            >中文</button>
+            <LanguageSelect />
           </div>
           {loading ? null : account ? (
             <div className="mm-land-account">

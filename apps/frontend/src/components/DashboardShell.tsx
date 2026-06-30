@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useSession } from '../SessionContext'
 import { signOut } from '../store'
+import LanguageSelect from './LanguageSelect'
 
 export interface NavItem { key: string; label: string; icon: ReactNode }
 
@@ -19,7 +20,7 @@ interface DashboardShellProps {
 // existing `.user-sidebar` / `.sidebar-*` / `.user-main` styles (responsive,
 // collapses to icons under 640px) — only the active section is swapped in.
 export default function DashboardShell({ logo, title, role, nav, active, onSelect, userName, children }: DashboardShellProps) {
-  const { t, lang, setLang } = useSession()
+  const { t } = useSession()
   return (
     <div className="user-layout user-layout--flush">
       <aside className="user-sidebar">
@@ -44,8 +45,7 @@ export default function DashboardShell({ logo, title, role, nav, active, onSelec
         <div className="sidebar-footer">
           {userName && <div className="sidebar-user-name">{userName}</div>}
           <div className="sidebar-lang">
-            <button type="button" className={`sidebar-lang-btn${lang === 'en' ? ' active' : ''}`} onClick={() => setLang('en')}>EN</button>
-            <button type="button" className={`sidebar-lang-btn${lang === 'zh' ? ' active' : ''}`} onClick={() => setLang('zh')}>中</button>
+            <LanguageSelect className="w-full" />
           </div>
           <button type="button" className="sidebar-signout" onClick={() => signOut()}>{t('Log out', '登出')}</button>
         </div>
