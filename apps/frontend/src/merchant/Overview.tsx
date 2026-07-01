@@ -5,13 +5,16 @@ import { fetchMerchantOrders, fetchProducts, fetchMerchantCustomers, fetchMercha
 import { SkeletonText } from '../components/Loaders'
 import { StatCard, ChartPanel, RevenueBarChart, DonutCard, BreakdownList } from '../components/charts/DashCharts'
 import { computeMerchantStats, type MerchantStats } from './overviewStats'
+import { formatMoney } from '../currency'
 
-const money = (n: number) => 'RM ' + n.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const STAT_ICON = { size: 15, strokeWidth: 1.75 }
 
 export default function Overview() {
   const { t, merchant } = useSession()
   const [stats, setStats] = useState<MerchantStats | null>(null)
+  // Aggregates render in the merchant's current currency — safe because currency
+  // is locked once ≥1 order exists, so totals never mix units.
+  const money = (n: number) => formatMoney(n, merchant?.currency)
 
   useEffect(() => {
     const id = merchant?.id

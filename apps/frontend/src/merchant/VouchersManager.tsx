@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
 import { fetchMerchantVouchers, createMerchantVoucher, deleteMerchantVoucher } from '../store'
+import { formatMoney, currencyDef } from '../currency'
 import { SkeletonText } from '../components/Loaders'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -24,6 +25,8 @@ export default function VouchersManager() {
   const [rows, setRows] = useState<Voucher[] | null>(null)
   const [form, setForm] = useState<any>(BLANK)
   const [busy, setBusy] = useState(false)
+  const currency = merchant?.currency
+  const symbol = currencyDef(currency).symbol
 
   async function load() { setRows(await fetchMerchantVouchers(merchant!.id)) }
   useEffect(() => { fetchMerchantVouchers(merchant!.id).then(setRows) }, [merchant!.id])
@@ -52,7 +55,7 @@ export default function VouchersManager() {
 
   function valueLabel(v: Voucher) {
     const value = (v as any).value
-    return (v as any).type === 'percent' ? `${value}% off` : `RM ${Number(value).toFixed(2)} off`
+    return (v as any).type === 'percent' ? `${value}% off` : `${formatMoney(value, currency)} off`
   }
   function usesLabel(v: Voucher) {
     const used = Array.isArray(v.usedBy) ? v.usedBy.length : 0
@@ -131,12 +134,12 @@ export default function VouchersManager() {
                 onChange={e => setForm({ ...form, kind: e.target.value })}
               >
                 <option value="percent">{t('Percentage (%)', '百分比 (%)')}</option>
-                <option value="fixed">{t('Fixed amount (RM)', '固定金额 (RM)')}</option>
+                <option value="fixed">{t(`Fixed amount (${symbol})`, `固定金额 (${symbol})`)}</option>
               </select>
             </div>
             <div className="flex flex-col gap-[6px]">
               <Label htmlFor="vm-amount">
-                {form.kind === 'percent' ? t('Percent off', '折扣百分比') : t('Amount off (RM)', '折扣金额 (RM)')}
+                {form.kind === 'percent' ? t('Percent off', '折扣百分比') : t(`Amount off (${symbol})`, `折扣金额 (${symbol})`)}
               </Label>
               <Input
                 id="vm-amount"

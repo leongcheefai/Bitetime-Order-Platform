@@ -23,7 +23,11 @@ pnpm --filter @bitetime/frontend preview   # serve built dist/ locally
 pnpm --filter @bitetime/backend dev         # billing server only
 pnpm --filter @bitetime/backend test        # backend unit tests (notify, etc.) — no Supabase needed
 pnpm --filter @bitetime/backend test:rls    # RLS tenant-isolation tests (needs local Supabase env vars)
+pnpm --filter @bitetime/backend db:migrate   # apply pending SQL migrations to the LOCAL Supabase DB
+pnpm --filter @bitetime/backend db:push      # push migrations to a linked REMOTE Supabase project
 ```
+
+Migrations live in `apps/backend/supabase/migrations/`. Adding a migration file does **not** apply it — run `db:migrate` (local) so the running app (and PostgREST's schema cache) sees the new columns; otherwise queries fail with `Could not find the 'X' column … in the schema cache`.
 
 Tests use Vitest (added during the multi-merchant build). Pure logic and `store.ts` functions have unit tests (`apps/frontend/src/*.test.ts`); the backend has pure unit tests in `apps/backend/tests/unit/` (run by `test`, no Supabase); tenant isolation is covered by integration tests in `apps/backend/tests/rls/` (run by `test:rls`) that need a running local Supabase (`supabase start`) and its keys as env vars. UI is verified by running the app (run-and-verify), not component tests.
 

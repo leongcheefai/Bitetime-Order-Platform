@@ -28,12 +28,28 @@ const ORDER = {
 }
 
 describe('buildOrderMessage', () => {
-  it('renders order fields and an itemised total', () => {
+  it('renders order fields and an itemised total, defaulting to RM for legacy rows', () => {
     const msg = buildOrderMessage(ORDER, 'Cookie Corner')
     expect(msg).toContain('Cookie Corner')
     expect(msg).toContain('BT-260629-0051')
     expect(msg).toContain('Cookie × 2 — RM 10.00')
+    expect(msg).toContain('*Shipping:* RM 8.00')
     expect(msg).toContain('*Total: RM 18.00*')
+  })
+
+  it('renders amounts in the order\'s stamped currency', () => {
+    const sgd = buildOrderMessage({ ...ORDER, currency: 'SGD' }, 'Cookie Corner')
+    expect(sgd).toContain('Cookie × 2 — S$ 10.00')
+    expect(sgd).toContain('*Total: S$ 18.00*')
+  })
+
+  it('omits cents for a 0-decimal currency', () => {
+    const jpy = buildOrderMessage(
+      { ...ORDER, currency: 'JPY', items: [{ name: 'Cookie', qty: 2, price: 500 }], shipping_fee: 800, total: 1800 },
+      'Cookie Corner',
+    )
+    expect(jpy).toContain('Cookie × 2 — ¥ 1,000')
+    expect(jpy).toContain('*Total: ¥ 1,800*')
   })
 })
 

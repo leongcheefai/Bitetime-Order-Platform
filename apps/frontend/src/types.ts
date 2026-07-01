@@ -24,6 +24,7 @@ export interface Merchant {
   owner_id?: string
   plan?: string
   billing_cycle?: string
+  currency?: string
   created_at?: string
   [key: string]: any
 }
@@ -76,6 +77,7 @@ export interface Order {
   shipping_fee?: number
   items?: OrderItem[]
   total?: number
+  currency?: string
   status?: OrderStatus | string
   created_at?: string
   [key: string]: any

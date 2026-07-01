@@ -6,6 +6,7 @@ import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote } from '../store'
 import { priceOrder, voucherError } from '../pricing'
+import { formatMoney } from '../currency'
 import type { Product, Voucher } from '../types'
 import LanguageSelect from '../components/LanguageSelect'
 import { cn } from '@/lib/utils'
@@ -52,6 +53,7 @@ export default function Storefront() {
   const [voucherMsg, setVoucherMsg] = useState('')
 
   const merchantId = merchant?.id
+  const currency = merchant?.currency
 
   useEffect(() => {
     if (!merchantId) return
@@ -101,7 +103,7 @@ export default function Storefront() {
       return
     }
     setAppliedVoucher(v!)
-    const label = (v as any).type === 'percent' ? `${(v as any).value}% off` : `RM ${(v as any).value} off`
+    const label = (v as any).type === 'percent' ? `${(v as any).value}% off` : `${formatMoney((v as any).value, currency)} off`
     setVoucherMsg(t(`✓ Voucher applied: ${label}`, `✓ 优惠券已应用：${label}`))
   }
 
@@ -118,7 +120,7 @@ export default function Storefront() {
       case 'already_used': return t('❌ You have already used this voucher.', '❌ 您已使用过此优惠券。')
       case 'not_assigned': return t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。')
       case 'expired': return t('❌ This voucher has expired.', '❌ 此优惠券已过期。')
-      case 'min_order': return t(`❌ Minimum order of RM ${(v as any)?.minOrder} required.`, `❌ 需要最低消费 RM ${(v as any)?.minOrder}。`)
+      case 'min_order': return t(`❌ Minimum order of ${formatMoney((v as any)?.minOrder, currency)} required.`, `❌ 需要最低消费 ${formatMoney((v as any)?.minOrder, currency)}。`)
       default: return ''
     }
   }
@@ -148,6 +150,7 @@ export default function Storefront() {
         shippingFee: fee,
         items: cartItems,
         total,
+        currency,
       })
       if (appliedVoucher) {
         // Best-effort: failure to record usage must not fail a placed order.
@@ -207,24 +210,24 @@ export default function Storefront() {
               {success.items.map(item => (
                 <div key={item.id} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                   <span className="shrink-0">{item.name} × {item.qty}</span>
-                  <span className="text-right">RM {(item.price * item.qty).toFixed(2)}</span>
+                  <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
                 </div>
               ))}
               {success.fee > 0 && (
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                   <span className="shrink-0">{t('Delivery fee', '送货费')}</span>
-                  <span className="text-right">RM {success.fee.toFixed(2)}</span>
+                  <span className="text-right">{formatMoney(success.fee, currency)}</span>
                 </div>
               )}
               {success.discount > 0 && (
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                   <span className="shrink-0">{t('Voucher', '优惠券')}</span>
-                  <span className="text-right">−RM {success.discount.toFixed(2)}</span>
+                  <span className="text-right">−{formatMoney(success.discount, currency)}</span>
                 </div>
               )}
               <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
                 <span className="shrink-0">{t('Total', '总计')}</span>
-                <span className="text-right">RM {success.total.toFixed(2)}</span>
+                <span className="text-right">{formatMoney(success.total, currency)}</span>
               </div>
             </div>
 
@@ -286,7 +289,7 @@ export default function Storefront() {
                         <div className="text-[12px] text-rose-muted mt-0.5 leading-[1.4]">{productDescr(p)}</div>
                       )}
                       <div className="text-[13px] font-medium text-oxblood mt-[5px]">
-                        RM {Number(p.price).toFixed(2)} / {p.unit || t('unit', '个')}
+                        {formatMoney(p.price, currency)} / {p.unit || t('unit', '个')}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -346,7 +349,7 @@ export default function Storefront() {
                 aria-pressed={mode === 'delivery'}
                 onClick={() => setMode('delivery')}
               >
-                {t('Delivery', '送货')} (+RM {Number(deliveryFee).toFixed(2)})
+                {t('Delivery', '送货')} (+{formatMoney(deliveryFee, currency)})
               </button>
             </div>
             {mode === 'delivery' && (
@@ -445,29 +448,29 @@ export default function Storefront() {
                   return (
                     <div key={item.id} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                       <span className="shrink-0">{displayName} × {item.qty}</span>
-                      <span className="text-right">RM {(item.price * item.qty).toFixed(2)}</span>
+                      <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
                     </div>
                   )
                 })}
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                   <span className="shrink-0">{t('Subtotal', '小计')}</span>
-                  <span className="text-right">RM {subtotal.toFixed(2)}</span>
+                  <span className="text-right">{formatMoney(subtotal, currency)}</span>
                 </div>
                 {mode === 'delivery' && (
                   <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                     <span className="shrink-0">{t('Delivery fee', '送货费')}</span>
-                    <span className="text-right">RM {fee.toFixed(2)}</span>
+                    <span className="text-right">{formatMoney(fee, currency)}</span>
                   </div>
                 )}
                 {discount > 0 && (
                   <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                     <span className="shrink-0">{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
-                    <span className="text-right">−RM {discount.toFixed(2)}</span>
+                    <span className="text-right">−{formatMoney(discount, currency)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
                   <span className="shrink-0">{t('Total', '总计')}</span>
-                  <span className="text-right">RM {total.toFixed(2)}</span>
+                  <span className="text-right">{formatMoney(total, currency)}</span>
                 </div>
               </>
             )}

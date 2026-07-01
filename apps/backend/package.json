@@ -11,7 +11,9 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run tests/unit",
-    "test:rls": "vitest run tests/rls"
+    "test:rls": "vitest run tests/rls",
+    "db:migrate": "supabase migration up",
+    "db:push": "supabase db push"
   },
   "dependencies": {
     "@hono/node-server": "^1.13.0",
