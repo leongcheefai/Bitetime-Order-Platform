@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
-import { useToast } from '../ToastContext'
+import { toast } from 'sonner'
 import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote } from '../store'
 import { priceOrder, voucherError } from '../pricing'
 import type { Product, Voucher } from '../types'
@@ -35,7 +35,6 @@ export default function Storefront() {
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
   const { lang, t, account } = useSession()
   const viewVariants = usePageVariants()
-  const toast = useToast()
 
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }

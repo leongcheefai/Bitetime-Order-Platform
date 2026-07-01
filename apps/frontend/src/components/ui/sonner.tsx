@@ -4,9 +4,8 @@ import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon
 
 /**
  * Toaster — brand-themed to surface-high, clay border, lg radius, z-toast (500).
- * NOTE: Do NOT wire this into the app here — the existing AppToastContext/Toaster
- * handles app-level toasts. This file is the shadcn primitive; wiring is done
- * separately in the shell (Task 5) if sonner replaces the existing toast system.
+ * App-level toast system: mounted once in AppRouter. Fire toasts anywhere with
+ * `import { toast } from 'sonner'` → `toast.success(...)` / `toast.error(...)`.
  */
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme()

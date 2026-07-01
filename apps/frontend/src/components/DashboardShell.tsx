@@ -169,9 +169,11 @@ export default function DashboardShell({ logo, title, role, nav, active, onSelec
         </div>
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 min-w-0 max-w-none pt-7 px-8 pb-16 max-sm:px-4 max-sm:pt-4 max-sm:pb-12">
-        {children}
+      {/* Main content — capped + centered so it doesn't stretch empty on wide screens */}
+      <main className="flex-1 min-w-0 pt-7 px-8 pb-16 max-sm:px-4 max-sm:pt-4 max-sm:pb-12">
+        <div className="w-full max-w-5xl">
+          {children}
+        </div>
       </main>
     </div>
   )

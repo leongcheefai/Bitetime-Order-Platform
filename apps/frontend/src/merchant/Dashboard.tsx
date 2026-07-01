@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
@@ -10,6 +9,8 @@ import VouchersManager from './VouchersManager'
 import ShopSettings from './ShopSettings'
 import OrdersView from './OrdersView'
 import CustomersView from './CustomersView'
+import { NavGuardProvider, useNavGuard } from './NavGuard'
+import { useDashboardSection } from '../useDashboardSection'
 
 const ICON = { size: 18, strokeWidth: 1.75 }
 const SECTIONS = [
@@ -22,11 +23,24 @@ const SECTIONS = [
 ]
 
 export default function Dashboard() {
+  return (
+    <NavGuardProvider>
+      <DashboardInner />
+    </NavGuardProvider>
+  )
+}
+
+function DashboardInner() {
   const { t, merchant, role } = useSession()
-  const [section, setSection] = useState<string>('overview')
+  const { guard } = useNavGuard()
+  const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
   const variants = usePageVariants()
 
   const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
+
+  // Route sidebar section switches through the unsaved-changes guard so a dirty
+  // Settings tab cannot be silently discarded by navigating away.
+  const selectSection = (key: string) => guard(() => setSection(key))
 
   return (
     <DashboardShell
@@ -35,7 +49,7 @@ export default function Dashboard() {
       role={role === 'superadmin' ? t('Viewing as shop', '以店铺身份查看') : t('Merchant', '商家')}
       nav={nav}
       active={section}
-      onSelect={setSection}
+      onSelect={selectSection}
       userName={`/s/${merchant!.slug}`}
       backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
     >
