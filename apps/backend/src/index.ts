@@ -6,12 +6,41 @@ import { admin, getUserFromToken } from './supabase.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
 import { upsertBilling, setMerchantStatus, billingFromSubscription } from './billing.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
+import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
+import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
 
 const app = new Hono()
 
 app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['POST', 'GET', 'OPTIONS'] }))
 
 app.get('/health', (c) => c.json({ ok: true }))
+
+// ── Region-resolved platform subscription pricing ─────────────────────────────
+// Country comes from a CDN header (or the `?country=` override for local dev/QA);
+// amounts are read from the region's Stripe Prices and cached briefly per region.
+const pricingCache = createPricingCache<PricingPayload>({ ttlMs: 5 * 60_000, now: () => Date.now() })
+
+app.get('/api/pricing', async (c) => {
+  const region = detectRegion({
+    explicitCountry: c.req.query('country') || undefined,
+    getHeader: (name) => c.req.header(name),
+  })
+  try {
+    const payload = await pricingCache.get(region, () =>
+      fetchRegionPricing(region, {
+        prices: env.prices,
+        retrievePrice: (id) =>
+          stripe.prices
+            .retrieve(id)
+            .then((p) => ({ unit_amount: p.unit_amount, currency: p.currency })),
+      }),
+    )
+    return c.json(payload)
+  } catch (err) {
+    console.error('Pricing resolution failed:', err instanceof Error ? err.message : String(err))
+    return c.json({ error: 'Pricing unavailable' }, 502)
+  }
+})
 
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────
 app.post('/api/checkout', async (c) => {
@@ -20,6 +49,8 @@ app.post('/api/checkout', async (c) => {
   if (!isValidPlan(plan) || !isValidCycle(billing)) {
     return c.json({ error: 'Invalid plan or billing cycle' }, 400)
   }
+  // Bill the region the frontend displayed; unknown/absent falls back to default.
+  const region = isValidRegion(body.region) ? body.region : DEFAULT_REGION
 
   // Authenticate the caller via their Supabase JWT.
   const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
@@ -53,11 +84,11 @@ app.post('/api/checkout', async (c) => {
     await upsertBilling(merchant.id, { stripe_customer_id: customerId })
   }
 
-  const metadata = { merchant_id: merchant.id, plan, billing }
+  const metadata = { merchant_id: merchant.id, plan, billing, region }
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer: customerId,
-    line_items: [{ price: priceFor(plan, billing), quantity: 1 }],
+    line_items: [{ price: priceFor(plan, billing, region), quantity: 1 }],
     client_reference_id: merchant.id,
     metadata,
     payment_method_collection: 'always', // card upfront even for the Basic trial

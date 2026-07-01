@@ -16,11 +16,22 @@ export const env = {
   supabaseAnonKey: required('SUPABASE_ANON_KEY'),
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
 
-  // Stripe Price IDs, keyed by `${plan}_${cycle}`.
+  // Stripe Price IDs per billing region, keyed by `${plan}_${cycle}`. US is the
+  // default and required. MY is optional: when its Price IDs are unset the app
+  // still boots (all traffic resolves to US), and requesting a MY price only
+  // fails at call time. Add a region by adding its four vars here.
   prices: {
-    basic_monthly: required('STRIPE_PRICE_BASIC_MONTHLY'),
-    basic_yearly: required('STRIPE_PRICE_BASIC_YEARLY'),
-    pro_monthly: required('STRIPE_PRICE_PRO_MONTHLY'),
-    pro_yearly: required('STRIPE_PRICE_PRO_YEARLY'),
+    US: {
+      basic_monthly: required('STRIPE_PRICE_BASIC_MONTHLY'),
+      basic_yearly: required('STRIPE_PRICE_BASIC_YEARLY'),
+      pro_monthly: required('STRIPE_PRICE_PRO_MONTHLY'),
+      pro_yearly: required('STRIPE_PRICE_PRO_YEARLY'),
+    },
+    MY: {
+      basic_monthly: process.env.STRIPE_PRICE_BASIC_MONTHLY_MYR || '',
+      basic_yearly: process.env.STRIPE_PRICE_BASIC_YEARLY_MYR || '',
+      pro_monthly: process.env.STRIPE_PRICE_PRO_MONTHLY_MYR || '',
+      pro_yearly: process.env.STRIPE_PRICE_PRO_YEARLY_MYR || '',
+    },
   },
 }

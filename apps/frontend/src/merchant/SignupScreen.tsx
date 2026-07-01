@@ -3,6 +3,8 @@ import { useSearchParams, Link } from 'react-router-dom'
 import { signUp, signIn, createMerchant, startCheckout } from '../store'
 import { toSlugBase } from '../slug'
 import { useSession } from '../SessionContext'
+import { usePlatformPricing } from '../usePlatformPricing'
+import { formatMoney } from '../currency'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -11,11 +13,10 @@ import { Badge } from '@/components/ui/badge'
 
 const PLANS = ['basic', 'pro']
 const CYCLES = ['monthly', 'yearly']
-// Monthly USD price per plan (matches the Stripe charge); yearly shown as effective /mo (2 months free = 10×/12).
-const PRICE: Record<string, number> = { basic: 9.99, pro: 39.99 }
 
 export default function SignupScreen() {
   const { t, refreshMerchant } = useSession()
+  const { pricing } = usePlatformPricing()
   const [params] = useSearchParams()
 
   const plan = PLANS.includes(params.get('plan') as string) ? (params.get('plan') as string) : 'basic'
@@ -37,7 +38,8 @@ export default function SignupScreen() {
 
   const planName = plan === 'pro' ? 'Pro' : t('Basic', '基础版')
   const cycleName = billing === 'yearly' ? t('Yearly', '按年') : t('Monthly', '按月')
-  const perMo = (billing === 'yearly' ? (PRICE[plan] * 10) / 12 : PRICE[plan]).toFixed(2)
+  const planPrices = pricing.prices[plan as 'basic' | 'pro']
+  const perMoAmount = billing === 'yearly' ? planPrices.yearly / 12 : planPrices.monthly
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -54,7 +56,8 @@ export default function SignupScreen() {
       await createMerchant({ name, plan, billing })
       await refreshMerchant()
       // Hand off to Stripe Checkout; webhook activates the shop on success.
-      const url = await startCheckout({ plan, billing })
+      // Bill the region shown on this page so displayed price equals charged price.
+      const url = await startCheckout({ plan, billing, region: pricing.region })
       window.location.assign(url)
     } catch (err: any) {
       setMsg(err.message || t('Something went wrong.', '出错了。'))
@@ -75,7 +78,7 @@ export default function SignupScreen() {
         {/* Plan banner: oxblood-tint bg, rose-border, md radius */}
         <div className="flex items-baseline flex-wrap gap-2 px-[13px] py-[10px] mb-[14px] bg-oxblood-tint border border-rose-border rounded-md">
           <span className="font-semibold text-oxblood text-[14px]">{planName} · {cycleName}</span>
-          <span className="font-heading text-ink text-[15px]">USD {perMo}{t('/mo', '/月')}</span>
+          <span className="font-heading text-ink text-[15px]">{formatMoney(perMoAmount, pricing.currency)}{t('/mo', '/月')}</span>
           {plan === 'basic' && (
             <Badge variant="default" className="ml-auto py-[2px] tracking-[0.03em]">
               {t('7-day free trial', '7 天免费试用')}
