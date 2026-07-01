@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useSession } from '../SessionContext'
 import { signOut } from '../store'
+import { usePlatformPricing } from '../usePlatformPricing'
+import { formatMoney } from '../currency'
 import LanguageSelect from '../components/LanguageSelect'
 import { Button } from '../components/ui/button'
 import { cn } from '../lib/utils'
@@ -31,6 +33,7 @@ const sectionTitle =
 
 export default function Landing() {
   const { t, account, role, loading } = useSession()
+  const { pricing } = usePlatformPricing()
   const [menuOpen, setMenuOpen] = useState(false)
   const [billing, setBilling] = useState('monthly') // 'monthly' | 'yearly'
 
@@ -41,13 +44,12 @@ export default function Landing() {
       ? { to: '/merchant', label: t('My dashboard', '我的后台') }
       : null
 
-  // Pricing tiers. yearly = 10× monthly (2 months free).
+  // Pricing tiers. Amounts come from the region-resolved backend pricing (`pricing`);
+  // yearly is billed at 10× monthly (2 months free) and shown as an effective /mo.
   const tiers = [
     {
       id: 'basic',
       name: t('Basic', '基础版'),
-      monthly: 9.99,
-      yearly: 99.90,
       blurb: t('For getting started.', '适合刚起步的你。'),
       features: [
         t('1 shop', '1 间店铺'),
@@ -61,8 +63,6 @@ export default function Landing() {
     {
       id: 'pro',
       name: 'Pro',
-      monthly: 39.99,
-      yearly: 399.90,
       blurb: t('For growing shops.', '为成长中的店铺打造。'),
       features: [
         t('Everything in Basic', '包含基础版所有功能'),
@@ -272,7 +272,8 @@ export default function Landing() {
         {/* Pricing cards */}
         <div className="grid [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))] gap-6 mt-10 text-left">
           {tiers.map(tier => {
-            const price = (billing === 'yearly' ? tier.yearly / 12 : tier.monthly).toFixed(2)
+            const tierPrices = pricing.prices[tier.id as 'basic' | 'pro']
+            const amount = billing === 'yearly' ? tierPrices.yearly / 12 : tierPrices.monthly
             return (
               <div
                 key={tier.id}
@@ -290,11 +291,11 @@ export default function Landing() {
                 )}
                 <h3 className="font-heading text-xl font-medium text-ink m-0">{tier.name}</h3>
                 <div className="flex items-baseline gap-[0.35rem] mt-3">
-                  <span className="font-heading text-[34px] font-semibold text-oxblood leading-none">USD {price}</span>
+                  <span className="font-heading text-[34px] font-semibold text-oxblood leading-none">{formatMoney(amount, pricing.currency)}</span>
                   <span className="text-sm text-rose-muted">{t('/mo', '/月')}</span>
                 </div>
                 <p className="min-h-[1.1em] text-xs text-rose-muted mt-[0.35rem] mb-0">
-                  {billing === 'yearly' && Number(price) > 0
+                  {billing === 'yearly' && amount > 0
                     ? t('billed yearly', '按年付费')
                     : ' '}
                 </p>
@@ -310,7 +311,7 @@ export default function Landing() {
                   ))}
                 </ul>
                 <Link
-                  to={`${tier.to}?plan=${tier.id}&billing=${billing}`}
+                  to={`${tier.to}?plan=${tier.id}&billing=${billing}&region=${pricing.region}`}
                   className={tier.highlight ? cardCtaPrimary : cardCtaGhost}
                 >
                   {tier.cta}

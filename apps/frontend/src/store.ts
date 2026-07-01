@@ -108,14 +108,15 @@ export async function createMerchant({ name, plan = 'basic', billing = 'monthly'
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
 
 // Create a Stripe Checkout Session for the current merchant and return its URL.
-export async function startCheckout({ plan, billing }: { plan: string; billing: string }) {
+// `region` bills the region the pricing page displayed (defaults server-side).
+export async function startCheckout({ plan, billing, region }: { plan: string; billing: string; region?: string }) {
   const { data: { session } } = await supabase.auth.getSession()
   const token = session?.access_token
   if (!token) throw new Error('Not signed in')
   const res = await fetch(`${API_URL}/api/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ plan, billing }),
+    body: JSON.stringify({ plan, billing, region }),
   })
   if (!res.ok) {
     const { error } = await res.json().catch(() => ({}))
@@ -123,6 +124,24 @@ export async function startCheckout({ plan, billing }: { plan: string; billing: 
   }
   const { url } = await res.json()
   return url
+}
+
+// Region-resolved platform subscription pricing from the backend. `country` is an
+// optional override forwarded as `?country=` (used to preview a region locally / in QA).
+export interface PlatformPricing {
+  region: string
+  currency: string
+  prices: {
+    basic: { monthly: number; yearly: number }
+    pro: { monthly: number; yearly: number }
+  }
+}
+
+export async function fetchPlatformPricing(country?: string): Promise<PlatformPricing> {
+  const qs = country ? `?country=${encodeURIComponent(country)}` : ''
+  const res = await fetch(`${API_URL}/api/pricing${qs}`)
+  if (!res.ok) throw new Error('Could not load pricing')
+  return res.json()
 }
 
 // Read the merchant's authoritative billing row (owner-readable via RLS).
