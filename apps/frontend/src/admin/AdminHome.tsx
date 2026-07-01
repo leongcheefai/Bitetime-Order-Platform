@@ -1,7 +1,7 @@
-import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
+import { useDashboardSection } from '../useDashboardSection'
 import { LayoutDashboard, Store } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import AdminOverview from './AdminOverview'
@@ -15,7 +15,7 @@ const SECTIONS = [
 
 export default function AdminHome() {
   const { t } = useSession()
-  const [section, setSection] = useState<string>('overview')
+  const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
   const variants = usePageVariants()
 
   const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))

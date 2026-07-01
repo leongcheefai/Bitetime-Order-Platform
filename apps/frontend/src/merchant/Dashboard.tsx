@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
@@ -11,6 +10,7 @@ import ShopSettings from './ShopSettings'
 import OrdersView from './OrdersView'
 import CustomersView from './CustomersView'
 import { NavGuardProvider, useNavGuard } from './NavGuard'
+import { useDashboardSection } from '../useDashboardSection'
 
 const ICON = { size: 18, strokeWidth: 1.75 }
 const SECTIONS = [
@@ -33,7 +33,7 @@ export default function Dashboard() {
 function DashboardInner() {
   const { t, merchant, role } = useSession()
   const { guard } = useNavGuard()
-  const [section, setSection] = useState<string>('overview')
+  const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
   const variants = usePageVariants()
 
   const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
