@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
-import { useToast } from '../ToastContext'
+import { toast } from 'sonner'
 import { fetchProducts, upsertProduct, deleteProduct } from '../store'
 import { SkeletonText } from '../components/Loaders'
 import { Button } from '../components/ui/button'
@@ -12,7 +12,6 @@ const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pc', active:
 
 export default function ProductsManager() {
   const { t, merchant } = useSession()
-  const toast = useToast()
   const [rows, setRows] = useState<any[] | null>(null)
   const [form, setForm] = useState<any>(BLANK)
   const [busy, setBusy] = useState(false)

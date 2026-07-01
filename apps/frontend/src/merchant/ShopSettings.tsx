@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
 import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret } from '../store'
 import { Button } from '../components/ui/button'
@@ -65,7 +66,6 @@ export default function ShopSettings() {
 }
 
 interface TabProps { onDirtyChange: (dirty: boolean) => void }
-type Msg = { ok: boolean; text: string } | null
 
 const CARD = 'bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border'
 const HEADING = 'font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2'
@@ -77,18 +77,11 @@ function useTabDirty(saved: SettingsFields, fields: SettingsFields, onDirtyChang
   return dirty
 }
 
-function SaveRow({ busy, msg, label }: { busy: boolean; msg: Msg; label: { idle: string; busy: string } }) {
+function SaveRow({ busy, label }: { busy: boolean; label: { idle: string; busy: string } }) {
   return (
-    <>
-      <Button type="submit" size="md" className="mt-1" disabled={busy}>
-        {busy ? label.busy : label.idle}
-      </Button>
-      {msg && (
-        <p className={`text-[13px] font-medium text-center mt-2 min-h-[18px] ${msg.ok ? 'text-oxblood' : 'text-destructive'}`}>
-          {msg.text}
-        </p>
-      )}
-    </>
+    <Button type="submit" size="md" className="mt-1" disabled={busy}>
+      {busy ? label.busy : label.idle}
+    </Button>
   )
 }
 
@@ -100,19 +93,18 @@ function ShippingTab({ onDirtyChange }: TabProps) {
   }))
   const [fields, setFields] = useState<SettingsFields>(saved)
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<Msg>(null)
   useTabDirty(saved, fields, onDirtyChange)
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setBusy(true); setMsg(null)
+    e.preventDefault(); setBusy(true)
     try {
       await updateMerchantConfig(merchant!.id, {
         shipping: { WM: Number(fields.wm) || 0, EM: Number(fields.em) || 0 },
       })
       await refreshMerchant()
       setSaved(fields)
-      setMsg({ ok: true, text: t('Saved.', '已保存。') })
-    } catch (err: any) { setMsg({ ok: false, text: err.message || t('Save failed', '保存失败') }) }
+      toast.success(t('Shipping saved', '运费已保存'))
+    } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
     finally { setBusy(false) }
   }
 
@@ -133,7 +125,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
           </div>
         </div>
       </div>
-      <SaveRow busy={busy} msg={msg} label={{ idle: t('Save shipping', '保存运费'), busy: t('Saving…', '保存中…') }} />
+      <SaveRow busy={busy} label={{ idle: t('Save shipping', '保存运费'), busy: t('Saving…', '保存中…') }} />
     </form>
   )
 }
@@ -146,17 +138,16 @@ function PaymentTab({ onDirtyChange }: TabProps) {
   }))
   const [fields, setFields] = useState<SettingsFields>(saved)
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<Msg>(null)
   useTabDirty(saved, fields, onDirtyChange)
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setBusy(true); setMsg(null)
+    e.preventDefault(); setBusy(true)
     try {
       await updateMerchantConfig(merchant!.id, { payment_bank: fields.bank, payment_note: fields.note })
       await refreshMerchant()
       setSaved(fields)
-      setMsg({ ok: true, text: t('Saved.', '已保存。') })
-    } catch (err: any) { setMsg({ ok: false, text: err.message || t('Save failed', '保存失败') }) }
+      toast.success(t('Payment saved', '付款已保存'))
+    } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
     finally { setBusy(false) }
   }
 
@@ -177,7 +168,7 @@ function PaymentTab({ onDirtyChange }: TabProps) {
           </div>
         </div>
       </div>
-      <SaveRow busy={busy} msg={msg} label={{ idle: t('Save payment', '保存付款'), busy: t('Saving…', '保存中…') }} />
+      <SaveRow busy={busy} label={{ idle: t('Save payment', '保存付款'), busy: t('Saving…', '保存中…') }} />
     </form>
   )
 }
@@ -187,7 +178,6 @@ function NotificationsTab({ onDirtyChange }: TabProps) {
   const [saved, setSaved] = useState<SettingsFields>({ tgToken: '', tgChat: '' })
   const [fields, setFields] = useState<SettingsFields>({ tgToken: '', tgChat: '' })
   const [busy, setBusy] = useState(false)
-  const [msg, setMsg] = useState<Msg>(null)
   const loaded = useRef(false)
   useTabDirty(saved, fields, onDirtyChange)
 
@@ -202,12 +192,12 @@ function NotificationsTab({ onDirtyChange }: TabProps) {
   }, [merchant!.id])
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setBusy(true); setMsg(null)
+    e.preventDefault(); setBusy(true)
     try {
       await upsertMerchantSecret(merchant!.id, { tg_token: fields.tgToken, tg_chat_id: fields.tgChat })
       setSaved(fields)
-      setMsg({ ok: true, text: t('Saved.', '已保存。') })
-    } catch (err: any) { setMsg({ ok: false, text: err.message || t('Save failed', '保存失败') }) }
+      toast.success(t('Notifications saved', '通知已保存'))
+    } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
     finally { setBusy(false) }
   }
 
@@ -229,7 +219,7 @@ function NotificationsTab({ onDirtyChange }: TabProps) {
           </div>
         </div>
       </div>
-      <SaveRow busy={busy} msg={msg} label={{ idle: t('Save notifications', '保存通知'), busy: t('Saving…', '保存中…') }} />
+      <SaveRow busy={busy} label={{ idle: t('Save notifications', '保存通知'), busy: t('Saving…', '保存中…') }} />
     </form>
   )
 }

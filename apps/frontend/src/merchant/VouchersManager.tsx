@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
-import { useToast } from '../ToastContext'
+import { toast } from 'sonner'
 import { fetchMerchantVouchers, createMerchantVoucher, deleteMerchantVoucher } from '../store'
 import { SkeletonText } from '../components/Loaders'
 import { Button } from '../components/ui/button'
@@ -21,7 +21,6 @@ const CHEVRON_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
 
 export default function VouchersManager() {
   const { t, merchant } = useSession()
-  const toast = useToast()
   const [rows, setRows] = useState<Voucher[] | null>(null)
   const [form, setForm] = useState<any>(BLANK)
   const [busy, setBusy] = useState(false)
