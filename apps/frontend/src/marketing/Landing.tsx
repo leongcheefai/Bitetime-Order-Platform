@@ -290,7 +290,7 @@ export default function Landing() {
                 )}
                 <h3 className="font-heading text-xl font-medium text-ink m-0">{tier.name}</h3>
                 <div className="flex items-baseline gap-[0.35rem] mt-3">
-                  <span className="font-heading text-[34px] font-semibold text-oxblood leading-none">RM {price}</span>
+                  <span className="font-heading text-[34px] font-semibold text-oxblood leading-none">USD {price}</span>
                   <span className="text-sm text-rose-muted">{t('/mo', '/月')}</span>
                 </div>
                 <p className="min-h-[1.1em] text-xs text-rose-muted mt-[0.35rem] mb-0">

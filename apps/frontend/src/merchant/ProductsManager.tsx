@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
 import { fetchProducts, upsertProduct, deleteProduct } from '../store'
+import { formatMoney, currencyDef } from '../currency'
 import { SkeletonText } from '../components/Loaders'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -15,6 +16,8 @@ export default function ProductsManager() {
   const [rows, setRows] = useState<any[] | null>(null)
   const [form, setForm] = useState<any>(BLANK)
   const [busy, setBusy] = useState(false)
+  const currency = merchant?.currency
+  const symbol = currencyDef(currency).symbol
 
   async function load() { setRows(await fetchProducts(merchant!.id)) }
   useEffect(() => { fetchProducts(merchant!.id).then(setRows) }, [merchant!.id])
@@ -63,7 +66,7 @@ export default function ProductsManager() {
                     {p.name_zh ? <span className="text-rose-muted font-normal"> / {p.name_zh}</span> : null}
                     {!p.active && <em className="italic text-[12px] text-text-tertiary"> · {t('hidden', '已隐藏')}</em>}
                   </div>
-                  <div className="text-[12px] text-rose-muted mt-0.5">RM {Number(p.price).toFixed(2)} / {p.unit}</div>
+                  <div className="text-[12px] text-rose-muted mt-0.5">{formatMoney(p.price, currency)} / {p.unit}</div>
                 </div>
                 <div className="flex gap-[6px] shrink-0 max-[480px]:w-full max-[480px]:justify-end">
                   <Button
@@ -130,7 +133,7 @@ export default function ProductsManager() {
               />
             </div>
             <div className="flex flex-col gap-[6px]">
-              <Label htmlFor="pm-4">{t('Price (RM)', '价格 (RM)')}</Label>
+              <Label htmlFor="pm-4">{t(`Price (${symbol})`, `价格 (${symbol})`)}</Label>
               <Input
                 id="pm-4"
                 variant="compact"

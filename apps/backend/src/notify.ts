@@ -6,11 +6,38 @@
 export interface NotifyOrderInput { merchantId: string; orderNumber: string }
 export interface NotifyResult { ok: boolean; skipped?: boolean; error?: string }
 
-// Pure: render the Telegram message from an order row.
+// Compact mirror of the frontend currency registry (apps/frontend/src/currency.ts).
+// Duplicated because the backend is a separate workspace; keep the two in sync.
+const CURRENCIES: Record<string, { symbol: string; decimals: number; symbolAfter?: boolean }> = {
+  MYR: { symbol: 'RM', decimals: 2 },
+  SGD: { symbol: 'S$', decimals: 2 },
+  USD: { symbol: '$', decimals: 2 },
+  THB: { symbol: '฿', decimals: 2 },
+  PHP: { symbol: '₱', decimals: 2 },
+  IDR: { symbol: 'Rp', decimals: 0 },
+  VND: { symbol: '₫', decimals: 0 },
+  JPY: { symbol: '¥', decimals: 0 },
+}
+
+// Renders `amount` in the order's currency, matching the frontend formatMoney.
+export function formatMoney(amount: number | null | undefined, code?: string | null): string {
+  const def = CURRENCIES[code ?? ''] ?? CURRENCIES.MYR
+  const n = Number(amount)
+  const value = Number.isFinite(n) ? n : 0
+  const num = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: def.decimals,
+    maximumFractionDigits: def.decimals,
+  }).format(value)
+  return def.symbolAfter ? `${num} ${def.symbol}` : `${def.symbol} ${num}`
+}
+
+// Pure: render the Telegram message from an order row, in the order's own
+// stamped currency (falls back to MYR for legacy rows without one).
 export function buildOrderMessage(order: any, merchantName?: string): string {
+  const cur = order.currency ?? 'MYR'
   const items = Array.isArray(order.items) ? order.items : []
   const lines = items
-    .map((i: any) => `• ${i.name} × ${i.qty} — RM ${Number((i.price ?? 0) * (i.qty ?? 0)).toFixed(2)}`)
+    .map((i: any) => `• ${i.name} × ${i.qty} — ${formatMoney((i.price ?? 0) * (i.qty ?? 0), cur)}`)
     .join('\n')
   let msg = `🛎️ *New order${merchantName ? ` — ${merchantName}` : ''}*\n\n`
   msg += `*Order No.:* ${order.order_number}\n`
@@ -19,8 +46,8 @@ export function buildOrderMessage(order: any, merchantName?: string): string {
   if (order.mode) msg += `*Mode:* ${order.mode}\n`
   if (order.address) msg += `*Address:* ${order.address}\n`
   msg += `\n*Items:*\n${lines}\n`
-  if (order.shipping_fee) msg += `*Shipping:* RM ${Number(order.shipping_fee).toFixed(2)}\n`
-  msg += `\n*Total: RM ${Number(order.total ?? 0).toFixed(2)}*`
+  if (order.shipping_fee) msg += `*Shipping:* ${formatMoney(order.shipping_fee, cur)}\n`
+  msg += `\n*Total: ${formatMoney(order.total ?? 0, cur)}*`
   return msg
 }
 

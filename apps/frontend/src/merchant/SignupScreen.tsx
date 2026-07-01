@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 
 const PLANS = ['basic', 'pro']
 const CYCLES = ['monthly', 'yearly']
-// Monthly RM price per plan; yearly shown as effective /mo (2 months free = 10×/12).
+// Monthly USD price per plan (matches the Stripe charge); yearly shown as effective /mo (2 months free = 10×/12).
 const PRICE: Record<string, number> = { basic: 9.99, pro: 39.99 }
 
 export default function SignupScreen() {
@@ -75,7 +75,7 @@ export default function SignupScreen() {
         {/* Plan banner: oxblood-tint bg, rose-border, md radius */}
         <div className="flex items-baseline flex-wrap gap-2 px-[13px] py-[10px] mb-[14px] bg-oxblood-tint border border-rose-border rounded-md">
           <span className="font-semibold text-oxblood text-[14px]">{planName} · {cycleName}</span>
-          <span className="font-heading text-ink text-[15px]">RM {perMo}{t('/mo', '/月')}</span>
+          <span className="font-heading text-ink text-[15px]">USD {perMo}{t('/mo', '/月')}</span>
           {plan === 'basic' && (
             <Badge variant="default" className="ml-auto py-[2px] tracking-[0.03em]">
               {t('7-day free trial', '7 天免费试用')}

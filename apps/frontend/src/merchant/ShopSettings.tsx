@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
-import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret } from '../store'
+import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret, merchantHasOrders } from '../store'
+import { CURRENCIES, CURRENCY_CODES, DEFAULT_CURRENCY, currencyDef } from '../currency'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { useNavGuard } from './NavGuard'
 import { isDirty, type SettingsFields } from './settingsDirty'
@@ -88,17 +90,33 @@ function SaveRow({ busy, label }: { busy: boolean; label: { idle: string; busy: 
 function ShippingTab({ onDirtyChange }: TabProps) {
   const { t, merchant, refreshMerchant } = useSession()
   const [saved, setSaved] = useState<SettingsFields>(() => ({
+    currency: merchant!.currency ?? DEFAULT_CURRENCY,
     wm: String(merchant!.shipping?.WM ?? 8),
     em: String(merchant!.shipping?.EM ?? 18),
   }))
   const [fields, setFields] = useState<SettingsFields>(saved)
   const [busy, setBusy] = useState(false)
+  // Currency locks after the first order so past orders/aggregates never
+  // re-denominate. Assume locked until the check clears, so it can't flip open.
+  const [currencyLocked, setCurrencyLocked] = useState(true)
   useTabDirty(saved, fields, onDirtyChange)
+
+  useEffect(() => {
+    let active = true
+    merchantHasOrders(merchant!.id).then(has => { if (active) setCurrencyLocked(has) })
+    return () => { active = false }
+  }, [merchant!.id])
+
+  // Live symbol drives the shipping-rate input labels.
+  const symbol = currencyDef(fields.currency).symbol
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
     try {
       await updateMerchantConfig(merchant!.id, {
+        // Guard against a stale locked value slipping through: only persist the
+        // currency when it is still editable.
+        ...(currencyLocked ? {} : { currency: fields.currency }),
         shipping: { WM: Number(fields.wm) || 0, EM: Number(fields.em) || 0 },
       })
       await refreshMerchant()
@@ -111,15 +129,44 @@ function ShippingTab({ onDirtyChange }: TabProps) {
   return (
     <form onSubmit={save}>
       <div className={CARD}>
+        <h3 className={HEADING}>{t('Currency', '货币')}</h3>
+        <div className="flex flex-col gap-[6px]">
+          <Label htmlFor="shop-currency">{t('Base currency', '基础货币')}</Label>
+          <Select
+            value={fields.currency}
+            onValueChange={(v) => setFields(f => ({ ...f, currency: v }))}
+            disabled={currencyLocked}
+          >
+            <SelectTrigger id="shop-currency" className="w-full max-w-[280px]" aria-label={t('Base currency', '基础货币')}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCY_CODES.map(code => (
+                <SelectItem key={code} value={code}>
+                  {CURRENCIES[code].code} — {CURRENCIES[code].symbol} · {CURRENCIES[code].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
+            {currencyLocked
+              ? t('Currency is locked because your shop has orders — changing it would re-denominate past totals.',
+                  '因店铺已有订单，货币已锁定 — 更改会重新换算历史金额。')
+              : t('The unit for your prices and what customers see. Locked once your first order is placed.',
+                  '您的价格和顾客看到的金额单位。首笔订单后将锁定。')}
+          </p>
+        </div>
+      </div>
+      <div className={CARD}>
         <h3 className={HEADING}>{t('Shipping rates', '运费')}</h3>
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-wm">{t('West Malaysia (RM)', '西马运费 (RM)')}</Label>
+            <Label htmlFor="shop-wm">{t(`West Malaysia (${symbol})`, `西马运费 (${symbol})`)}</Label>
             <Input id="shop-wm" type="number" step="0.01" value={fields.wm}
               onChange={e => setFields(f => ({ ...f, wm: e.target.value }))} variant="compact" />
           </div>
           <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-em">{t('East Malaysia (RM)', '东马运费 (RM)')}</Label>
+            <Label htmlFor="shop-em">{t(`East Malaysia (${symbol})`, `东马运费 (${symbol})`)}</Label>
             <Input id="shop-em" type="number" step="0.01" value={fields.em}
               onChange={e => setFields(f => ({ ...f, em: e.target.value }))} variant="compact" />
           </div>

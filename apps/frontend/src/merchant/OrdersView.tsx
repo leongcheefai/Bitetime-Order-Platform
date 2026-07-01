@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, setOrderStatus } from '../store'
+import { formatMoney } from '../currency'
 import { SkeletonText } from '../components/Loaders'
 import { Badge } from '@/components/ui/badge'
 
@@ -132,7 +133,7 @@ export default function OrdersView() {
               <div className="flex gap-4 flex-wrap max-[600px]:gap-[10px]">
                 <span>
                   <span className={LBL}>{t('Total', '总计')}</span>{' '}
-                  <strong>RM {Number(o.total || 0).toFixed(2)}</strong>
+                  <strong>{formatMoney(o.total, o.currency ?? merchant?.currency)}</strong>
                 </span>
                 <span>
                   <span className={LBL}>{t('Mode', '方式')}</span>{' '}

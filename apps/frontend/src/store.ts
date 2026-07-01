@@ -265,7 +265,7 @@ export function referralCodeOf(userId: string) {
 
 const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
 
-export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total }: {
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total, currency }: {
   merchantId: string
   customerName: string
   customerWa: string
@@ -274,6 +274,7 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   shippingFee?: number
   items: any
   total: number
+  currency?: string
 }) {
   const { data: orderNumber, error: rpcErr } = await supabase
     .rpc('next_order_number', { p_merchant: merchantId })
@@ -285,6 +286,7 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     mode, address,
     shipping_fee: shippingFee ?? 0,
     items, total,
+    currency: currency ?? 'MYR',
     order_number: orderNumber,
     status: 'new',
   }).select().single()
@@ -311,6 +313,16 @@ export async function fetchMerchantOrders(merchantId: string) {
     .order('created_at', { ascending: false })
   if (error) return []
   return data ?? []
+}
+
+// True once the merchant has ≥1 order — used to lock the currency selector so
+// past orders and dashboard aggregates never silently re-denominate.
+export async function merchantHasOrders(merchantId: string) {
+  if (!merchantId) return false
+  const { count, error } = await supabase
+    .from('orders').select('id', { count: 'exact', head: true }).eq('merchant_id', merchantId)
+  if (error) return false
+  return (count ?? 0) > 0
 }
 
 export async function setOrderStatus(orderId: string, status: string) {
