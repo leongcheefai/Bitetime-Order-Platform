@@ -137,38 +137,55 @@ app.post('/api/admin/approve-merchant', async (c) => {
 
   const { data: billing } = await admin
     .from('merchant_billing').select('*').eq('merchant_id', merchant.id).maybeSingle()
+
+  // Atomically claim the pending merchant so concurrent approvals can't both
+  // proceed (double-click, two admin tabs) — first caller wins, later ones 409.
+  const { data: claimed, error: claimErr } = await admin
+    .from('merchants')
+    .update({ status: 'active' })
+    .eq('id', merchant.id)
+    .eq('status', 'pending')
+    .select('id')
+    .maybeSingle()
+  if (claimErr) return c.json({ error: 'Claim failed' }, 500)
+  if (!claimed) return c.json({ error: 'Merchant is not pending' }, 409)
+
   if (!canStartTrial(billing)) {
     // Had a subscription once already — approval re-activates, but never re-trials.
-    await setMerchantStatus(merchant.id, 'active')
     return c.json({ ok: true, trial: false })
   }
 
-  const { data: owner } = await admin
-    .from('profiles').select('email').eq('id', merchant.owner_id).maybeSingle()
+  try {
+    const { data: owner } = await admin
+      .from('profiles').select('email').eq('id', merchant.owner_id).maybeSingle()
 
-  let customerId = billing?.stripe_customer_id
-  if (!customerId) {
-    const customer = await stripe.customers.create({
-      email: owner?.email || undefined,
-      name: merchant.name,
-      metadata: { merchant_id: merchant.id },
+    let customerId = billing?.stripe_customer_id
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: owner?.email || undefined,
+        name: merchant.name,
+        metadata: { merchant_id: merchant.id },
+      })
+      customerId = customer.id
+    }
+
+    const plan = merchant.plan || 'basic'
+    const cycle = merchant.billing_cycle || 'monthly'
+    const region = isValidRegion(merchant.billing_region) ? merchant.billing_region : DEFAULT_REGION
+    const sub = await stripe.subscriptions.create({
+      customer: customerId,
+      items: [{ price: priceFor(plan, cycle, region) }],
+      trial_period_days: 7,
+      trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+      metadata: { merchant_id: merchant.id, plan, billing: cycle, region },
     })
-    customerId = customer.id
+    await upsertBilling(merchant.id, billingFromSubscription(sub))
+    return c.json({ ok: true, trial: true })
+  } catch (err) {
+    console.error('Trial subscription creation failed:', err instanceof Error ? err.message : String(err))
+    await setMerchantStatus(merchant.id, 'pending') // release the claim
+    return c.json({ error: 'Subscription creation failed' }, 502)
   }
-
-  const plan = merchant.plan || 'basic'
-  const cycle = merchant.billing_cycle || 'monthly'
-  const region = isValidRegion(merchant.billing_region) ? merchant.billing_region : DEFAULT_REGION
-  const sub = await stripe.subscriptions.create({
-    customer: customerId,
-    items: [{ price: priceFor(plan, cycle, region) }],
-    trial_period_days: 7,
-    trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
-    metadata: { merchant_id: merchant.id, plan, billing: cycle, region },
-  })
-  await upsertBilling(merchant.id, billingFromSubscription(sub))
-  await setMerchantStatus(merchant.id, 'active')
-  return c.json({ ok: true, trial: true })
 })
 
 // ── Order notification — sends Telegram server-side ────────────────────────────
