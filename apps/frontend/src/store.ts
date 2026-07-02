@@ -53,12 +53,24 @@ export async function fetchAllMerchants() {
   return data ?? []
 }
 
+// Status is the billing enforcement boundary and is service_role-only at the DB
+// layer (guard_merchant_status trigger). Direct PostgREST updates are blocked, so
+// admin suspend/reject/reactivate goes through the superadmin backend endpoint.
 export async function setMerchantStatus(id: string, status: string) {
   if (!MERCHANT_STATUSES.includes(status)) throw new Error('Invalid status')
-  const { data, error } = await supabase
-    .from('merchants').update({ status }).eq('id', id).select().single()
-  if (error) throw error
-  return data
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/admin/set-merchant-status`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ merchantId: id, status }),
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || 'Status update failed')
+  }
+  return res.json()
 }
 
 export async function fetchMerchantBySlug(slug: string | undefined) {

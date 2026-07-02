@@ -76,6 +76,38 @@ describe.skipIf(!hasEnv)('tenant isolation (RLS)', () => {
     expect(data).toEqual([])
   })
 
+  it('an owner cannot insert a merchant that is already active (forced to pending)', async () => {
+    const uA = (await merchantA.auth.getUser()).data.user!.id
+    const { data, error } = await merchantA
+      .from('merchants')
+      .insert({ name: 'Self', slug: 'shop-rls-self', order_prefix: 'SS', owner_id: uA, status: 'active' })
+      .select('status')
+      .single()
+    expect(error).toBeNull()
+    expect(data!.status).toBe('pending')                // guard_merchant_status forces pending
+    // cleanup
+    await serviceClient().from('merchants').delete().eq('slug', 'shop-rls-self')
+  })
+
+  it('an owner cannot flip their own merchant status to active', async () => {
+    const svc = serviceClient()
+    await svc.from('merchants').update({ status: 'suspended' }).eq('id', idA)
+
+    const { error } = await merchantA
+      .from('merchants').update({ status: 'active' }).eq('id', idA)
+    expect(error).not.toBeNull()                        // raise exception => error
+
+    const { data } = await svc.from('merchants').select('status').eq('id', idA).single()
+    expect(data!.status).toBe('suspended')              // unchanged
+    await svc.from('merchants').update({ status: 'active' }).eq('id', idA) // restore
+  })
+
+  it('an owner can still edit non-status fields on their own merchant', async () => {
+    const { error } = await merchantA
+      .from('merchants').update({ name: 'A renamed' }).eq('id', idA)
+    expect(error).toBeNull()
+  })
+
   it('a normal user cannot self-promote to superadmin', async () => {
     const uid = (await merchantA.auth.getUser()).data.user!.id
 

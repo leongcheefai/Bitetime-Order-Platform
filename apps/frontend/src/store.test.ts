@@ -50,7 +50,9 @@ vi.mock('./supabase', () => {
 
   // auth mock for getCurrentUser() → supabase.auth.getUser()
   const getUser = vi.fn()
-  const auth = { getUser }
+  // getSession() → used by backend-calling helpers (setMerchantStatus, etc.)
+  const getSession = vi.fn()
+  const auth = { getUser, getSession }
 
   // rpc mock — top-level supabase.rpc(name, params) → awaited directly.
   const rpc = vi.fn()
@@ -59,7 +61,7 @@ vi.mock('./supabase', () => {
     supabase: { from, auth, rpc },
     __mocks: {
       from, select, eq, single, maybeSingle, insert, update,
-      insertSelect, updateEqSelect, upsertSelect, getUser, order,
+      insertSelect, updateEqSelect, upsertSelect, getUser, getSession, order,
       upsert, del, deleteEq, rpc,
     },
   }
@@ -254,33 +256,45 @@ describe('fetchAllMerchants', () => {
 // ── setMerchantStatus (Task 3.2) ──────────────────────────────────────────────
 
 describe('setMerchantStatus', () => {
-  it('throws "Invalid status" for an unknown status without calling update', async () => {
+  const okSession = { data: { session: { access_token: 'tok' } } }
+
+  it('throws "Invalid status" for an unknown status without calling the backend', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     await expect(setMerchantStatus('m1', 'banned')).rejects.toThrow('Invalid status')
-    expect(__mocks.update).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
   })
 
-  it('updates status on merchants table and returns the updated row', async () => {
-    const row = { id: 'm1', status: 'active' }
-    __mocks.single.mockResolvedValueOnce({ data: row, error: null })
-    const result = await setMerchantStatus('m1', 'active')
-    expect(__mocks.from).toHaveBeenCalledWith('merchants')
-    expect(__mocks.update).toHaveBeenCalledWith({ status: 'active' })
-    expect(__mocks.eq).toHaveBeenCalledWith('id', 'm1')
-    expect(result).toEqual(row)
+  it('throws when there is no session (not signed in)', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
+    await expect(setMerchantStatus('m1', 'active')).rejects.toThrow('Not signed in')
   })
 
-  it('accepts all three valid statuses: pending, active, suspended', async () => {
-    for (const status of ['pending', 'active', 'suspended']) {
-      vi.clearAllMocks()
-      __mocks.single.mockResolvedValueOnce({ data: { id: 'm1', status }, error: null })
-      const result = await setMerchantStatus('m1', status)
-      expect(result.status).toBe(status)
-    }
+  it('POSTs merchantId + status to the admin endpoint with a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce(okSession)
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => ({ ok: true, status: 'suspended' }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const result = await setMerchantStatus('m1', 'suspended')
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [url, opts] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/admin\/set-merchant-status$/)
+    expect(opts.method).toBe('POST')
+    expect(opts.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(opts.body)).toEqual({ merchantId: 'm1', status: 'suspended' })
+    expect(result).toEqual({ ok: true, status: 'suspended' })
+    vi.unstubAllGlobals()
   })
 
-  it('throws on DB error after a valid status', async () => {
-    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('write failed') })
-    await expect(setMerchantStatus('m1', 'suspended')).rejects.toThrow('write failed')
+  it('throws with the backend error message on a non-ok response', async () => {
+    __mocks.getSession.mockResolvedValueOnce(okSession)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'Forbidden' }),
+    }))
+    await expect(setMerchantStatus('m1', 'active')).rejects.toThrow('Forbidden')
+    vi.unstubAllGlobals()
   })
 })
 
