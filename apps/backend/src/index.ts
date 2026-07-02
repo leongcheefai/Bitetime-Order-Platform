@@ -155,11 +155,25 @@ app.post('/api/admin/approve-merchant', async (c) => {
     return c.json({ ok: true, trial: false })
   }
 
-  try {
-    const { data: owner } = await admin
-      .from('profiles').select('email').eq('id', merchant.owner_id).maybeSingle()
+  const { data: owner } = await admin
+    .from('profiles').select('email').eq('id', merchant.owner_id).maybeSingle()
 
-    let customerId = billing?.stripe_customer_id
+  const plan = merchant.plan || 'basic'
+  const cycle = merchant.billing_cycle || 'monthly'
+  const region = isValidRegion(merchant.billing_region) ? merchant.billing_region : DEFAULT_REGION
+
+  // Revert the pending→active claim; never throw from a failure path.
+  const revertClaim = async () => {
+    try {
+      await setMerchantStatus(merchant.id, 'pending')
+    } catch (e) {
+      console.error('Claim revert failed — merchant left active without a subscription:', e instanceof Error ? e.message : String(e))
+    }
+  }
+
+  let customerId = billing?.stripe_customer_id
+  let sub
+  try {
     if (!customerId) {
       const customer = await stripe.customers.create({
         email: owner?.email || undefined,
@@ -168,24 +182,35 @@ app.post('/api/admin/approve-merchant', async (c) => {
       })
       customerId = customer.id
     }
-
-    const plan = merchant.plan || 'basic'
-    const cycle = merchant.billing_cycle || 'monthly'
-    const region = isValidRegion(merchant.billing_region) ? merchant.billing_region : DEFAULT_REGION
-    const sub = await stripe.subscriptions.create({
+    sub = await stripe.subscriptions.create({
       customer: customerId,
       items: [{ price: priceFor(plan, cycle, region) }],
       trial_period_days: 7,
       trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
       metadata: { merchant_id: merchant.id, plan, billing: cycle, region },
     })
-    await upsertBilling(merchant.id, billingFromSubscription(sub))
-    return c.json({ ok: true, trial: true })
   } catch (err) {
     console.error('Trial subscription creation failed:', err instanceof Error ? err.message : String(err))
-    await setMerchantStatus(merchant.id, 'pending') // release the claim
+    await revertClaim()
     return c.json({ error: 'Subscription creation failed' }, 502)
   }
+
+  try {
+    await upsertBilling(merchant.id, billingFromSubscription(sub))
+  } catch (err) {
+    // The subscription exists but wasn't persisted — cancel it so a retried
+    // approval can't mint a second trial against an orphaned live one.
+    console.error('Billing persist failed — canceling trial subscription', sub.id, err instanceof Error ? err.message : String(err))
+    try {
+      await stripe.subscriptions.cancel(sub.id)
+    } catch (cancelErr) {
+      console.error('Cancel failed — ORPHANED Stripe subscription', sub.id, cancelErr instanceof Error ? cancelErr.message : String(cancelErr))
+    }
+    await revertClaim()
+    return c.json({ error: 'Subscription creation failed' }, 502)
+  }
+
+  return c.json({ ok: true, trial: true })
 })
 
 // ── Order notification — sends Telegram server-side ────────────────────────────
