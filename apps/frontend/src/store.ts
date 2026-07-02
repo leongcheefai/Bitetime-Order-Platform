@@ -171,6 +171,23 @@ export async function approveMerchant(merchantId: string) {
   return res.json()
 }
 
+// Open the Stripe billing portal for the signed-in merchant (add/update card).
+export async function openBillingPortal(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/billing/portal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || 'Could not open billing portal')
+  }
+  const { url } = await res.json()
+  return url
+}
+
 export async function updateMerchantSlug(id: string, slug: string) {
   const s = (slug || '').trim().toLowerCase()
   if (!s || RESERVED_SLUGS.includes(s)) throw new Error('Reserved or empty slug')

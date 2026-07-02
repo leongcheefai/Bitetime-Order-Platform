@@ -213,6 +213,26 @@ app.post('/api/admin/approve-merchant', async (c) => {
   return c.json({ ok: true, trial: true })
 })
 
+// ── Stripe billing portal for the signed-in merchant ───────────────────────────
+// Where a trialing merchant adds their card, and a past_due one updates it.
+// Requires the portal to be enabled once in the Stripe Dashboard.
+app.post('/api/billing/portal', async (c) => {
+  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+  const user = await getUserFromToken(token)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const { data: merchant } = await admin
+    .from('merchants').select('id').eq('owner_id', user.id).maybeSingle()
+  if (!merchant) return c.json({ error: 'No merchant for this account' }, 404)
+  const { data: billing } = await admin
+    .from('merchant_billing').select('stripe_customer_id').eq('merchant_id', merchant.id).maybeSingle()
+  if (!billing?.stripe_customer_id) return c.json({ error: 'No billing account yet' }, 404)
+  const session = await stripe.billingPortal.sessions.create({
+    customer: billing.stripe_customer_id,
+    return_url: `${env.frontendUrl}/merchant`,
+  })
+  return c.json({ url: session.url })
+})
+
 // ── Order notification — sends Telegram server-side ────────────────────────────
 // The customer is anonymous; abuse is bounded by requiring a real order. The
 // token is read from merchant_secrets (service role) and never reaches the client.
