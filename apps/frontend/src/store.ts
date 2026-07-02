@@ -21,25 +21,54 @@ export async function signUp(name: string, email: string, password: string) {
   if (error) throw error;
   if (data.user) {
     // If email confirmation is required, there is no session yet and RLS will
-    // block this insert — it will succeed (or upsert) once the user confirms
-    // and signs in, which is handled in onAuthChange below.
-    await supabase.from('profiles').upsert({
-      id: data.user.id,
+    // block this write — it succeeds once the user confirms and signs in, which
+    // is handled in onAuthChange below.
+    await ensureGlobalProfile({
+      user_id: data.user.id,
       name,
       email,
       email_confirmed: !!data.user.email_confirmed_at,
-      created_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    });
   }
   return data.user;
+}
+
+// The profiles restructure made `id` a surrogate PK and moved auth identity to
+// `user_id`; the only unique index on user_id alone is partial (merchant_id IS
+// NULL), so ON CONFLICT-based upsert can't target it. Do an explicit
+// select-then-insert/update on the user's global (merchant_id null) profile.
+// Returns any write error (null on success); RLS blocks the write until the
+// user has a session, which is expected during pending email confirmation.
+async function ensureGlobalProfile(fields: {
+  user_id: string
+  name: string
+  email?: string | null
+  email_confirmed: boolean
+  referral_code?: string
+}) {
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('user_id', fields.user_id)
+    .is('merchant_id', null)
+    .maybeSingle();
+  if (existing) {
+    const { error } = await supabase.from('profiles').update(fields).eq('id', existing.id);
+    return error;
+  }
+  const { error } = await supabase
+    .from('profiles')
+    .insert({ ...fields, created_at: new Date().toISOString() });
+  return error;
 }
 
 export async function fetchProfileByUserId(userId: string) {
   const { data, error } = await supabase
     .from('profiles')
     .select('id, name, email, app_role, merchant_id')
-    .eq('id', userId)
-    .single();
+    .eq('user_id', userId)
+    .is('merchant_id', null)
+    .maybeSingle();
   if (error) return null;
   return data;
 }
@@ -230,14 +259,13 @@ export function onAuthChange(callback: (user: User | null, event?: string) => vo
       // Deferred via setTimeout: awaiting a Supabase call inside onAuthStateChange
       // deadlocks the client's internal auth lock and hangs all later requests.
       setTimeout(() => {
-        supabase.from('profiles').upsert({
-          id: user.id,
+        ensureGlobalProfile({
+          user_id: user.id,
           name: user.user_metadata?.name || user.email?.split('@')[0] || '',
           email: user.email,
           email_confirmed: !!user.email_confirmed_at,
-          created_at: user.created_at,
           referral_code: referralCodeOf(user.id),
-        }, { onConflict: 'id' }).then(({ error }) => {
+        }).then((error) => {
           if (error) console.error('Profile upsert failed:', error.message);
         });
       }, 0);
