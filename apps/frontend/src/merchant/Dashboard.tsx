@@ -3,6 +3,7 @@ import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { LayoutDashboard, ReceiptText, Cake, Ticket, Users, Settings } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
+import BillingBanner from './BillingBanner.tsx'
 import Overview from './Overview'
 import ProductsManager from './ProductsManager'
 import VouchersManager from './VouchersManager'
@@ -53,6 +54,7 @@ function DashboardInner() {
       userName={`/s/${merchant!.slug}`}
       backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
     >
+      <BillingBanner />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={section} variants={variants} initial="initial" animate="animate" exit="exit">
           {section === 'overview'  && <Overview />}
