@@ -38,4 +38,4 @@ suspends the shop. Suspended shops serve a closed storefront and reactivate
 through a fresh Checkout that never re-grants a trial (`canStartTrial`). Failed
 renewals go `past_due` (red banner) and ride Stripe dunning. Stripe is the
 single source of billing truth; `merchant_billing` mirrors it. Pure seams:
-`billingLifecycle` (backend) and `billingBanner` (frontend).
+`billingLifecycle` (backend) and `billingBannerState` (frontend).
