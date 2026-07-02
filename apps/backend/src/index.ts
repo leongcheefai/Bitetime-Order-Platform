@@ -282,7 +282,20 @@ app.post('/api/stripe/webhook', async (c) => {
       case 'customer.subscription.updated': {
         const sub = event.data.object
         const merchantId = sub.metadata?.merchant_id
-        if (merchantId) await upsertBilling(merchantId, billingFromSubscription(sub))
+        if (merchantId) {
+          const fields = billingFromSubscription(sub)
+          // The Customer Portal often stores an added card as the customer default
+          // rather than on the subscription, leaving sub.default_payment_method null.
+          // Resolve that so a merchant who added a card stops seeing the nag banner.
+          if (!fields.has_payment_method) {
+            const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
+            const customer = await stripe.customers.retrieve(customerId)
+            if (!('deleted' in customer) && customer.invoice_settings?.default_payment_method) {
+              fields.has_payment_method = true
+            }
+          }
+          await upsertBilling(merchantId, fields)
+        }
         break
       }
       case 'customer.subscription.deleted': {
