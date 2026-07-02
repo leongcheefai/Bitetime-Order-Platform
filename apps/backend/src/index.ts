@@ -71,9 +71,16 @@ app.post('/api/checkout', async (c) => {
   // Reuse an existing Stripe customer if we have one, else create and store it.
   const { data: existing } = await admin
     .from('merchant_billing')
-    .select('stripe_customer_id')
+    .select('stripe_customer_id, status')
     .eq('merchant_id', merchant.id)
     .maybeSingle()
+
+  // A live subscription means there is nothing to buy here — refuse rather
+  // than create a second subscription (double-billing), e.g. for a shop an
+  // admin suspended while its Stripe subscription is still running.
+  if (existing && ['trialing', 'active', 'past_due'].includes(existing.status ?? '')) {
+    return c.json({ error: 'This shop already has an active subscription' }, 409)
+  }
 
   let customerId = existing?.stripe_customer_id
   if (!customerId) {
@@ -279,6 +286,16 @@ app.post('/api/stripe/webhook', async (c) => {
         const sub = event.data.object
         const merchantId = sub.metadata?.merchant_id
         if (merchantId) {
+          // Only the CURRENT subscription's cancellation suspends the shop — a
+          // stale or replaced subscription (e.g. the old trial after the shop
+          // reactivated via Checkout) must not re-suspend a paying merchant or
+          // clobber the billing row.
+          const { data: current } = await admin
+            .from('merchant_billing')
+            .select('stripe_subscription_id')
+            .eq('merchant_id', merchantId)
+            .maybeSingle()
+          if (current?.stripe_subscription_id && current.stripe_subscription_id !== sub.id) break
           await upsertBilling(merchantId, billingFromSubscription(sub))
           await setMerchantStatus(merchantId, 'suspended')
         }
@@ -286,7 +303,15 @@ app.post('/api/stripe/webhook', async (c) => {
       }
       case 'invoice.payment_failed': {
         const inv = event.data.object
-        const merchantId = inv.subscription_details?.metadata?.merchant_id || inv.metadata?.merchant_id
+        // Stripe moved `subscription_details` under `invoice.parent` (API
+        // version 2025-03-31+). The payload shape follows the ENDPOINT's
+        // registered API version, so read the new location with a legacy
+        // fallback (same drift-hardening as billingFromSubscription).
+        const parent = (inv as { parent?: { subscription_details?: { metadata?: Record<string, string> } } }).parent
+        const merchantId =
+          (inv as { subscription_details?: { metadata?: Record<string, string> } }).subscription_details?.metadata?.merchant_id ||
+          parent?.subscription_details?.metadata?.merchant_id ||
+          inv.metadata?.merchant_id
         if (merchantId) await upsertBilling(merchantId, { status: 'past_due' })
         break
       }
