@@ -23,3 +23,19 @@ A per-merchant promotion code. `percent` (subtotal×value/100) or fixed (`min(va
 ## Referral
 
 A discount earned by referring a new customer. Capped at the post-voucher total. The cap math is in `priceOrder`; the referrer lookup and new-customer check are I/O in the caller (`fetchProfileByReferralCode`, `isNewCustomer`).
+
+## Billing lifecycle
+
+A merchant's platform-subscription journey. Basic signup is cardless and lands
+`pending`; **superadmin approval** creates the 7-day trialing Stripe
+subscription (the only place a trial is ever granted) and activates the shop —
+the trial clock starts at approval. While `trialing`, the dashboard shows a
+persistent countdown banner (urgent inside 72h) whose CTA opens the Stripe
+billing portal; Stripe's `trial_will_end` webhook sends the 72h reminder email.
+Trial end with no card → Stripe cancels the subscription
+(`missing_payment_method: 'cancel'`) → the `subscription.deleted` webhook
+suspends the shop. Suspended shops serve a closed storefront and reactivate
+through a fresh Checkout that never re-grants a trial (`canStartTrial`). Failed
+renewals go `past_due` (red banner) and ride Stripe dunning. Stripe is the
+single source of billing truth; `merchant_billing` mirrors it. Pure seams:
+`billingLifecycle` (backend) and `billingBanner` (frontend).
