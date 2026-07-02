@@ -2,7 +2,7 @@ import { lazy, Suspense } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { AnimatePresence } from 'motion/react'
 import { PageTransition } from './motion'
-import { SessionProvider } from './SessionContext'
+import { SessionProvider, useSession } from './SessionContext'
 import { Toaster } from './components/ui/sonner'
 import { MerchantProvider, useMerchant } from './MerchantContext'
 import RequireRole from './RequireRole'
@@ -28,6 +28,7 @@ function RouteFallback() {
 
 function StorefrontShell() {
   const { merchant, loading, notFound } = useMerchant()
+  const { t } = useSession()
 
   if (loading) return (
     <div className="w-full min-h-[50vh] flex items-center justify-center">
@@ -59,7 +60,7 @@ function StorefrontShell() {
       </div>
       <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border text-left">
         <p className="text-rose-muted text-[14px] leading-[1.6] mt-1.5">
-          This shop isn't available right now.
+          {t('This shop is temporarily closed. Please check back later.', '本店暂时休息，请稍后再来。')}
         </p>
       </div>
     </div>

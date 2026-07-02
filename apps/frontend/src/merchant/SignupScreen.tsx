@@ -53,9 +53,15 @@ export default function SignupScreen() {
                  '账号已创建。请查收邮件确认，然后登录以完成店铺设置。'))
         setBusy(false); return
       }
-      await createMerchant({ name, plan, billing })
+      await createMerchant({ name, plan, billing, region: pricing.region })
       await refreshMerchant()
-      // Hand off to Stripe Checkout; webhook activates the shop on success.
+      if (plan === 'basic') {
+        // Cardless trial: no Checkout. The shop waits for platform approval,
+        // which is what starts the 7-day trial subscription.
+        window.location.assign('/merchant')
+        return
+      }
+      // Pro pays upfront: hand off to Stripe Checkout; webhook activates the shop.
       // Bill the region shown on this page so displayed price equals charged price.
       const url = await startCheckout({ plan, billing, region: pricing.region })
       window.location.assign(url)
@@ -81,7 +87,7 @@ export default function SignupScreen() {
           <span className="font-heading text-ink text-[15px]">{formatMoney(perMoAmount, pricing.currency)}{t('/mo', '/月')}</span>
           {plan === 'basic' && (
             <Badge variant="default" className="ml-auto py-[2px] tracking-[0.03em]">
-              {t('7-day free trial', '7 天免费试用')}
+              {t('7-day free trial — no card required', '7 天免费试用，无需信用卡')}
             </Badge>
           )}
         </div>

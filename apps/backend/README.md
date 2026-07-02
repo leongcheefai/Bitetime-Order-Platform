@@ -9,10 +9,17 @@ Stripe calls `/api/stripe/webhook`.
 - `POST /api/checkout` — body `{ plan: 'basic'|'pro', billing: 'monthly'|'yearly' }`,
   `Authorization: Bearer <supabase access token>`. Creates (or reuses) a Stripe
   customer for the caller's merchant and returns `{ url }` to a hosted Checkout
-  Session. Basic gets a 7-day trial; both collect a card upfront.
+  Session. Paid path only (pro signup + reactivation) — never grants a trial.
 - `POST /api/stripe/webhook` — Stripe-signed events. Writes `merchant_billing` and
   flips `merchants.status` (`active` on checkout, `suspended` on cancellation).
 - `GET /health` — liveness check.
+- `POST /api/admin/approve-merchant` — body `{ merchantId }`, superadmin JWT.
+  Creates the Stripe customer + 7-day cardless trialing subscription
+  (`missing_payment_method: 'cancel'`) and flips the merchant `active`. The only
+  place a trial is ever granted; refuses pro-plan and non-pending merchants.
+- `POST /api/billing/portal` — merchant JWT. Returns `{ url }` to a Stripe
+  billing-portal session (add/update card). Requires the portal to be enabled
+  once in the Stripe Dashboard.
 
 ## Local setup
 
@@ -30,9 +37,21 @@ In the Stripe Dashboard (test mode) create:
 - **Product: Basic** → recurring prices: RM 9.99/month, RM 99.90/year
 - **Product: Pro** → recurring prices: RM 39.99/month, RM 399.90/year
 
-Copy each Price ID into the matching `STRIPE_PRICE_*` env var. The 7-day trial is
-applied per-checkout (`trial_period_days`), not on the price, so no trial config is
-needed on the prices themselves.
+Copy each Price ID into the matching `STRIPE_PRICE_*` env var.
+
+One-time Stripe Dashboard setup beyond prices:
+
+- **Billing portal**: Settings → Billing → Customer portal → enable (allow
+  payment-method updates). `/api/billing/portal` fails until this is done.
+- **Webhook events** (production endpoint): `checkout.session.completed`,
+  `customer.subscription.updated`, `customer.subscription.deleted`,
+  `customer.subscription.trial_will_end`, `invoice.payment_failed`.
+  (`stripe listen` forwards everything locally.)
+- **Dunning**: Settings → Billing → Revenue recovery — after smart retries are
+  exhausted, set "cancel the subscription" so the `subscription.deleted`
+  webhook suspends the shop.
+- Trials are applied per-subscription by the approve endpoint
+  (`trial_period_days: 7`, cancel-if-no-card), not on the prices.
 
 ## Production
 

@@ -9,13 +9,15 @@ export default function PendingScreen() {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  // A merchant that picked a plan but abandoned checkout sits here until paid.
-  const hasPlan = !!merchant?.plan
+  // Pro merchants that abandoned Checkout can finish paying here. Basic shops
+  // are cardless: they wait for approval (which starts the trial), so they
+  // always see the review notice.
+  const hasPlan = !!merchant?.plan && merchant.plan !== 'basic'
 
   async function completePayment() {
     setBusy(true); setErr('')
     try {
-      const url = await startCheckout({ plan: merchant!.plan as string, billing: merchant!.billing_cycle || 'monthly' })
+      const url = await startCheckout({ plan: merchant!.plan as string, billing: merchant!.billing_cycle || 'monthly', region: merchant!.billing_region })
       window.location.assign(url)
     } catch (e: any) {
       setErr(e.message || t('Could not start checkout', '无法开始结账'))
