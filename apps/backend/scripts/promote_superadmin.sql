@@ -10,12 +10,12 @@
 --   2. Run the whole block.
 -- The account must already exist in auth.users (i.e. the person has signed up).
 --
--- Sets one global profile row (merchant_id NULL) so both is_superadmin() (matches
--- profiles.user_id) and the client role lookup (matches profiles.id) resolve.
+-- Sets one global profile row (merchant_id NULL); both is_superadmin() and the
+-- client role lookup key on profiles.user_id, so this resolves for either path.
 
 do $$
 declare
-  v_email text := 'CHANGE_ME@example.com';   -- <-- edit this
+  v_email text := 'bitetime@praxor.dev';   -- <-- edit this
   v_uid   uuid;
 begin
   select id into v_uid from auth.users where lower(email) = lower(v_email);
@@ -25,10 +25,17 @@ begin
 
   alter table public.profiles disable trigger guard_profile_privileges;
 
-  insert into public.profiles (id, user_id, email, app_role, merchant_id)
-    values (v_uid, v_uid, v_email, 'superadmin', null)
-  on conflict (id) do update
-    set app_role = 'superadmin', user_id = v_uid;
+  -- Profiles are keyed on user_id (id is a surrogate that may differ), so
+  -- promote the existing global row by user_id. Fall back to an insert only
+  -- when the account has no profile row yet.
+  update public.profiles
+    set app_role = 'superadmin'
+    where user_id = v_uid;
+
+  if not found then
+    insert into public.profiles (id, user_id, email, app_role, merchant_id)
+      values (v_uid, v_uid, v_email, 'superadmin', null);
+  end if;
 
   alter table public.profiles enable trigger guard_profile_privileges;
 

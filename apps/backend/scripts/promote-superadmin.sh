@@ -32,10 +32,13 @@ begin
     raise exception 'No auth user with email %, have they signed up?', v_email;
   end if;
   alter table public.profiles disable trigger guard_profile_privileges;
-  insert into public.profiles (id, user_id, email, app_role, merchant_id)
-    values (v_uid, v_uid, v_email, 'superadmin', null)
-  on conflict (id) do update
-    set app_role = 'superadmin', user_id = v_uid;
+  -- Keyed on user_id (id is a surrogate that may differ): promote the existing
+  -- global row, insert only when the account has no profile row yet.
+  update public.profiles set app_role = 'superadmin' where user_id = v_uid;
+  if not found then
+    insert into public.profiles (id, user_id, email, app_role, merchant_id)
+      values (v_uid, v_uid, v_email, 'superadmin', null);
+  end if;
   alter table public.profiles enable trigger guard_profile_privileges;
   raise notice 'Promoted % (%) to superadmin.', v_email, v_uid;
 end \$\$;

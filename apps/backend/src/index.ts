@@ -124,7 +124,7 @@ app.post('/api/admin/approve-merchant', async (c) => {
   const { data: callerProfile } = await admin
     .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
   // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors SessionContext).
-  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetimeandco@gmail.com'
+  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
   if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
 
   const { merchantId } = await c.req.json().catch(() => ({}))
@@ -234,7 +234,7 @@ app.post('/api/admin/set-merchant-status', async (c) => {
   const { data: callerProfile } = await admin
     .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
   // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors approve-merchant).
-  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetimeandco@gmail.com'
+  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
   if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
 
   const { merchantId, status } = await c.req.json().catch(() => ({}))
