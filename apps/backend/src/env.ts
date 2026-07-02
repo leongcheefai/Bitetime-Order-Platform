@@ -16,6 +16,11 @@ export const env = {
   supabaseAnonKey: required('SUPABASE_ANON_KEY'),
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
 
+  // Email (Resend). Optional: when the key is unset, sends are skipped with a
+  // warning so local dev works without an email account.
+  resendApiKey: process.env.RESEND_API_KEY || '',
+  emailFrom: process.env.EMAIL_FROM || 'BiteTime <onboarding@resend.dev>',
+
   // Stripe Price IDs per billing region, keyed by `${plan}_${cycle}`. US is the
   // default and required. MY is optional: when its Price IDs are unset the app
   // still boots (all traffic resolves to US), and requesting a MY price only
