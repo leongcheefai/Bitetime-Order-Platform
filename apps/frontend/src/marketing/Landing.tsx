@@ -262,7 +262,7 @@ export default function Landing() {
           {t('Simple, honest pricing', '简单透明的价格')}
         </h2>
         <p className="-mt-7 mb-8 text-[15px] leading-[1.6] text-ink-soft">
-          {t('Start with a 7-day free trial. Upgrade when your shop grows.', '7 天免费试用开始，店铺成长后再升级。')}
+          {t('Start with a 7-day free trial — no card required. Upgrade when your shop grows.', '7 天免费试用开始，无需信用卡，店铺成长后再升级。')}
         </p>
         </Reveal>
 
@@ -359,7 +359,7 @@ export default function Landing() {
           })}
         </div>
         <p className="mt-8 text-[13px] text-rose-muted">
-          {t('7-day free trial · Cancel anytime.', '7 天免费试用 · 随时取消。')}
+          {t('7-day free trial · No card required · Cancel anytime.', '7 天免费试用 · 无需信用卡 · 随时取消。')}
         </p>
         </Reveal>
       </section>
