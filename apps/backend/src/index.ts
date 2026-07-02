@@ -118,23 +118,36 @@ app.post('/api/checkout', async (c) => {
 // here and only here — Checkout never grants one.
 app.post('/api/admin/approve-merchant', async (c) => {
   const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
-  const user = await getUserFromToken(token)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-  // profiles identity lives in user_id (id is a surrogate PK since the P0 restructure).
-  const { data: callerProfile } = await admin
-    .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
-  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors SessionContext).
-  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
-  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
-
   const { merchantId } = await c.req.json().catch(() => ({}))
   if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
 
-  const { data: merchant, error } = await admin
-    .from('merchants')
-    .select('id, name, status, plan, billing_cycle, billing_region, owner_id')
-    .eq('id', merchantId)
-    .maybeSingle()
+  // These reads are independent — the caller's identity (auth → profile) gates the
+  // mutation, while the target merchant + its billing load in parallel. merchant_billing
+  // keys on the merchants PK, so both use merchantId directly. Run them concurrently to
+  // save cross-network round-trips (Railway → Supabase); nothing is mutated until authz passes.
+  const authPromise = getUserFromToken(token).then(async (user) => {
+    if (!user) return { user: null, profile: null }
+    // profiles identity lives in user_id (id is a surrogate PK since the P0 restructure).
+    const { data: profile } = await admin
+      .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
+    return { user, profile }
+  })
+  const [{ user, profile }, merchantRes, billingRes] = await Promise.all([
+    authPromise,
+    admin
+      .from('merchants')
+      .select('id, name, status, plan, billing_cycle, billing_region, owner_id')
+      .eq('id', merchantId)
+      .maybeSingle(),
+    admin.from('merchant_billing').select('*').eq('merchant_id', merchantId).maybeSingle(),
+  ])
+
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors SessionContext).
+  const isSuper = profile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
+  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
+
+  const { data: merchant, error } = merchantRes
   if (error) return c.json({ error: 'Lookup failed' }, 500)
   if (!merchant) return c.json({ error: 'Merchant not found' }, 404)
   if (merchant.status !== 'pending') return c.json({ error: 'Merchant is not pending' }, 409)
@@ -142,8 +155,7 @@ app.post('/api/admin/approve-merchant', async (c) => {
     return c.json({ error: 'Pro shops activate via payment, not approval' }, 409)
   }
 
-  const { data: billing } = await admin
-    .from('merchant_billing').select('*').eq('merchant_id', merchant.id).maybeSingle()
+  const { data: billing } = billingRes
 
   // Atomically claim the pending merchant so concurrent approvals can't both
   // proceed (double-click, two admin tabs) — first caller wins, later ones 409.
