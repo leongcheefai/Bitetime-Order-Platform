@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchAllMerchants, setMerchantStatus } from '../store'
+import { fetchAllMerchants, setMerchantStatus, approveMerchant } from '../store'
 import { useSession } from '../SessionContext'
+import { toast } from 'sonner'
 import type { Merchant, MerchantStatus } from '../types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -20,6 +21,13 @@ export default function AdminMerchants() {
   async function act(id: string, status: MerchantStatus) {
     setBusy(id)
     try { await setMerchantStatus(id, status); await load() }
+    finally { setBusy(null) }
+  }
+
+  async function approve(id: string) {
+    setBusy(id)
+    try { await approveMerchant(id); await load() }
+    catch (e) { toast.error(e instanceof Error ? e.message : t('Approval failed', '批准失败')) }
     finally { setBusy(null) }
   }
 
@@ -80,7 +88,7 @@ export default function AdminMerchants() {
                         size="none"
                         className="py-[4px] px-3 rounded-pill border-[1.5px] border-oxblood bg-oxblood text-cream text-[12px] whitespace-nowrap transition-all hover:bg-oxblood-deep hover:border-oxblood-deep"
                         disabled={busy === m.id}
-                        onClick={() => act(m.id, 'active')}
+                        onClick={() => approve(m.id)}
                       >{t('Approve', '批准')}</Button>
                       <Button
                         size="none"

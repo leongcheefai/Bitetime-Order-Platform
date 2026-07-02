@@ -153,6 +153,24 @@ export async function fetchMyBilling(merchantId: string) {
   return data ?? null
 }
 
+// Superadmin approval goes through the backend: it creates the Stripe customer
+// + cardless trialing subscription and flips the shop active in one step.
+export async function approveMerchant(merchantId: string) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/admin/approve-merchant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ merchantId }),
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || 'Approval failed')
+  }
+  return res.json()
+}
+
 export async function updateMerchantSlug(id: string, slug: string) {
   const s = (slug || '').trim().toLowerCase()
   if (!s || RESERVED_SLUGS.includes(s)) throw new Error('Reserved or empty slug')
