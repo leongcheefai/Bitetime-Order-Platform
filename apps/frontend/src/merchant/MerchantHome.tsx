@@ -44,7 +44,9 @@ export default function MerchantHome() {
     return <Dashboard />
   }
 
-  if (!ownMerchant) return <Navigate to="/merchant/signup" replace />
+  // A superadmin owns no shop of their own — send them to the admin console
+  // rather than the merchant signup flow.
+  if (!ownMerchant) return <Navigate to={role === 'superadmin' ? '/admin' : '/merchant/signup'} replace />
   if (justPaid && ownMerchant.status !== 'active') {
     return <div className="form-wrap">{t('Setting up your subscription…', '正在设置您的订阅…')}</div>
   }
