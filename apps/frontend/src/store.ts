@@ -87,7 +87,7 @@ export async function fetchMyMerchant(userId: string) {
   return data ?? null
 }
 
-export async function createMerchant({ name, plan = 'basic', billing = 'monthly' }: { name: string; plan?: string; billing?: string }) {
+export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US' }: { name: string; plan?: string; billing?: string; region?: string }) {
   const user = await getCurrentUser()
   if (!user) throw new Error('Not signed in')
   const taken = await listTakenSlugs()
@@ -96,7 +96,7 @@ export async function createMerchant({ name, plan = 'basic', billing = 'monthly'
     .from('merchants')
     .insert({
       name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending',
-      plan, billing_cycle: billing,
+      plan, billing_cycle: billing, billing_region: region,
     })
     .select().single()
   if (error) throw error

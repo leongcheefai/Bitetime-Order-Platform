@@ -53,7 +53,7 @@ export default function SignupScreen() {
                  '账号已创建。请查收邮件确认，然后登录以完成店铺设置。'))
         setBusy(false); return
       }
-      await createMerchant({ name, plan, billing })
+      await createMerchant({ name, plan, billing, region: pricing.region })
       await refreshMerchant()
       // Hand off to Stripe Checkout; webhook activates the shop on success.
       // Bill the region shown on this page so displayed price equals charged price.
