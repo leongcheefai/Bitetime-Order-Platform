@@ -5,6 +5,7 @@ import { env } from './env.js'
 import { admin, getUserFromToken } from './supabase.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
 import { upsertBilling, setMerchantStatus, billingFromSubscription } from './billing.js'
+import { canStartTrial } from './billingLifecycle.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
 import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
 import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
@@ -101,6 +102,73 @@ app.post('/api/checkout', async (c) => {
   })
 
   return c.json({ url: session.url })
+})
+
+// ── Superadmin: approve a pending merchant → start its cardless trial ──────────
+// Approval (not signup) is the abuse gate: signup alone never puts a live shop
+// on the platform. The subscription is created with no payment method and
+// cancels itself at trial end (missing_payment_method: 'cancel'), which drives
+// the existing subscription.deleted → suspended webhook path. Trials are granted
+// here and only here — Checkout never grants one.
+app.post('/api/admin/approve-merchant', async (c) => {
+  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+  const user = await getUserFromToken(token)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const { data: callerProfile } = await admin
+    .from('profiles').select('app_role').eq('id', user.id).maybeSingle()
+  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors SessionContext).
+  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetimeandco@gmail.com'
+  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
+
+  const { merchantId } = await c.req.json().catch(() => ({}))
+  if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
+
+  const { data: merchant, error } = await admin
+    .from('merchants')
+    .select('id, name, status, plan, billing_cycle, billing_region, owner_id')
+    .eq('id', merchantId)
+    .maybeSingle()
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  if (!merchant) return c.json({ error: 'Merchant not found' }, 404)
+  if (merchant.status !== 'pending') return c.json({ error: 'Merchant is not pending' }, 409)
+  if (merchant.plan === 'pro') {
+    return c.json({ error: 'Pro shops activate via payment, not approval' }, 409)
+  }
+
+  const { data: billing } = await admin
+    .from('merchant_billing').select('*').eq('merchant_id', merchant.id).maybeSingle()
+  if (!canStartTrial(billing)) {
+    // Had a subscription once already — approval re-activates, but never re-trials.
+    await setMerchantStatus(merchant.id, 'active')
+    return c.json({ ok: true, trial: false })
+  }
+
+  const { data: owner } = await admin
+    .from('profiles').select('email').eq('id', merchant.owner_id).maybeSingle()
+
+  let customerId = billing?.stripe_customer_id
+  if (!customerId) {
+    const customer = await stripe.customers.create({
+      email: owner?.email || undefined,
+      name: merchant.name,
+      metadata: { merchant_id: merchant.id },
+    })
+    customerId = customer.id
+  }
+
+  const plan = merchant.plan || 'basic'
+  const cycle = merchant.billing_cycle || 'monthly'
+  const region = isValidRegion(merchant.billing_region) ? merchant.billing_region : DEFAULT_REGION
+  const sub = await stripe.subscriptions.create({
+    customer: customerId,
+    items: [{ price: priceFor(plan, cycle, region) }],
+    trial_period_days: 7,
+    trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
+    metadata: { merchant_id: merchant.id, plan, billing: cycle, region },
+  })
+  await upsertBilling(merchant.id, billingFromSubscription(sub))
+  await setMerchantStatus(merchant.id, 'active')
+  return c.json({ ok: true, trial: true })
 })
 
 // ── Order notification — sends Telegram server-side ────────────────────────────
