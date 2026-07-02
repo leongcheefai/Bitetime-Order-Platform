@@ -93,11 +93,9 @@ app.post('/api/checkout', async (c) => {
     line_items: [{ price: priceFor(plan, billing, region), quantity: 1 }],
     client_reference_id: merchant.id,
     metadata,
-    payment_method_collection: 'always', // card upfront even for the Basic trial
-    subscription_data: {
-      metadata,
-      ...(plan === 'basic' ? { trial_period_days: 7 } : {}),
-    },
+    // No trial here: trials are granted only by superadmin approval (cardless).
+    // Checkout is the paid path — pro signup and suspended-shop reactivation.
+    subscription_data: { metadata },
     success_url: `${env.frontendUrl}/merchant?checkout=success`,
     cancel_url: `${env.frontendUrl}/merchant/signup?plan=${plan}&billing=${billing}&canceled=1`,
   })
