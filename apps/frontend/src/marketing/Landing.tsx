@@ -7,6 +7,18 @@ import { formatMoney } from '../currency'
 import LanguageSelect from '../components/LanguageSelect'
 import { Button } from '../components/ui/button'
 import { cn } from '../lib/utils'
+import {
+  GrainOverlay,
+  Reveal,
+  HeroStagger,
+  HeroItem,
+  MagneticButton,
+  StorefrontPreview,
+} from './LandingMotion'
+
+// Transitional (low-commitment) CTA target: a real storefront a hesitant
+// merchant can preview before signing up. Swap the slug to change the demo shop.
+const SAMPLE_SHOP_SLUG = 'bitetime'
 
 // ── CTA class strings (reused across hero, pricing cards, footer) ─────────
 const ctaPrimary =
@@ -81,7 +93,8 @@ export default function Landing() {
 
   return (
     // Keep mm-land class — body:has(.mm-land) in index.css resets body padding/alignment
-    <div className="mm-land flex flex-col items-stretch min-h-screen font-sans text-ink bg-cream">
+    <div className="mm-land relative isolate flex flex-col items-stretch min-h-screen font-sans text-ink bg-cream">
+      <GrainOverlay />
 
       {/* ── Nav bar ── */}
       <nav className="flex items-center justify-between px-8 py-5 border-b border-clay-border max-[600px]:px-5 max-[600px]:py-4">
@@ -150,30 +163,49 @@ export default function Landing() {
 
       {/* ── Hero ── */}
       <section className="max-w-[700px] mx-auto px-8 pt-20 pb-16 text-center max-[600px]:px-5 max-[600px]:pt-12 max-[600px]:pb-10">
-        <p className="font-heading italic text-[15px] text-rose-muted mb-5 motion-safe:[animation:mm-fadein_0.6s_ease_both]">
-          {t('Your own online shop, in minutes.', '几分钟内，拥有属于你的网店。')}
-        </p>
-        <h1 className="font-heading text-[clamp(2rem,5vw,3.5rem)] font-medium text-ink leading-[1.18] tracking-[-0.01em] mb-5 motion-safe:[animation:mm-fadein_0.6s_ease_0.1s_both]">
-          {t('Run your bakery online — beautifully.', '让你的烘焙小店，在线开业。')}
-        </h1>
-        <p className="text-base leading-[1.7] text-ink-soft max-w-[560px] mx-auto mb-9 motion-safe:[animation:mm-fadein_0.6s_ease_0.2s_both]">
-          {t(
-            'BiteTime gives home cooks and small food businesses a branded storefront, product catalog, and order management — all in one link you can share with anyone.',
-            'BiteTime 为家厨与小型食品业者提供专属店面链接、产品目录与订单管理，一个链接搞定一切。'
-          )}
-        </p>
-        <div className="flex gap-4 justify-center flex-wrap max-[600px]:flex-col max-[600px]:items-center motion-safe:[animation:mm-fadein_0.6s_ease_0.3s_both]">
-          <Link to="/merchant/signup" className={ctaPrimary}>
-            {t('Start your shop', '开始建店')}
-          </Link>
-          <Link to="/merchant/login" className={ctaGhost}>
-            {t('Merchant log in', '商家登录')}
-          </Link>
-        </div>
+        <HeroStagger>
+          <HeroItem>
+            <p className="font-heading italic text-[15px] text-rose-muted mb-5">
+              {t('We know what it\'s like to run a kitchen out of your DMs.', '我们懂，用聊天窗口接单有多累。')}
+            </p>
+          </HeroItem>
+          <HeroItem>
+            <h1 className="font-heading text-[clamp(2rem,5vw,3.5rem)] font-medium text-ink leading-[1.18] tracking-[-0.01em] mb-5">
+              {t('Sell your food online — without the DM chaos.', '把美食搬到线上——告别聊天接单的混乱。')}
+            </h1>
+          </HeroItem>
+          <HeroItem>
+            <p className="text-base leading-[1.7] text-ink-soft max-w-[560px] mx-auto mb-9">
+              {t(
+                'Orders get lost across chats and screenshots. BiteTime gives you one branded storefront link — so every order lands in one place and you look the part.',
+                '订单散落在各种聊天和截图里。BiteTime 给你一个专属店面链接——所有订单集中一处，让你更专业。'
+              )}
+            </p>
+          </HeroItem>
+          <HeroItem>
+            <div className="flex gap-4 justify-center flex-wrap max-[600px]:flex-col max-[600px]:items-center">
+              <MagneticButton to="/merchant/signup" className={ctaPrimary}>
+                {t('Start your shop', '开始建店')}
+              </MagneticButton>
+              <Link to={`/s/${SAMPLE_SHOP_SLUG}`} className={ctaGhost}>
+                {t('See a sample shop', '看看示例店铺')}
+              </Link>
+            </div>
+          </HeroItem>
+          <HeroItem>
+            <p className="mt-6 mb-12 text-[13px] text-rose-muted">
+              {t('Made for Malaysian home kitchens and small food businesses.', '专为马来西亚家厨与小型食品业者打造。')}
+            </p>
+          </HeroItem>
+          <HeroItem>
+            <StorefrontPreview t={t} />
+          </HeroItem>
+        </HeroStagger>
       </section>
 
       {/* ── How it works ── */}
       <section className="bg-surface-raised border-y border-clay-border px-8 py-16 max-[600px]:px-5 max-[600px]:py-10">
+        <Reveal>
         <h2 className={sectionTitle}>
           {t('Three steps to your first order', '三步收到第一笔订单')}
         </h2>
@@ -200,10 +232,12 @@ export default function Landing() {
             </div>
           </li>
         </ol>
+        </Reveal>
       </section>
 
       {/* ── Value props ── */}
       <section className="px-8 py-16 max-w-[860px] mx-auto w-full max-[600px]:px-5 max-[600px]:py-10">
+        <Reveal>
         <dl className="grid [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] gap-x-12 gap-y-10 max-[600px]:[grid-template-columns:1fr] max-[600px]:gap-8">
           <div>
             <dt className="font-heading text-base font-medium text-ink mb-2">{t('Your own storefront link', '专属店面链接')}</dt>
@@ -218,16 +252,19 @@ export default function Landing() {
             <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('Your storefront speaks both English and Chinese — perfect for Malaysian food businesses.', '店面自动支持中英文，专为马来西亚小食企业设计。')}</dd>
           </div>
         </dl>
+        </Reveal>
       </section>
 
       {/* ── Pricing ── */}
       <section id="pricing" className="px-8 py-16 max-w-[1000px] mx-auto w-full text-center border-t border-clay-border">
+        <Reveal>
         <h2 className={sectionTitle}>
           {t('Simple, honest pricing', '简单透明的价格')}
         </h2>
         <p className="-mt-7 mb-8 text-[15px] leading-[1.6] text-ink-soft">
-          {t('Start free. Upgrade when your shop grows.', '免费开始，店铺成长后再升级。')}
+          {t('Start with a 7-day free trial. Upgrade when your shop grows.', '7 天免费试用开始，店铺成长后再升级。')}
         </p>
+        </Reveal>
 
         {/* Billing toggle */}
         <div
@@ -270,6 +307,7 @@ export default function Landing() {
         </div>
 
         {/* Pricing cards */}
+        <Reveal>
         <div className="grid [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))] gap-6 mt-10 text-left">
           {tiers.map(tier => {
             const tierPrices = pricing.prices[tier.id as 'basic' | 'pro']
@@ -320,16 +358,25 @@ export default function Landing() {
             )
           })}
         </div>
+        <p className="mt-8 text-[13px] text-rose-muted">
+          {t('7-day free trial · Cancel anytime.', '7 天免费试用 · 随时取消。')}
+        </p>
+        </Reveal>
       </section>
 
       {/* ── Footer CTA ── */}
       <section className="border-t border-clay-border px-8 py-16 text-center bg-oxblood-tint max-[600px]:px-5 max-[600px]:py-10">
-        <p className="font-heading italic text-[18px] text-ink mb-6">
-          {t('Ready to take your first order?', '准备好接收你的第一笔订单了吗？')}
+        <Reveal>
+        <p className="text-sm leading-[1.6] text-rose-muted mb-3">
+          {t('Every order lost in a chat thread is a sale you\'ll never see.', '每一笔淹没在聊天里的订单，都是流失的生意。')}
         </p>
-        <Link to="/merchant/signup" className={ctaPrimary}>
-          {t('Start your shop — it\'s free', '立即建店，免费开始')}
-        </Link>
+        <p className="font-heading italic text-[18px] text-ink mb-6 max-w-[520px] mx-auto">
+          {t('Become a real, professional food business — orders in one place, more time to bake.', '成为真正专业的美食生意——订单集中一处，专注烘焙。')}
+        </p>
+        <MagneticButton to="/merchant/signup" className={ctaPrimary}>
+          {t('Start your free trial', '开始免费试用')}
+        </MagneticButton>
+        </Reveal>
       </section>
 
       {/* ── Footer ── */}
