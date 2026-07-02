@@ -52,7 +52,7 @@ Multi-merchant ordering SaaS. React 19 + Vite + React Router (`react-router-dom`
 ### Auth & roles
 
 - Supabase Auth handles login/registration (`src/supabase.ts`, `src/store.ts`)
-- `SessionContext` derives `role`: `superadmin` if `profiles.app_role === 'superadmin'` (transitional email fallback to `bitetimeandco@gmail.com`), else `merchant` if the user owns a `merchants` row, else `customer`
+- `SessionContext` derives `role`: `superadmin` if `profiles.app_role === 'superadmin'` (transitional email fallback to `bitetime@praxor.dev`), else `merchant` if the user owns a `merchants` row, else `customer`
 - `MerchantContext` resolves the active shop for `/s/:slug` storefronts
 
 ### Merchant onboarding & slugs (`src/slug.ts`)

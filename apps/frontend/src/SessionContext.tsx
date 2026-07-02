@@ -5,7 +5,7 @@ import { onAuthChange, fetchProfileByUserId, fetchMyMerchant, fetchMerchantBySlu
 import type { Lang, Merchant, Profile, Role, SessionValue } from './types'
 
 // TODO(P3): remove this transitional fallback once superadmin role is seeded in DB.
-const USER_EMAIL = 'bitetimeandco@gmail.com'
+const USER_EMAIL = 'bitetime@praxor.dev'
 
 const SessionContext = createContext<SessionValue | null>(null)
 
