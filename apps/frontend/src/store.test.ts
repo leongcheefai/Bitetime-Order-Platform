@@ -26,11 +26,15 @@ vi.mock('./supabase', () => {
   // For terminal-await use (no .select()), mock with .mockResolvedValueOnce({error}).
   const upsert = vi.fn(() => ({ select: upsertSelect }))
 
-  // eq() → { single, maybeSingle, select: updateEqSelect, order }
+  // is() → { maybeSingle, single, is } — for .eq().is('merchant_id', null) chains
+  // (fetchProfileByUserId, ensureGlobalProfile). Terminal via maybeSingle.
+  const is = vi.fn(() => ({ maybeSingle, single, is }))
+
+  // eq() → { single, maybeSingle, select: updateEqSelect, order, is }
   // Used by: fetchMerchantBySlug (→single), fetchMyMerchant (→maybeSingle),
   //          updateMerchantSlug / setMerchantStatus (→updateEqSelect→single),
-  //          fetchProducts (→order→order)
-  const eq = vi.fn(() => ({ single, maybeSingle, select: updateEqSelect, order }))
+  //          fetchProducts (→order→order), fetchProfileByUserId (→is→maybeSingle)
+  const eq = vi.fn(() => ({ single, maybeSingle, select: updateEqSelect, order, is }))
 
   // insert() → { select: insertSelect }
   const insert = vi.fn(() => ({ select: insertSelect }))
@@ -52,7 +56,9 @@ vi.mock('./supabase', () => {
   const getUser = vi.fn()
   // getSession() → used by backend-calling helpers (setMerchantStatus, etc.)
   const getSession = vi.fn()
-  const auth = { getUser, getSession }
+  // signUp() → supabase.auth.signUp() for signUp() store fn
+  const signUp = vi.fn()
+  const auth = { getUser, getSession, signUp }
 
   // rpc mock — top-level supabase.rpc(name, params) → awaited directly.
   const rpc = vi.fn()
@@ -60,8 +66,8 @@ vi.mock('./supabase', () => {
   return {
     supabase: { from, auth, rpc },
     __mocks: {
-      from, select, eq, single, maybeSingle, insert, update,
-      insertSelect, updateEqSelect, upsertSelect, getUser, getSession, order,
+      from, select, eq, is, single, maybeSingle, insert, update,
+      insertSelect, updateEqSelect, upsertSelect, getUser, getSession, signUp: auth.signUp, order,
       upsert, del, deleteEq, rpc,
     },
   }
@@ -69,6 +75,8 @@ vi.mock('./supabase', () => {
 
 import {
   fetchMerchantBySlug,
+  fetchProfileByUserId,
+  signUp,
   listTakenSlugs,
   fetchMyMerchant,
   createMerchant,
@@ -96,6 +104,57 @@ import * as supabaseModule from './supabase'
 const { __mocks } = supabaseModule as any
 
 beforeEach(() => { vi.clearAllMocks() })
+
+// ── profiles: user_id keying (issue #31) ──────────────────────────────────────
+// The profiles restructure made `id` a surrogate PK and moved auth identity to
+// `user_id`; client writes/reads must key on user_id or RLS rejects them.
+describe('fetchProfileByUserId', () => {
+  it('queries the global profile by user_id, not id', async () => {
+    __mocks.maybeSingle.mockResolvedValueOnce({
+      data: { id: 'p1', name: 'Fai', email: 'f@x.co', app_role: null, merchant_id: null },
+      error: null,
+    })
+    const result = await fetchProfileByUserId('u1')
+    expect(__mocks.eq).toHaveBeenCalledWith('user_id', 'u1')
+    expect(__mocks.is).toHaveBeenCalledWith('merchant_id', null)
+    expect(result).toMatchObject({ id: 'p1', name: 'Fai' })
+  })
+
+  it('returns null when the query errors', async () => {
+    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: new Error('rls') })
+    expect(await fetchProfileByUserId('u1')).toBeNull()
+  })
+})
+
+describe('signUp profile write', () => {
+  it('inserts a new profile keyed on user_id, never id', async () => {
+    __mocks.signUp.mockResolvedValueOnce({
+      data: { user: { id: 'u1', email_confirmed_at: null } }, error: null,
+    })
+    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null }) // no existing row
+    await signUp('Fai', 'f@x.co', 'pw')
+    expect(__mocks.eq).toHaveBeenCalledWith('user_id', 'u1')
+    expect(__mocks.is).toHaveBeenCalledWith('merchant_id', null)
+    const inserted = __mocks.insert.mock.calls[0][0]
+    expect(inserted).toMatchObject({
+      user_id: 'u1', name: 'Fai', email: 'f@x.co', email_confirmed: false,
+    })
+    expect(inserted).not.toHaveProperty('id')
+    expect(__mocks.update).not.toHaveBeenCalled()
+  })
+
+  it('updates the existing global profile in place, not insert', async () => {
+    __mocks.signUp.mockResolvedValueOnce({
+      data: { user: { id: 'u1', email_confirmed_at: '2026-07-02T00:00:00Z' } }, error: null,
+    })
+    __mocks.maybeSingle.mockResolvedValueOnce({ data: { id: 'p1' }, error: null })
+    await signUp('Fai', 'f@x.co', 'pw')
+    const updated = __mocks.update.mock.calls[0][0]
+    expect(updated).toMatchObject({ user_id: 'u1', email_confirmed: true })
+    expect(__mocks.eq).toHaveBeenCalledWith('id', 'p1')
+    expect(__mocks.insert).not.toHaveBeenCalled()
+  })
+})
 
 // ── fetchMerchantBySlug (Task 1.2) ────────────────────────────────────────────
 
