@@ -20,22 +20,32 @@ describe('billingBannerState', () => {
 
   it('counts down a comfortable trial without urgency', () => {
     expect(billingBannerState({ status: 'trialing', trial_ends_at: hoursFromNow(73) }, NOW))
-      .toEqual({ kind: 'trial', urgent: false, daysLeft: 3, hoursLeft: 1 })
+      .toEqual({ kind: 'trial', urgent: false, hasPaymentMethod: false, daysLeft: 3, hoursLeft: 1 })
   })
 
   it('turns urgent at exactly 72 hours', () => {
     expect(billingBannerState({ status: 'trialing', trial_ends_at: hoursFromNow(72) }, NOW))
-      .toEqual({ kind: 'trial', urgent: true, daysLeft: 3, hoursLeft: 0 })
+      .toEqual({ kind: 'trial', urgent: true, hasPaymentMethod: false, daysLeft: 3, hoursLeft: 0 })
   })
 
   it('stays urgent through the final hours', () => {
     expect(billingBannerState({ status: 'trialing', trial_ends_at: hoursFromNow(2) }, NOW))
-      .toEqual({ kind: 'trial', urgent: true, daysLeft: 0, hoursLeft: 2 })
+      .toEqual({ kind: 'trial', urgent: true, hasPaymentMethod: false, daysLeft: 0, hoursLeft: 2 })
   })
 
   it('clamps to zero after the trial end while the webhook lags', () => {
     expect(billingBannerState({ status: 'trialing', trial_ends_at: hoursFromNow(-1) }, NOW))
-      .toEqual({ kind: 'trial', urgent: true, daysLeft: 0, hoursLeft: 0 })
+      .toEqual({ kind: 'trial', urgent: true, hasPaymentMethod: false, daysLeft: 0, hoursLeft: 0 })
+  })
+
+  it('never goes urgent once a card is on file, even inside the 72h window', () => {
+    expect(billingBannerState({ status: 'trialing', trial_ends_at: hoursFromNow(2), has_payment_method: true }, NOW))
+      .toEqual({ kind: 'trial', urgent: false, hasPaymentMethod: true, daysLeft: 0, hoursLeft: 2 })
+  })
+
+  it('keeps counting down with a card outside the urgent window', () => {
+    expect(billingBannerState({ status: 'trialing', trial_ends_at: hoursFromNow(73), has_payment_method: true }, NOW))
+      .toEqual({ kind: 'trial', urgent: false, hasPaymentMethod: true, daysLeft: 3, hoursLeft: 1 })
   })
 
   it('flags past_due for the failed-renewal banner', () => {

@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 // not dismissible: trial expiry and failed payments are the two states a
 // merchant must not be able to hide from themselves.
 export default function BillingBanner() {
-  const { t, merchant } = useSession()
+  const { t, lang, merchant } = useSession()
   const [billing, setBilling] = useState<BillingSnapshot | null>(null)
   const [busy, setBusy] = useState(false)
   const merchantId = merchant?.id
@@ -31,10 +31,15 @@ export default function BillingBanner() {
   }
 
   const urgent = state.kind === 'past-due' || (state.kind === 'trial' && state.urgent)
+  const carded = state.kind === 'trial' && state.hasPaymentMethod
   const countdown = state.kind === 'trial'
     ? (state.daysLeft > 0
         ? t(`${state.daysLeft} days ${state.hoursLeft}h`, `${state.daysLeft} 天 ${state.hoursLeft} 小时`)
         : t(`${state.hoursLeft} hours`, `${state.hoursLeft} 小时`))
+    : ''
+  const convertsOn = billing?.trial_ends_at
+    ? new Date(billing.trial_ends_at).toLocaleDateString(lang === 'zh' ? 'zh-CN' : 'en-GB',
+        { year: 'numeric', month: 'short', day: 'numeric' })
     : ''
 
   return (
@@ -49,10 +54,13 @@ export default function BillingBanner() {
         {state.kind === 'past-due'
           ? t('Payment failed — update your card to keep your shop open.',
               '付款失败——请更新银行卡以保持店铺营业。')
-          : state.urgent
-            ? t(`Your free trial ends in ${countdown}. Add a payment method to keep your shop open.`,
-                `免费试用将在 ${countdown} 后结束。请添加付款方式以保持店铺营业。`)
-            : t(`Free trial — ${countdown} left.`, `免费试用——剩余 ${countdown}。`)}
+          : carded
+            ? t(`Free trial — converts to a paid plan on ${convertsOn}.`,
+                `免费试用——将于 ${convertsOn} 转为付费方案。`)
+            : state.urgent
+              ? t(`Your free trial ends in ${countdown}. Add a payment method to keep your shop open.`,
+                  `免费试用将在 ${countdown} 后结束。请添加付款方式以保持店铺营业。`)
+              : t(`Free trial — ${countdown} left.`, `免费试用——剩余 ${countdown}。`)}
       </span>
       <Button
         size="none"
@@ -65,7 +73,9 @@ export default function BillingBanner() {
           ? t('Opening…', '打开中…')
           : state.kind === 'past-due'
             ? t('Update card', '更新银行卡')
-            : t('Add payment method', '添加付款方式')}
+            : carded
+              ? t('Manage billing', '管理账单')
+              : t('Add payment method', '添加付款方式')}
       </Button>
     </div>
   )

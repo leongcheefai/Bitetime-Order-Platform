@@ -34,5 +34,10 @@ export function billingFromSubscription(sub: Stripe.Subscription) {
     status: sub.status, // trialing | active | past_due | canceled | incomplete | ...
     trial_ends_at: toIso(sub.trial_end),
     current_period_end: toIso(periodEnd),
+    // A card attached to the subscription means the trial will convert on its own —
+    // the countdown banner softens from "add a card" to an informational notice.
+    // Null here doesn't prove there's no card: it can still live on the customer
+    // default, which the webhook resolves as a fallback (see index.ts).
+    has_payment_method: !!sub.default_payment_method,
   }
 }
