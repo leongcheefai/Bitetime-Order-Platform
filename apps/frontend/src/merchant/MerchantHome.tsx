@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useSession } from '../SessionContext'
 import PendingScreen from './PendingScreen'
+import SuspendedScreen from './SuspendedScreen'
 import Dashboard from './Dashboard'
 import { PageSkeleton } from '../components/Loaders'
 
@@ -48,6 +49,6 @@ export default function MerchantHome() {
     return <div className="form-wrap">{t('Setting up your subscription…', '正在设置您的订阅…')}</div>
   }
   if (ownMerchant.status === 'pending') return <PendingScreen />
-  if (ownMerchant.status === 'suspended') return <div className="form-wrap"><h2>{t('Shop suspended', '店铺已暂停')}</h2></div>
+  if (ownMerchant.status === 'suspended') return <SuspendedScreen />
   return <Dashboard />
 }

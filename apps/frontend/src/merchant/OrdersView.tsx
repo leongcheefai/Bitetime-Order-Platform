@@ -54,7 +54,7 @@ function fmtTime(iso: string | null | undefined) {
   return d.toLocaleString('en-MY', { dateStyle: 'short', timeStyle: 'short' })
 }
 
-export default function OrdersView() {
+export default function OrdersView({ readOnly = false }: { readOnly?: boolean } = {}) {
   const { t, merchant } = useSession()
   const [orders, setOrders] = useState<any[] | null>(null)
 
@@ -150,28 +150,30 @@ export default function OrdersView() {
               )}
             </div>
 
-            {/* ── Footer: status select ── */}
-            <div className="flex items-center gap-[10px] flex-wrap pt-[6px] border-t border-surface-sunken">
-              <label className={LBL} htmlFor={`status-${o.id}`}>
-                {t('Status', '状态')}
-              </label>
-              {/* Self-contained stack wrapper (replaces admin-field--stack dependency) */}
-              <div className="flex flex-col gap-1 min-w-[200px] items-start">
-                <select
-                  id={`status-${o.id}`}
-                  className={SELECT_CLS}
-                  style={{ backgroundImage: CHEVRON_SVG, backgroundPosition: 'right 10px center' }}
-                  value={o.status || 'new'}
-                  onChange={e => handleStatusChange(o, e.target.value)}
-                >
-                  {ORDER_STATUSES.map(s => (
-                    <option key={s} value={s}>
-                      {t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}
-                    </option>
-                  ))}
-                </select>
+            {/* ── Footer: status select (hidden for suspended read-only view) ── */}
+            {!readOnly && (
+              <div className="flex items-center gap-[10px] flex-wrap pt-[6px] border-t border-surface-sunken">
+                <label className={LBL} htmlFor={`status-${o.id}`}>
+                  {t('Status', '状态')}
+                </label>
+                {/* Self-contained stack wrapper (replaces admin-field--stack dependency) */}
+                <div className="flex flex-col gap-1 min-w-[200px] items-start">
+                  <select
+                    id={`status-${o.id}`}
+                    className={SELECT_CLS}
+                    style={{ backgroundImage: CHEVRON_SVG, backgroundPosition: 'right 10px center' }}
+                    value={o.status || 'new'}
+                    onChange={e => handleStatusChange(o, e.target.value)}
+                  >
+                    {ORDER_STATUSES.map(s => (
+                      <option key={s} value={s}>
+                        {t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
+            )}
 
           </div>
         )
