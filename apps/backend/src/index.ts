@@ -222,6 +222,41 @@ app.post('/api/admin/approve-merchant', async (c) => {
   return c.json({ ok: true, trial: true })
 })
 
+// ── Superadmin: manual suspend / reject / reactivate ───────────────────────────
+// merchants.status is service_role-only at the DB layer (guard_merchant_status),
+// so the admin console can no longer flip it through PostgREST — these writes must
+// come through here. Covers Reject (pending→suspended), Suspend (active→suspended),
+// and Reactivate (suspended→active). Trial-granting stays in approve-merchant.
+app.post('/api/admin/set-merchant-status', async (c) => {
+  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+  const user = await getUserFromToken(token)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const { data: callerProfile } = await admin
+    .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
+  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors approve-merchant).
+  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetimeandco@gmail.com'
+  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
+
+  const { merchantId, status } = await c.req.json().catch(() => ({}))
+  if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
+  // 'pending' is never a manual target — it is reached only by revert paths.
+  if (status !== 'active' && status !== 'suspended') {
+    return c.json({ error: 'status must be active or suspended' }, 400)
+  }
+
+  const { data: merchant } = await admin
+    .from('merchants').select('id').eq('id', merchantId).maybeSingle()
+  if (!merchant) return c.json({ error: 'Merchant not found' }, 404)
+
+  try {
+    await setMerchantStatus(merchantId, status)
+  } catch (err) {
+    console.error('set-merchant-status failed:', err instanceof Error ? err.message : String(err))
+    return c.json({ error: 'Status update failed' }, 500)
+  }
+  return c.json({ ok: true, status })
+})
+
 // ── Stripe billing portal for the signed-in merchant ───────────────────────────
 // Where a trialing merchant adds their card, and a past_due one updates it.
 // Requires the portal to be enabled once in the Stripe Dashboard.
