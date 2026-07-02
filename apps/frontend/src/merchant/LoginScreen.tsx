@@ -46,7 +46,8 @@ export default function LoginScreen() {
               <Input id="login-2" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
             </div>
           </div>
-          <Button variant="default" size="md" className="py-3" disabled={busy}>
+          {/* Base UI's Button defaults to type="button" — explicit submit or the form never fires */}
+          <Button type="submit" variant="default" size="md" className="py-3" disabled={busy}>
             {busy ? t('Logging in…', '登录中…') : t('Log in', '登录')}
           </Button>
         </form>
