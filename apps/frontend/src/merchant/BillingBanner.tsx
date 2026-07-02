@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { fetchMyBilling, openBillingPortal } from '../store'
-import { billingBannerState, type BillingSnapshot } from './billingBanner'
+import { billingBannerState, type BillingSnapshot } from './billingBannerState'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
