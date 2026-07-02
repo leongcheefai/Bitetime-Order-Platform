@@ -120,8 +120,9 @@ app.post('/api/admin/approve-merchant', async (c) => {
   const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
   const user = await getUserFromToken(token)
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  // profiles identity lives in user_id (id is a surrogate PK since the P0 restructure).
   const { data: callerProfile } = await admin
-    .from('profiles').select('app_role').eq('id', user.id).maybeSingle()
+    .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
   // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors SessionContext).
   const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetimeandco@gmail.com'
   if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
@@ -161,8 +162,10 @@ app.post('/api/admin/approve-merchant', async (c) => {
     return c.json({ ok: true, trial: false })
   }
 
-  const { data: owner } = await admin
-    .from('profiles').select('email').eq('id', merchant.owner_id).maybeSingle()
+  // Owner email comes from Auth, not profiles — the profiles row may not exist
+  // (client-side profile upsert is currently RLS-blocked for new signups).
+  const { data: ownerUser } = await admin.auth.admin.getUserById(merchant.owner_id)
+  const ownerEmail = ownerUser?.user?.email
 
   const plan = merchant.plan || 'basic'
   const cycle = merchant.billing_cycle || 'monthly'
@@ -182,7 +185,7 @@ app.post('/api/admin/approve-merchant', async (c) => {
   try {
     if (!customerId) {
       const customer = await stripe.customers.create({
-        email: owner?.email || undefined,
+        email: ownerEmail || undefined,
         name: merchant.name,
         metadata: { merchant_id: merchant.id },
       })
@@ -323,16 +326,19 @@ app.post('/api/stripe/webhook', async (c) => {
         if (merchantId && sub.trial_end) {
           const { data: merchant } = await admin
             .from('merchants').select('name, owner_id').eq('id', merchantId).maybeSingle()
-          const { data: owner } = merchant?.owner_id
-            ? await admin.from('profiles').select('email').eq('id', merchant.owner_id).maybeSingle()
-            : { data: null }
-          if (owner?.email) {
+          // Owner email from Auth, not profiles — the profiles row may not exist
+          // (client-side profile upsert is currently RLS-blocked for new signups).
+          const { data: ownerUser } = merchant?.owner_id
+            ? await admin.auth.admin.getUserById(merchant.owner_id)
+            : { data: { user: null } }
+          const ownerEmail = ownerUser?.user?.email
+          if (ownerEmail) {
             const { subject, text } = buildTrialReminderEmail({
               shopName: merchant?.name || 'your shop',
               trialEndsAt: new Date(sub.trial_end * 1000).toISOString(),
               dashboardUrl: `${env.frontendUrl}/merchant`,
             })
-            await resendSend(owner.email, subject, text)
+            await resendSend(ownerEmail, subject, text)
           }
         }
         break
