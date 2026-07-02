@@ -5,7 +5,8 @@ import { env } from './env.js'
 import { admin, getUserFromToken } from './supabase.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
 import { upsertBilling, setMerchantStatus, billingFromSubscription } from './billing.js'
-import { canStartTrial } from './billingLifecycle.js'
+import { canStartTrial, buildTrialReminderEmail } from './billingLifecycle.js'
+import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
 import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
 import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
@@ -289,6 +290,28 @@ app.post('/api/stripe/webhook', async (c) => {
         const inv = event.data.object
         const merchantId = inv.subscription_details?.metadata?.merchant_id || inv.metadata?.merchant_id
         if (merchantId) await upsertBilling(merchantId, { status: 'past_due' })
+        break
+      }
+      case 'customer.subscription.trial_will_end': {
+        // Fires 72h before trial end — the out-of-app reminder. A thrown send
+        // error 500s the webhook so Stripe retries delivery.
+        const sub = event.data.object
+        const merchantId = sub.metadata?.merchant_id
+        if (merchantId && sub.trial_end) {
+          const { data: merchant } = await admin
+            .from('merchants').select('name, owner_id').eq('id', merchantId).maybeSingle()
+          const { data: owner } = merchant?.owner_id
+            ? await admin.from('profiles').select('email').eq('id', merchant.owner_id).maybeSingle()
+            : { data: null }
+          if (owner?.email) {
+            const { subject, text } = buildTrialReminderEmail({
+              shopName: merchant?.name || 'your shop',
+              trialEndsAt: new Date(sub.trial_end * 1000).toISOString(),
+              dashboardUrl: `${env.frontendUrl}/merchant`,
+            })
+            await resendSend(owner.email, subject, text)
+          }
+        }
         break
       }
       default:
