@@ -180,6 +180,7 @@ describe('createMerchant', () => {
       status: 'pending',
       plan: 'basic',
       billing_cycle: 'monthly',
+      billing_region: 'US',
     })
     expect(result).toEqual(merchantRow)
   })
