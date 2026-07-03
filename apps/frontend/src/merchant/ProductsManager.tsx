@@ -137,6 +137,9 @@ export default function ProductsManager() {
   const [draftId, setDraftId] = useState(() => crypto.randomUUID())
   // Photos being edited in the add/edit dialog (add: new draft; edit: the row's).
   const [images, setImages] = useState<string[]>([])
+  // The dialog popup node — Radix portals the unit menu here so it counts as
+  // inside the dialog (else clicking an item reads as outside-press and closes it).
+  const [dialogEl, setDialogEl] = useState<HTMLElement | null>(null)
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
 
@@ -224,7 +227,7 @@ export default function ProductsManager() {
 
       {/* Add / edit product details */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+        <DialogContent ref={setDialogEl} className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingProduct ? t('Edit product', '编辑产品') : t('Add a product', '添加产品')}</DialogTitle>
           </DialogHeader>
@@ -280,8 +283,9 @@ export default function ProductsManager() {
                   <SelectTrigger id="pm-5" className="w-full bg-cream border-clay-border text-[13px]">
                     <SelectValue />
                   </SelectTrigger>
-                  {/* Render above the dialog popup (z-modal); z-modal-popover = 400. */}
-                  <SelectContent className="z-modal-popover">
+                  {/* Portal into the dialog so item clicks aren't treated as an
+                      outside-press. z-modal-popover (400) floats above the popup. */}
+                  <SelectContent container={dialogEl} className="z-modal-popover">
                     {/* Keep a legacy value (e.g. old "pc") selectable so existing rows survive. */}
                     {form.unit && !UNITS.some(u => u.value === form.unit) && (
                       <SelectItem value={form.unit}>{form.unit}</SelectItem>
