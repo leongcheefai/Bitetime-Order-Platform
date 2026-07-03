@@ -137,9 +137,6 @@ export default function ProductsManager() {
   const [draftId, setDraftId] = useState(() => crypto.randomUUID())
   // Photos being edited in the add/edit dialog (add: new draft; edit: the row's).
   const [images, setImages] = useState<string[]>([])
-  // The dialog popup node — Radix portals the unit menu here so it counts as
-  // inside the dialog (else clicking an item reads as outside-press and closes it).
-  const [dialogEl, setDialogEl] = useState<HTMLElement | null>(null)
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
 
@@ -225,9 +222,11 @@ export default function ProductsManager() {
         nextLabel={t('Next', '下一页')}
       />
 
-      {/* Add / edit product details */}
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent ref={setDialogEl} className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+      {/* Add / edit product details. disablePointerDismissal: the unit Select
+          portals its menu to <body>, so an item click would otherwise read as an
+          outside-press and close the dialog. Close via the X, Save, or Escape. */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen} disablePointerDismissal>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingProduct ? t('Edit product', '编辑产品') : t('Add a product', '添加产品')}</DialogTitle>
           </DialogHeader>
@@ -283,9 +282,8 @@ export default function ProductsManager() {
                   <SelectTrigger id="pm-5" className="w-full bg-cream border-clay-border text-[13px]">
                     <SelectValue />
                   </SelectTrigger>
-                  {/* Portal into the dialog so item clicks aren't treated as an
-                      outside-press. z-modal-popover (400) floats above the popup. */}
-                  <SelectContent container={dialogEl} className="z-modal-popover">
+                  {/* z-modal-popover (400) floats above the dialog popup (z-modal). */}
+                  <SelectContent className="z-modal-popover">
                     {/* Keep a legacy value (e.g. old "pc") selectable so existing rows survive. */}
                     {form.unit && !UNITS.some(u => u.value === form.unit) && (
                       <SelectItem value={form.unit}>{form.unit}</SelectItem>

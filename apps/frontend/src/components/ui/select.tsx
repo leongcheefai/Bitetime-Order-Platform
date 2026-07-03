@@ -53,15 +53,10 @@ function SelectContent({
   children,
   position = "popper",
   align = "center",
-  container,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content> & {
-  /** Portal target. Set to a dialog's popup node so the menu counts as
-   *  "inside" that dialog and clicking an item doesn't dismiss it. */
-  container?: React.ComponentProps<typeof SelectPrimitive.Portal>["container"]
-}) {
+}: React.ComponentProps<typeof SelectPrimitive.Content>) {
   return (
-    <SelectPrimitive.Portal container={container}>
+    <SelectPrimitive.Portal>
       <SelectPrimitive.Content
         data-slot="select-content"
         className={cn(
