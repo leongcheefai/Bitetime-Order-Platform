@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog'
 import { productImageUrl } from '../store'
 import { cn } from '@/lib/utils'
@@ -20,10 +20,22 @@ export default function ImageLightbox({
   t: T
 }) {
   const [i, setI] = useState(0)
-  if (!paths.length) return null
-  const idx = Math.min(i, paths.length - 1)
-  const prev = () => setI(v => (v - 1 + paths.length) % paths.length)
-  const next = () => setI(v => (v + 1) % paths.length)
+  const n = paths.length
+  const prev = () => setI(v => (v - 1 + n) % n)
+  const next = () => setI(v => (v + 1) % n)
+
+  useEffect(() => {
+    if (!open || n < 2) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); setI(v => (v - 1 + n) % n) }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); setI(v => (v + 1) % n) }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, n])
+
+  if (!n) return null
+  const idx = Math.min(i, n - 1)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
