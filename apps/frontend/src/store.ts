@@ -102,6 +102,24 @@ export async function setMerchantStatus(id: string, status: string) {
   return res.json()
 }
 
+// Superadmin: grant a merchant free Pro (active + pro, no Stripe charge). Goes
+// through the backend, which writes status/plan/billing with the service-role key.
+export async function compMerchant(id: string) {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/admin/comp-merchant`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ merchantId: id }),
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || 'Comp failed')
+  }
+  return res.json()
+}
+
 export async function fetchMerchantBySlug(slug: string | undefined) {
   const s = (slug || '').trim().toLowerCase()
   if (!s || RESERVED_SLUGS.includes(s)) return null
@@ -183,6 +201,22 @@ export async function fetchPlatformPricing(country?: string): Promise<PlatformPr
   const res = await fetch(`${API_URL}/api/pricing${qs}`)
   if (!res.ok) throw new Error('Could not load pricing')
   return res.json()
+}
+
+export interface MerchantBilling {
+  merchant_id: string
+  stripe_customer_id?: string | null
+  stripe_subscription_id?: string | null
+  status?: string | null
+  trial_ends_at?: string | null
+  current_period_end?: string | null
+}
+
+// Superadmin: read every merchant's billing row (RLS grants superadmins read on all).
+export async function fetchAllBilling(): Promise<MerchantBilling[]> {
+  const { data, error } = await supabase.from('merchant_billing').select('*')
+  if (error) throw error
+  return data ?? []
 }
 
 // Read the merchant's authoritative billing row (owner-readable via RLS).
