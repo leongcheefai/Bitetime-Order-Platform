@@ -4,11 +4,12 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
-import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote } from '../store'
+import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl } from '../store'
 import { priceOrder, voucherError } from '../pricing'
 import { formatMoney } from '../currency'
 import type { Product, Voucher } from '../types'
 import LanguageSelect from '../components/LanguageSelect'
+import ImageLightbox from '../components/ImageLightbox'
 import { cn } from '@/lib/utils'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -46,6 +47,8 @@ export default function Storefront() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<SuccessState | null>(null)
+
+  const [gallery, setGallery] = useState<Product | null>(null)
 
   const [vouchers, setVouchers] = useState<Voucher[]>([])
   const [voucherInput, setVoucherInput] = useState('')
@@ -283,6 +286,21 @@ export default function Storefront() {
                       (cart[p.id] || 0) > 0 && "border-oxblood bg-oxblood-tint"
                     )}
                   >
+                    {p.image_urls?.length ? (
+                      <button
+                        type="button"
+                        onClick={() => setGallery(p)}
+                        aria-label={t('View photos', '查看图片')}
+                        className="size-14 shrink-0 rounded-lg overflow-hidden border-[1.5px] border-clay-border cursor-pointer relative"
+                      >
+                        <img src={productImageUrl(p.image_urls[0])} alt="" className="size-full object-cover" />
+                        {p.image_urls.length > 1 && (
+                          <span className="absolute bottom-0.5 right-0.5 px-1 rounded-full bg-oxblood/85 text-white text-[10px] leading-[14px]">
+                            {p.image_urls.length}
+                          </span>
+                        )}
+                      </button>
+                    ) : null}
                     <div className="flex-1 min-w-0">
                       <div className="text-[14px] font-medium text-ink">{productName(p)}</div>
                       {productDescr(p) && (
@@ -318,6 +336,15 @@ export default function Storefront() {
               </div>
             )}
           </div>
+
+          <ImageLightbox
+            key={gallery?.id}
+            paths={gallery?.image_urls ?? []}
+            open={!!gallery}
+            onOpenChange={o => { if (!o) setGallery(null) }}
+            title={gallery ? productName(gallery) : undefined}
+            t={t}
+          />
 
           <hr className="border-0 border-t border-clay-border my-6" />
 

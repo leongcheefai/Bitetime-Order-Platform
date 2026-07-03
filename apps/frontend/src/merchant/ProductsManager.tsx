@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
-import { fetchProducts, upsertProduct, deleteProduct } from '../store'
+import { fetchProducts, upsertProduct, deleteProduct, deleteProductImages, productImageUrl } from '../store'
 import { formatMoney, currencyDef } from '../currency'
 import { SkeletonText } from '../components/Loaders'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Textarea } from '../components/ui/textarea'
+import ImagePicker from './ProductImages'
 
 const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pc', active: true }
 
@@ -16,6 +17,10 @@ export default function ProductsManager() {
   const [rows, setRows] = useState<any[] | null>(null)
   const [form, setForm] = useState<any>(BLANK)
   const [busy, setBusy] = useState(false)
+  // Draft id lets the add-form upload images to Storage before the row exists.
+  const [draftId, setDraftId] = useState(() => crypto.randomUUID())
+  const [draftImages, setDraftImages] = useState<string[]>([])
+  const [editingPhotos, setEditingPhotos] = useState<string | null>(null)
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
 
@@ -27,16 +32,25 @@ export default function ProductsManager() {
     try {
       await upsertProduct({
         ...form,
+        id: draftId,
+        image_urls: draftImages,
         price: Number(form.price) || 0,
         merchant_id: merchant!.id,
       })
-      setForm(BLANK); await load()
+      setForm(BLANK); setDraftImages([]); setDraftId(crypto.randomUUID()); await load()
       toast.success(t('Product saved', '产品已保存'))
     } finally { setBusy(false) }
   }
 
   async function toggleActive(p: any) { await upsertProduct({ ...p, active: !p.active }); await load() }
-  async function remove(id: string) { await deleteProduct(id); await load(); toast.success(t('Product deleted', '产品已删除')) }
+  async function setProductImages(p: any, image_urls: string[]) {
+    await upsertProduct({ ...p, image_urls }); await load()
+  }
+  async function remove(p: any) {
+    await deleteProduct(p.id)
+    if (p.image_urls?.length) { try { await deleteProductImages(p.image_urls) } catch { /* best-effort */ } }
+    await load(); toast.success(t('Product deleted', '产品已删除'))
+  }
 
   if (!rows) return (
     <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
@@ -58,36 +72,67 @@ export default function ProductsManager() {
             {rows.map((p: any) => (
               <div
                 key={p.id}
-                className={`flex items-center gap-3 px-[14px] py-[10px] bg-cream border-[1.5px] border-clay-border rounded-lg transition-colors max-[480px]:flex-wrap${p.active ? '' : ' opacity-50'}`}
+                className={`flex flex-col gap-2 px-[14px] py-[10px] bg-cream border-[1.5px] border-clay-border rounded-lg transition-colors${p.active ? '' : ' opacity-50'}`}
               >
-                <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium text-ink">
-                    {p.name}
-                    {p.name_zh ? <span className="text-rose-muted font-normal"> / {p.name_zh}</span> : null}
-                    {!p.active && <em className="italic text-[12px] text-text-tertiary"> · {t('hidden', '已隐藏')}</em>}
+                <div className="flex items-center gap-3 max-[480px]:flex-wrap">
+                  {p.image_urls?.length ? (
+                    <img
+                      src={productImageUrl(p.image_urls[0])}
+                      alt=""
+                      className="size-11 shrink-0 object-cover rounded-lg border-[1.5px] border-clay-border"
+                    />
+                  ) : (
+                    <div className="size-11 shrink-0 rounded-lg border-[1.5px] border-dashed border-clay-border" aria-hidden />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[14px] font-medium text-ink">
+                      {p.name}
+                      {p.name_zh ? <span className="text-rose-muted font-normal"> / {p.name_zh}</span> : null}
+                      {!p.active && <em className="italic text-[12px] text-text-tertiary"> · {t('hidden', '已隐藏')}</em>}
+                    </div>
+                    <div className="text-[12px] text-rose-muted mt-0.5">{formatMoney(p.price, currency)} / {p.unit}</div>
                   </div>
-                  <div className="text-[12px] text-rose-muted mt-0.5">{formatMoney(p.price, currency)} / {p.unit}</div>
+                  <div className="flex gap-[6px] shrink-0 max-[480px]:w-full max-[480px]:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="none"
+                      className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
+                      onClick={() => setEditingPhotos(editingPhotos === p.id ? null : p.id)}
+                    >
+                      {t('Photos', '图片')}{p.image_urls?.length ? ` (${p.image_urls.length})` : ''}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="none"
+                      className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
+                      onClick={() => toggleActive(p)}
+                    >
+                      {p.active ? t('Hide', '隐藏') : t('Show', '显示')}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="none"
+                      className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
+                      onClick={() => remove(p)}
+                    >
+                      {t('Delete', '删除')}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-[6px] shrink-0 max-[480px]:w-full max-[480px]:justify-end">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="none"
-                    className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
-                    onClick={() => toggleActive(p)}
-                  >
-                    {p.active ? t('Hide', '隐藏') : t('Show', '显示')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="none"
-                    className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
-                    onClick={() => remove(p.id)}
-                  >
-                    {t('Delete', '删除')}
-                  </Button>
-                </div>
+                {editingPhotos === p.id && (
+                  <div className="pl-[52px] max-[480px]:pl-0">
+                    <ImagePicker
+                      merchantId={merchant!.id}
+                      productId={p.id}
+                      value={p.image_urls ?? []}
+                      onChange={paths => setProductImages(p, paths)}
+                      t={t}
+                    />
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -153,6 +198,16 @@ export default function ProductsManager() {
                 value={form.unit}
                 onChange={e => setForm({ ...form, unit: e.target.value })}
                 placeholder="pc / box / kg"
+              />
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <Label>{t('Photos (optional)', '图片（可选）')}</Label>
+              <ImagePicker
+                merchantId={merchant!.id}
+                productId={draftId}
+                value={draftImages}
+                onChange={paths => setDraftImages(paths as string[])}
+                t={t}
               />
             </div>
           </div>

@@ -52,6 +52,7 @@ export interface Product {
   price: number
   unit?: string
   sort?: number
+  image_urls?: string[]
   created_at?: string
   [key: string]: any
 }
