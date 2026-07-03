@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
 import { fetchProducts, upsertProduct, deleteProduct, deleteProductImages, productImageUrl } from '../store'
@@ -9,9 +10,93 @@ import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Textarea } from '../components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog'
+import { DataTable, SortableHeader } from '../components/ui/data-table'
 import ImagePicker from './ProductImages'
 
 const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pc', active: true }
+
+// Handlers + language + currency ride on table.options.meta so the column defs stay
+// stable (defined once) and never reset sorting when a row action refetches.
+interface ProductTableMeta {
+  t: (en: string, zh: string) => string
+  currency?: string
+  onPhotos: (id: string) => void
+  onToggle: (p: any) => void
+  onRemove: (p: any) => void
+}
+
+const columns: ColumnDef<any>[] = [
+  {
+    id: 'photo',
+    header: () => null,
+    enableSorting: false,
+    cell: ({ row }) => {
+      const p = row.original
+      return p.image_urls?.length ? (
+        <img
+          src={productImageUrl(p.image_urls[0])}
+          alt=""
+          className="size-11 shrink-0 object-cover rounded-lg border-[1.5px] border-clay-border"
+        />
+      ) : (
+        <div className="size-11 shrink-0 rounded-lg border-[1.5px] border-dashed border-clay-border" aria-hidden />
+      )
+    },
+  },
+  {
+    accessorKey: 'name',
+    header: ({ column, table }) => (
+      <SortableHeader column={column} label={(table.options.meta as ProductTableMeta).t('Product', '产品')} />
+    ),
+    cell: ({ row, table }) => {
+      const { t } = table.options.meta as ProductTableMeta
+      const p = row.original
+      return (
+        <div className="text-[14px] font-medium text-ink">
+          {p.name}
+          {p.name_zh ? <span className="text-rose-muted font-normal"> / {p.name_zh}</span> : null}
+          {!p.active && <em className="italic text-[12px] text-text-tertiary"> · {t('hidden', '已隐藏')}</em>}
+        </div>
+      )
+    },
+  },
+  {
+    accessorKey: 'price',
+    header: ({ column, table }) => (
+      <SortableHeader column={column} label={(table.options.meta as ProductTableMeta).t('Price', '价格')} />
+    ),
+    cell: ({ row, table }) => {
+      const { currency } = table.options.meta as ProductTableMeta
+      const p = row.original
+      return <span className="text-[13px] text-rose-muted whitespace-nowrap">{formatMoney(p.price, currency)} / {p.unit}</span>
+    },
+  },
+  {
+    id: 'actions',
+    header: ({ table }) => (
+      <div className="text-right whitespace-nowrap">{(table.options.meta as ProductTableMeta).t('Actions', '操作')}</div>
+    ),
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as ProductTableMeta
+      const { t } = meta
+      const p = row.original
+      const pill = 'rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint'
+      return (
+        <div className="flex gap-[6px] justify-end">
+          <Button type="button" variant="outline" size="none" className={pill} onClick={() => meta.onPhotos(p.id)}>
+            {t('Photos', '图片')}{p.image_urls?.length ? ` (${p.image_urls.length})` : ''}
+          </Button>
+          <Button type="button" variant="outline" size="none" className={pill} onClick={() => meta.onToggle(p)}>
+            {p.active ? t('Hide', '隐藏') : t('Show', '显示')}
+          </Button>
+          <Button type="button" variant="outline" size="none" className={pill} onClick={() => meta.onRemove(p)}>
+            {t('Delete', '删除')}
+          </Button>
+        </div>
+      )
+    },
+  },
+]
 
 export default function ProductsManager() {
   const { t, merchant } = useSession()
@@ -21,8 +106,8 @@ export default function ProductsManager() {
   // Draft id lets the add-form upload images to Storage before the row exists.
   const [draftId, setDraftId] = useState(() => crypto.randomUUID())
   const [draftImages, setDraftImages] = useState<string[]>([])
-  const [editingPhotos, setEditingPhotos] = useState<string | null>(null)
   const [addOpen, setAddOpen] = useState(false)
+  const [photoTargetId, setPhotoTargetId] = useState<string | null>(null)
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
 
@@ -53,6 +138,15 @@ export default function ProductsManager() {
     if (p.image_urls?.length) { try { await deleteProductImages(p.image_urls) } catch { /* best-effort */ } }
     await load(); toast.success(t('Product deleted', '产品已删除'))
   }
+
+  const meta: ProductTableMeta = {
+    t, currency,
+    onPhotos: setPhotoTargetId,
+    onToggle: toggleActive,
+    onRemove: remove,
+  }
+
+  const photoProduct = rows?.find(p => p.id === photoTargetId) ?? null
 
   const addForm = (
     <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
@@ -140,97 +234,50 @@ export default function ProductsManager() {
   )
 
   return (
-    <div>
-      {/* Your products panel */}
-      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <h3 className="font-heading text-[15px] font-medium text-oxblood flex items-center gap-2">
-            {t('Your products', '您的产品')}
-          </h3>
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
-            <DialogTrigger
-              render={
-                <Button type="button" size="none" className="rounded-pill py-[6px] px-[14px] text-[13px] whitespace-nowrap" />
-              }
-            >
-              {t('+ Add product', '+ 添加产品')}
-            </DialogTrigger>
-            {addForm}
-          </Dialog>
-        </div>
-        {rows.length === 0 ? (
-          <p className="text-[13px] text-text-tertiary italic">{t('No products yet — tap “Add product” to create your first.', '还没有产品 — 点击“添加产品”创建第一个。')}</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {rows.map((p: any) => (
-              <div
-                key={p.id}
-                className={`flex flex-col gap-2 px-[14px] py-[10px] bg-cream border-[1.5px] border-clay-border rounded-lg transition-colors${p.active ? '' : ' opacity-50'}`}
-              >
-                <div className="flex items-center gap-3 max-[480px]:flex-wrap">
-                  {p.image_urls?.length ? (
-                    <img
-                      src={productImageUrl(p.image_urls[0])}
-                      alt=""
-                      className="size-11 shrink-0 object-cover rounded-lg border-[1.5px] border-clay-border"
-                    />
-                  ) : (
-                    <div className="size-11 shrink-0 rounded-lg border-[1.5px] border-dashed border-clay-border" aria-hidden />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[14px] font-medium text-ink">
-                      {p.name}
-                      {p.name_zh ? <span className="text-rose-muted font-normal"> / {p.name_zh}</span> : null}
-                      {!p.active && <em className="italic text-[12px] text-text-tertiary"> · {t('hidden', '已隐藏')}</em>}
-                    </div>
-                    <div className="text-[12px] text-rose-muted mt-0.5">{formatMoney(p.price, currency)} / {p.unit}</div>
-                  </div>
-                  <div className="flex gap-[6px] shrink-0 max-[480px]:w-full max-[480px]:justify-end">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="none"
-                      className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
-                      onClick={() => setEditingPhotos(editingPhotos === p.id ? null : p.id)}
-                    >
-                      {t('Photos', '图片')}{p.image_urls?.length ? ` (${p.image_urls.length})` : ''}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="none"
-                      className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
-                      onClick={() => toggleActive(p)}
-                    >
-                      {p.active ? t('Hide', '隐藏') : t('Show', '显示')}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="none"
-                      className="rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
-                      onClick={() => remove(p)}
-                    >
-                      {t('Delete', '删除')}
-                    </Button>
-                  </div>
-                </div>
-                {editingPhotos === p.id && (
-                  <div className="pl-[52px] max-[480px]:pl-0">
-                    <ImagePicker
-                      merchantId={merchant!.id}
-                      productId={p.id}
-                      value={p.image_urls ?? []}
-                      onChange={paths => setProductImages(p, paths)}
-                      t={t}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+    <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h3 className="font-heading text-[15px] font-medium text-oxblood flex items-center gap-2">
+          {t('Your products', '您的产品')}
+        </h3>
+        <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <DialogTrigger
+            render={
+              <Button type="button" size="none" className="rounded-pill py-[6px] px-[14px] text-[13px] whitespace-nowrap" />
+            }
+          >
+            {t('+ Add product', '+ 添加产品')}
+          </DialogTrigger>
+          {addForm}
+        </Dialog>
       </div>
+
+      <DataTable
+        columns={columns}
+        data={rows}
+        meta={meta}
+        searchPlaceholder={t('Search products…', '搜索产品…')}
+        emptyText={t('No products yet — tap “Add product” to create your first.', '还没有产品 — 点击“添加产品”创建第一个。')}
+        prevLabel={t('Previous', '上一页')}
+        nextLabel={t('Next', '下一页')}
+      />
+
+      {/* Photo management for an existing product */}
+      <Dialog open={!!photoTargetId} onOpenChange={o => { if (!o) setPhotoTargetId(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{photoProduct ? `${t('Photos', '图片')} — ${photoProduct.name}` : t('Photos', '图片')}</DialogTitle>
+          </DialogHeader>
+          {photoProduct && (
+            <ImagePicker
+              merchantId={merchant!.id}
+              productId={photoProduct.id}
+              value={photoProduct.image_urls ?? []}
+              onChange={paths => setProductImages(photoProduct, paths)}
+              t={t}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
