@@ -127,7 +127,8 @@ export default function ProductsManager() {
   const [formOpen, setFormOpen] = useState(false)
   // Draft id lets the add-form upload images to Storage before the row exists.
   const [draftId, setDraftId] = useState(() => crypto.randomUUID())
-  const [draftImages, setDraftImages] = useState<string[]>([])
+  // Photos being edited in the add/edit dialog (add: new draft; edit: the row's).
+  const [images, setImages] = useState<string[]>([])
   const [photoTargetId, setPhotoTargetId] = useState<string | null>(null)
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
@@ -138,7 +139,7 @@ export default function ProductsManager() {
   function openAdd() {
     setEditingProduct(null)
     setForm(BLANK)
-    setDraftImages([]); setDraftId(crypto.randomUUID())
+    setImages([]); setDraftId(crypto.randomUUID())
     setFormOpen(true)
   }
   function openEdit(p: any) {
@@ -147,6 +148,7 @@ export default function ProductsManager() {
       name: p.name ?? '', name_zh: p.name_zh ?? '', descr: p.descr ?? '',
       price: String(p.price ?? ''), unit: p.unit ?? 'pc', active: p.active,
     })
+    setImages(p.image_urls ?? [])
     setFormOpen(true)
   }
 
@@ -154,18 +156,18 @@ export default function ProductsManager() {
     e.preventDefault(); setBusy(true)
     try {
       if (editingProduct) {
-        // Spread the original row first so image_urls / sort / etc. survive the upsert.
-        await upsertProduct({ ...editingProduct, ...form, price: Number(form.price) || 0 })
+        // Spread the original row first so sort / active / etc. survive the upsert.
+        await upsertProduct({ ...editingProduct, ...form, image_urls: images, price: Number(form.price) || 0 })
       } else {
         await upsertProduct({
           ...form,
           id: draftId,
-          image_urls: draftImages,
+          image_urls: images,
           price: Number(form.price) || 0,
           merchant_id: merchant!.id,
         })
       }
-      setFormOpen(false); setForm(BLANK); setEditingProduct(null); setDraftImages([]); setDraftId(crypto.randomUUID())
+      setFormOpen(false); setForm(BLANK); setEditingProduct(null); setImages([]); setDraftId(crypto.randomUUID())
       await load()
       toast.success(t('Product saved', '产品已保存'))
     } finally { setBusy(false) }
@@ -280,19 +282,21 @@ export default function ProductsManager() {
                   placeholder="pc / box / kg"
                 />
               </div>
-              {/* Photos only on create; existing products manage photos via the Photos action. */}
-              {!editingProduct && (
-                <div className="flex flex-col gap-[6px]">
-                  <Label>{t('Photos (optional)', '图片（可选）')}</Label>
-                  <ImagePicker
-                    merchantId={merchant!.id}
-                    productId={draftId}
-                    value={draftImages}
-                    onChange={paths => setDraftImages(paths as string[])}
-                    t={t}
-                  />
-                </div>
-              )}
+              <div className="flex flex-col gap-[6px]">
+                <Label>{t('Photos (optional)', '图片（可选）')}</Label>
+                <ImagePicker
+                  merchantId={merchant!.id}
+                  productId={editingProduct ? editingProduct.id : draftId}
+                  value={images}
+                  onChange={paths => {
+                    setImages(paths as string[])
+                    // Edit mode: the row exists, so persist immediately — that way a
+                    // removed photo isn't left dangling if the dialog is cancelled.
+                    if (editingProduct) return setProductImages(editingProduct, paths as string[])
+                  }}
+                  t={t}
+                />
+              </div>
             </div>
             <Button type="submit" size="md" className="mt-4 w-full" disabled={busy}>
               {busy ? t('Saving…', '保存中…') : editingProduct ? t('Save changes', '保存更改') : t('Add product', '添加产品')}
