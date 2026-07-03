@@ -496,6 +496,49 @@ export async function deleteProduct(id: string) {
   if (error) throw error
 }
 
+// ── Product images (Supabase Storage: public `product-images` bucket) ──────────
+
+export const PRODUCT_IMAGE_BUCKET = 'product-images'
+export const MAX_PRODUCT_IMAGES = 5
+export const MAX_PRODUCT_IMAGE_BYTES = 5 * 1024 * 1024
+export const PRODUCT_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+// Resolve a stored path to a public URL for rendering.
+export function productImageUrl(path: string): string {
+  return supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl
+}
+
+// Validate + upload files under {merchantId}/{productId}/…; returns stored paths.
+export async function uploadProductImages(
+  merchantId: string,
+  productId: string,
+  files: File[],
+): Promise<string[]> {
+  const paths: string[] = []
+  for (const file of files) {
+    if (!PRODUCT_IMAGE_TYPES.includes(file.type)) {
+      throw new Error(`Unsupported image type: ${file.name}`)
+    }
+    if (file.size > MAX_PRODUCT_IMAGE_BYTES) {
+      throw new Error(`Image too large (max 5MB): ${file.name}`)
+    }
+    const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const path = `${merchantId}/${productId}/${crypto.randomUUID()}-${safe}`
+    const { error } = await supabase.storage
+      .from(PRODUCT_IMAGE_BUCKET)
+      .upload(path, file, { contentType: file.type, upsert: true })
+    if (error) throw error
+    paths.push(path)
+  }
+  return paths
+}
+
+export async function deleteProductImages(paths: string[]): Promise<void> {
+  if (!paths?.length) return
+  const { error } = await supabase.storage.from(PRODUCT_IMAGE_BUCKET).remove(paths)
+  if (error) throw error
+}
+
 // ── Merchant config & secrets ─────────────────────────────────────────────────
 
 export async function updateMerchantConfig(id: string, patch: any) {

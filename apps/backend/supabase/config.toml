@@ -30,6 +30,10 @@ port = 55324
 enabled = true
 port = 55327
 
+[storage]
+enabled = true
+file_size_limit = "5MiB"
+
 [auth]
 enabled = true
 site_url = "http://localhost:5173"
