@@ -6,6 +6,7 @@ import { SkeletonText } from '../components/Loaders'
 import { StatCard, ChartPanel, RevenueBarChart, DonutCard, BreakdownList } from '../components/charts/DashCharts'
 import { computeMerchantStats, type MerchantStats } from './overviewStats'
 import { formatMoney } from '../currency'
+import ShareStorefront from './ShareStorefront'
 
 const STAT_ICON = { size: 15, strokeWidth: 1.75 }
 
@@ -38,6 +39,7 @@ export default function Overview() {
 
   if (!stats) return (
     <div className="flex flex-col gap-5">
+      <ShareStorefront />
       <div className="grid grid-cols-4 gap-[10px] max-[900px]:grid-cols-2 max-[520px]:grid-cols-1">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="rounded-xl border-[1.5px] border-rose-border bg-surface-raised px-5 py-4"><SkeletonText lines={2} /></div>
@@ -49,6 +51,7 @@ export default function Overview() {
 
   return (
     <div className="flex flex-col gap-5">
+      <ShareStorefront />
       <div className="grid grid-cols-4 gap-[10px] max-[900px]:grid-cols-2 max-[520px]:grid-cols-1">
         <StatCard label={t('Total orders', '总订单')} value={String(stats.totalOrders)} delta={stats.ordersDelta} icon={<ReceiptText {...STAT_ICON} />} />
         <StatCard label={t('Revenue', '营收')} value={money(stats.revenue)} delta={stats.revenueDelta} icon={<Wallet {...STAT_ICON} />} />
