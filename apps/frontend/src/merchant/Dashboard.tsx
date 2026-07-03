@@ -51,7 +51,6 @@ function DashboardInner() {
       nav={nav}
       active={section}
       onSelect={selectSection}
-      userName={`/s/${merchant!.slug}`}
       backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
     >
       <BillingBanner />

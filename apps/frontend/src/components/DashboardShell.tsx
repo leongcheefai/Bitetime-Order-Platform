@@ -15,7 +15,6 @@ interface DashboardShellProps {
   nav: NavItem[]
   active: string
   onSelect: (key: string) => void
-  userName?: string
   backTo?: { href: string; label: string }
   children: ReactNode
 }
@@ -24,7 +23,7 @@ interface DashboardShellProps {
 // Responsive: 210px sidebar on desktop, 64px icon-only on mobile (≤ 640px).
 // data-layout-flush triggers body:has([data-layout-flush]) in index.css
 // (removes body padding + stretches body flex to full viewport height).
-export default function DashboardShell({ logo, title, role, nav, active, onSelect, userName, backTo, children }: DashboardShellProps) {
+export default function DashboardShell({ logo, title, role, nav, active, onSelect, backTo, children }: DashboardShellProps) {
   const { t } = useSession()
   return (
     <div data-layout-flush="" className="flex gap-0 min-h-screen w-full">
@@ -136,16 +135,11 @@ export default function DashboardShell({ logo, title, role, nav, active, onSelec
           ))}
         </nav>
 
-        {/* Footer — user name, language selector, sign-out */}
+        {/* Footer — language selector, sign-out */}
         <div className={cn(
           'px-5 pt-4 pb-6 border-t border-divider',
           'max-sm:px-2 max-sm:py-3',
         )}>
-          {userName && (
-            <div className="text-[12px] text-text-tertiary mb-1.5 whitespace-nowrap overflow-hidden text-ellipsis max-sm:hidden">
-              {userName}
-            </div>
-          )}
           {/* Language select */}
           <div className="mb-2">
             <LanguageSelect className="w-full" />
