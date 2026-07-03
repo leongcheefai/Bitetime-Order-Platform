@@ -30,8 +30,9 @@ export default function ImageLightbox({
       if (e.key === 'ArrowLeft') { e.preventDefault(); setI(v => (v - 1 + n) % n) }
       else if (e.key === 'ArrowRight') { e.preventDefault(); setI(v => (v + 1) % n) }
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    // Capture phase: fire before Base UI's dialog handler can swallow arrow keys.
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
   }, [open, n])
 
   if (!n) return null
