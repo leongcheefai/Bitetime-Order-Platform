@@ -59,7 +59,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
       data-slot="tabs-trigger"
       className={cn(
         // `.cust-tab` — flex-1, px-3 py-[9px], md radius, 14px, rose-muted inactive
-        "relative inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-3 py-[9px] text-[14px] font-medium whitespace-nowrap text-rose-muted transition-all",
+        "relative inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-3 py-[9px] text-[14px] font-medium whitespace-nowrap text-rose-muted transition-all cursor-pointer",
         "group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start",
         "hover:bg-surface-sunken-hover hover:text-ink",
         "focus-visible:border-oxblood focus-visible:ring-[3px] focus-visible:ring-oxblood/50 focus-visible:outline-1 focus-visible:outline-oxblood",

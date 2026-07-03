@@ -16,7 +16,7 @@ function Checkbox({ className, ...props }: CheckboxPrimitive.Root.Props) {
       data-slot="checkbox"
       className={cn(
         // .cookie-check-badge — xs radius (4px), 1.5px clay border, white bg
-        "peer relative flex size-4 shrink-0 items-center justify-center rounded-xs border-[1.5px] border-clay-border bg-white transition-colors outline-none",
+        "peer relative flex size-4 shrink-0 items-center justify-center rounded-xs border-[1.5px] border-clay-border bg-white transition-colors outline-none cursor-pointer",
         "after:absolute after:-inset-x-3 after:-inset-y-2",
         "focus-visible:border-oxblood focus-visible:ring-3 focus-visible:ring-oxblood/10",
         "disabled:cursor-not-allowed disabled:opacity-50",
