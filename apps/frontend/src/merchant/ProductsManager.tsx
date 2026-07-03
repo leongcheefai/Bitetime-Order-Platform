@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Textarea } from '../components/ui/textarea'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog'
 import ImagePicker from './ProductImages'
 
 const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pc', active: true }
@@ -21,6 +22,7 @@ export default function ProductsManager() {
   const [draftId, setDraftId] = useState(() => crypto.randomUUID())
   const [draftImages, setDraftImages] = useState<string[]>([])
   const [editingPhotos, setEditingPhotos] = useState<string | null>(null)
+  const [addOpen, setAddOpen] = useState(false)
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
 
@@ -37,7 +39,7 @@ export default function ProductsManager() {
         price: Number(form.price) || 0,
         merchant_id: merchant!.id,
       })
-      setForm(BLANK); setDraftImages([]); setDraftId(crypto.randomUUID()); await load()
+      setForm(BLANK); setDraftImages([]); setDraftId(crypto.randomUUID()); setAddOpen(false); await load()
       toast.success(t('Product saved', '产品已保存'))
     } finally { setBusy(false) }
   }
@@ -52,6 +54,85 @@ export default function ProductsManager() {
     await load(); toast.success(t('Product deleted', '产品已删除'))
   }
 
+  const addForm = (
+    <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle>{t('Add a product', '添加产品')}</DialogTitle>
+      </DialogHeader>
+      <form onSubmit={save}>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="pm-1">{t('Name', '名称')}</Label>
+            <Input
+              id="pm-1"
+              variant="compact"
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+              required
+              placeholder={t('e.g. Brown Butter Cookie', '如：焦化奶油曲奇')}
+            />
+          </div>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="pm-2">{t('Chinese name (optional)', '中文名称（可选）')}</Label>
+            <Input
+              id="pm-2"
+              variant="compact"
+              value={form.name_zh}
+              onChange={e => setForm({ ...form, name_zh: e.target.value })}
+              placeholder="e.g. 焦化奶油曲奇"
+            />
+          </div>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="pm-3">{t('Description', '描述')}</Label>
+            <Textarea
+              id="pm-3"
+              value={form.descr}
+              onChange={e => setForm({ ...form, descr: e.target.value })}
+              placeholder={t('Short description (optional)', '简短描述（可选）')}
+              className="bg-cream text-[13px] rounded-sm py-[7px] px-2.5 min-h-0"
+            />
+          </div>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="pm-4">{t(`Price (${symbol})`, `价格 (${symbol})`)}</Label>
+            <Input
+              id="pm-4"
+              variant="compact"
+              type="number"
+              step="0.01"
+              value={form.price}
+              onChange={e => setForm({ ...form, price: e.target.value })}
+              required
+              placeholder="0.00"
+            />
+          </div>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="pm-5">{t('Unit', '单位')}</Label>
+            <Input
+              id="pm-5"
+              variant="compact"
+              value={form.unit}
+              onChange={e => setForm({ ...form, unit: e.target.value })}
+              placeholder="pc / box / kg"
+            />
+          </div>
+          <div className="flex flex-col gap-[6px]">
+            <Label>{t('Photos (optional)', '图片（可选）')}</Label>
+            <ImagePicker
+              merchantId={merchant!.id}
+              productId={draftId}
+              value={draftImages}
+              onChange={paths => setDraftImages(paths as string[])}
+              t={t}
+            />
+          </div>
+        </div>
+        <Button type="submit" size="md" className="mt-4 w-full" disabled={busy}>
+          {busy ? t('Saving…', '保存中…') : t('Add product', '添加产品')}
+        </Button>
+      </form>
+    </DialogContent>
+  )
+
   if (!rows) return (
     <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
       <SkeletonText lines={4} />
@@ -62,11 +143,23 @@ export default function ProductsManager() {
     <div>
       {/* Your products panel */}
       <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
-        <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
-          {t('Your products', '您的产品')}
-        </h3>
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="font-heading text-[15px] font-medium text-oxblood flex items-center gap-2">
+            {t('Your products', '您的产品')}
+          </h3>
+          <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            <DialogTrigger
+              render={
+                <Button type="button" size="none" className="rounded-pill py-[6px] px-[14px] text-[13px] whitespace-nowrap" />
+              }
+            >
+              {t('+ Add product', '+ 添加产品')}
+            </DialogTrigger>
+            {addForm}
+          </Dialog>
+        </div>
         {rows.length === 0 ? (
-          <p className="text-[13px] text-text-tertiary italic">{t('No products yet — add your first below.', '还没有产品 — 在下方添加。')}</p>
+          <p className="text-[13px] text-text-tertiary italic">{t('No products yet — tap “Add product” to create your first.', '还没有产品 — 点击“添加产品”创建第一个。')}</p>
         ) : (
           <div className="flex flex-col gap-2">
             {rows.map((p: any) => (
@@ -137,84 +230,6 @@ export default function ProductsManager() {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Add a product panel */}
-      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
-        <h3 className="font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2">
-          {t('Add a product', '添加产品')}
-        </h3>
-        <form onSubmit={save}>
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-col gap-[6px]">
-              <Label htmlFor="pm-1">{t('Name', '名称')}</Label>
-              <Input
-                id="pm-1"
-                variant="compact"
-                value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
-                required
-                placeholder={t('e.g. Brown Butter Cookie', '如：焦化奶油曲奇')}
-              />
-            </div>
-            <div className="flex flex-col gap-[6px]">
-              <Label htmlFor="pm-2">{t('Chinese name (optional)', '中文名称（可选）')}</Label>
-              <Input
-                id="pm-2"
-                variant="compact"
-                value={form.name_zh}
-                onChange={e => setForm({ ...form, name_zh: e.target.value })}
-                placeholder="e.g. 焦化奶油曲奇"
-              />
-            </div>
-            <div className="flex flex-col gap-[6px]">
-              <Label htmlFor="pm-3">{t('Description', '描述')}</Label>
-              <Textarea
-                id="pm-3"
-                value={form.descr}
-                onChange={e => setForm({ ...form, descr: e.target.value })}
-                placeholder={t('Short description (optional)', '简短描述（可选）')}
-                className="bg-cream text-[13px] rounded-sm py-[7px] px-2.5 min-h-0"
-              />
-            </div>
-            <div className="flex flex-col gap-[6px]">
-              <Label htmlFor="pm-4">{t(`Price (${symbol})`, `价格 (${symbol})`)}</Label>
-              <Input
-                id="pm-4"
-                variant="compact"
-                type="number"
-                step="0.01"
-                value={form.price}
-                onChange={e => setForm({ ...form, price: e.target.value })}
-                required
-                placeholder="0.00"
-              />
-            </div>
-            <div className="flex flex-col gap-[6px]">
-              <Label htmlFor="pm-5">{t('Unit', '单位')}</Label>
-              <Input
-                id="pm-5"
-                variant="compact"
-                value={form.unit}
-                onChange={e => setForm({ ...form, unit: e.target.value })}
-                placeholder="pc / box / kg"
-              />
-            </div>
-            <div className="flex flex-col gap-[6px]">
-              <Label>{t('Photos (optional)', '图片（可选）')}</Label>
-              <ImagePicker
-                merchantId={merchant!.id}
-                productId={draftId}
-                value={draftImages}
-                onChange={paths => setDraftImages(paths as string[])}
-                t={t}
-              />
-            </div>
-          </div>
-          <Button type="submit" size="md" className="mt-3" disabled={busy}>
-            {busy ? t('Saving…', '保存中…') : t('Add product', '添加产品')}
-          </Button>
-        </form>
       </div>
     </div>
   )
