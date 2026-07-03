@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import { MoreHorizontal } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
 import { fetchProducts, upsertProduct, deleteProduct, deleteProductImages, productImageUrl } from '../store'
@@ -9,7 +10,10 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Textarea } from '../components/ui/textarea'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog'
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
+} from '../components/ui/dropdown-menu'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import ImagePicker from './ProductImages'
 
@@ -20,6 +24,7 @@ const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pc', active:
 interface ProductTableMeta {
   t: (en: string, zh: string) => string
   currency?: string
+  onEdit: (p: any) => void
   onPhotos: (id: string) => void
   onToggle: (p: any) => void
   onRemove: (p: any) => void
@@ -80,18 +85,32 @@ const columns: ColumnDef<any>[] = [
       const meta = table.options.meta as ProductTableMeta
       const { t } = meta
       const p = row.original
-      const pill = 'rounded-pill py-[5px] px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint'
       return (
-        <div className="flex gap-[6px] justify-end">
-          <Button type="button" variant="outline" size="none" className={pill} onClick={() => meta.onPhotos(p.id)}>
-            {t('Photos', '图片')}{p.image_urls?.length ? ` (${p.image_urls.length})` : ''}
-          </Button>
-          <Button type="button" variant="outline" size="none" className={pill} onClick={() => meta.onToggle(p)}>
-            {p.active ? t('Hide', '隐藏') : t('Show', '显示')}
-          </Button>
-          <Button type="button" variant="outline" size="none" className={pill} onClick={() => meta.onRemove(p)}>
-            {t('Delete', '删除')}
-          </Button>
+        <div className="text-right">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="none"
+                  className="size-8 p-0 rounded-full cursor-pointer hover:bg-oxblood-tint hover:text-oxblood"
+                  aria-label={t('Actions', '操作')}
+                />
+              }
+            >
+              <MoreHorizontal className="size-4" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem className="cursor-pointer" onClick={() => meta.onEdit(p)}>{t('Edit', '编辑')}</DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => meta.onPhotos(p.id)}>
+                {t('Photos', '图片')}{p.image_urls?.length ? ` (${p.image_urls.length})` : ''}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => meta.onToggle(p)}>
+                {p.active ? t('Hide', '隐藏') : t('Show', '显示')}
+              </DropdownMenuItem>
+              <DropdownMenuItem className="cursor-pointer" onClick={() => meta.onRemove(p)}>{t('Delete', '删除')}</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       )
     },
@@ -103,10 +122,12 @@ export default function ProductsManager() {
   const [rows, setRows] = useState<any[] | null>(null)
   const [form, setForm] = useState<any>(BLANK)
   const [busy, setBusy] = useState(false)
+  // editingProduct = the row being edited (null → add mode).
+  const [editingProduct, setEditingProduct] = useState<any | null>(null)
+  const [formOpen, setFormOpen] = useState(false)
   // Draft id lets the add-form upload images to Storage before the row exists.
   const [draftId, setDraftId] = useState(() => crypto.randomUUID())
   const [draftImages, setDraftImages] = useState<string[]>([])
-  const [addOpen, setAddOpen] = useState(false)
   const [photoTargetId, setPhotoTargetId] = useState<string | null>(null)
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
@@ -114,17 +135,38 @@ export default function ProductsManager() {
   async function load() { setRows(await fetchProducts(merchant!.id)) }
   useEffect(() => { fetchProducts(merchant!.id).then(setRows) }, [merchant!.id])
 
+  function openAdd() {
+    setEditingProduct(null)
+    setForm(BLANK)
+    setDraftImages([]); setDraftId(crypto.randomUUID())
+    setFormOpen(true)
+  }
+  function openEdit(p: any) {
+    setEditingProduct(p)
+    setForm({
+      name: p.name ?? '', name_zh: p.name_zh ?? '', descr: p.descr ?? '',
+      price: String(p.price ?? ''), unit: p.unit ?? 'pc', active: p.active,
+    })
+    setFormOpen(true)
+  }
+
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
     try {
-      await upsertProduct({
-        ...form,
-        id: draftId,
-        image_urls: draftImages,
-        price: Number(form.price) || 0,
-        merchant_id: merchant!.id,
-      })
-      setForm(BLANK); setDraftImages([]); setDraftId(crypto.randomUUID()); setAddOpen(false); await load()
+      if (editingProduct) {
+        // Spread the original row first so image_urls / sort / etc. survive the upsert.
+        await upsertProduct({ ...editingProduct, ...form, price: Number(form.price) || 0 })
+      } else {
+        await upsertProduct({
+          ...form,
+          id: draftId,
+          image_urls: draftImages,
+          price: Number(form.price) || 0,
+          merchant_id: merchant!.id,
+        })
+      }
+      setFormOpen(false); setForm(BLANK); setEditingProduct(null); setDraftImages([]); setDraftId(crypto.randomUUID())
+      await load()
       toast.success(t('Product saved', '产品已保存'))
     } finally { setBusy(false) }
   }
@@ -141,91 +183,13 @@ export default function ProductsManager() {
 
   const meta: ProductTableMeta = {
     t, currency,
+    onEdit: openEdit,
     onPhotos: setPhotoTargetId,
     onToggle: toggleActive,
     onRemove: remove,
   }
 
   const photoProduct = rows?.find(p => p.id === photoTargetId) ?? null
-
-  const addForm = (
-    <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
-      <DialogHeader>
-        <DialogTitle>{t('Add a product', '添加产品')}</DialogTitle>
-      </DialogHeader>
-      <form onSubmit={save}>
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="pm-1">{t('Name', '名称')}</Label>
-            <Input
-              id="pm-1"
-              variant="compact"
-              value={form.name}
-              onChange={e => setForm({ ...form, name: e.target.value })}
-              required
-              placeholder={t('e.g. Brown Butter Cookie', '如：焦化奶油曲奇')}
-            />
-          </div>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="pm-2">{t('Chinese name (optional)', '中文名称（可选）')}</Label>
-            <Input
-              id="pm-2"
-              variant="compact"
-              value={form.name_zh}
-              onChange={e => setForm({ ...form, name_zh: e.target.value })}
-              placeholder="e.g. 焦化奶油曲奇"
-            />
-          </div>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="pm-3">{t('Description', '描述')}</Label>
-            <Textarea
-              id="pm-3"
-              value={form.descr}
-              onChange={e => setForm({ ...form, descr: e.target.value })}
-              placeholder={t('Short description (optional)', '简短描述（可选）')}
-              className="bg-cream text-[13px] rounded-sm py-[7px] px-2.5 min-h-0"
-            />
-          </div>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="pm-4">{t(`Price (${symbol})`, `价格 (${symbol})`)}</Label>
-            <Input
-              id="pm-4"
-              variant="compact"
-              type="number"
-              step="0.01"
-              value={form.price}
-              onChange={e => setForm({ ...form, price: e.target.value })}
-              required
-              placeholder="0.00"
-            />
-          </div>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="pm-5">{t('Unit', '单位')}</Label>
-            <Input
-              id="pm-5"
-              variant="compact"
-              value={form.unit}
-              onChange={e => setForm({ ...form, unit: e.target.value })}
-              placeholder="pc / box / kg"
-            />
-          </div>
-          <div className="flex flex-col gap-[6px]">
-            <Label>{t('Photos (optional)', '图片（可选）')}</Label>
-            <ImagePicker
-              merchantId={merchant!.id}
-              productId={draftId}
-              value={draftImages}
-              onChange={paths => setDraftImages(paths as string[])}
-              t={t}
-            />
-          </div>
-        </div>
-        <Button type="submit" size="md" className="mt-4 w-full" disabled={busy}>
-          {busy ? t('Saving…', '保存中…') : t('Add product', '添加产品')}
-        </Button>
-      </form>
-    </DialogContent>
-  )
 
   if (!rows) return (
     <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
@@ -239,16 +203,9 @@ export default function ProductsManager() {
         <h3 className="font-heading text-[15px] font-medium text-oxblood flex items-center gap-2">
           {t('Your products', '您的产品')}
         </h3>
-        <Dialog open={addOpen} onOpenChange={setAddOpen}>
-          <DialogTrigger
-            render={
-              <Button type="button" size="none" className="rounded-pill py-[6px] px-[14px] text-[13px] whitespace-nowrap" />
-            }
-          >
-            {t('+ Add product', '+ 添加产品')}
-          </DialogTrigger>
-          {addForm}
-        </Dialog>
+        <Button type="button" size="none" className="rounded-pill py-[6px] px-[14px] text-[13px] whitespace-nowrap" onClick={openAdd}>
+          {t('+ Add product', '+ 添加产品')}
+        </Button>
       </div>
 
       <DataTable
@@ -260,6 +217,89 @@ export default function ProductsManager() {
         prevLabel={t('Previous', '上一页')}
         nextLabel={t('Next', '下一页')}
       />
+
+      {/* Add / edit product details */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="sm:max-w-md max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingProduct ? t('Edit product', '编辑产品') : t('Add a product', '添加产品')}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={save}>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-[6px]">
+                <Label htmlFor="pm-1">{t('Name', '名称')}</Label>
+                <Input
+                  id="pm-1"
+                  variant="compact"
+                  value={form.name}
+                  onChange={e => setForm({ ...form, name: e.target.value })}
+                  required
+                  placeholder={t('e.g. Brown Butter Cookie', '如：焦化奶油曲奇')}
+                />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <Label htmlFor="pm-2">{t('Chinese name (optional)', '中文名称（可选）')}</Label>
+                <Input
+                  id="pm-2"
+                  variant="compact"
+                  value={form.name_zh}
+                  onChange={e => setForm({ ...form, name_zh: e.target.value })}
+                  placeholder="e.g. 焦化奶油曲奇"
+                />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <Label htmlFor="pm-3">{t('Description', '描述')}</Label>
+                <Textarea
+                  id="pm-3"
+                  value={form.descr}
+                  onChange={e => setForm({ ...form, descr: e.target.value })}
+                  placeholder={t('Short description (optional)', '简短描述（可选）')}
+                  className="bg-cream text-[13px] rounded-sm py-[7px] px-2.5 min-h-0"
+                />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <Label htmlFor="pm-4">{t(`Price (${symbol})`, `价格 (${symbol})`)}</Label>
+                <Input
+                  id="pm-4"
+                  variant="compact"
+                  type="number"
+                  step="0.01"
+                  value={form.price}
+                  onChange={e => setForm({ ...form, price: e.target.value })}
+                  required
+                  placeholder="0.00"
+                />
+              </div>
+              <div className="flex flex-col gap-[6px]">
+                <Label htmlFor="pm-5">{t('Unit', '单位')}</Label>
+                <Input
+                  id="pm-5"
+                  variant="compact"
+                  value={form.unit}
+                  onChange={e => setForm({ ...form, unit: e.target.value })}
+                  placeholder="pc / box / kg"
+                />
+              </div>
+              {/* Photos only on create; existing products manage photos via the Photos action. */}
+              {!editingProduct && (
+                <div className="flex flex-col gap-[6px]">
+                  <Label>{t('Photos (optional)', '图片（可选）')}</Label>
+                  <ImagePicker
+                    merchantId={merchant!.id}
+                    productId={draftId}
+                    value={draftImages}
+                    onChange={paths => setDraftImages(paths as string[])}
+                    t={t}
+                  />
+                </div>
+              )}
+            </div>
+            <Button type="submit" size="md" className="mt-4 w-full" disabled={busy}>
+              {busy ? t('Saving…', '保存中…') : editingProduct ? t('Save changes', '保存更改') : t('Add product', '添加产品')}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Photo management for an existing product */}
       <Dialog open={!!photoTargetId} onOpenChange={o => { if (!o) setPhotoTargetId(null) }}>
