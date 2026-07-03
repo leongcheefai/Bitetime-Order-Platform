@@ -280,7 +280,8 @@ export default function ProductsManager() {
                   <SelectTrigger id="pm-5" className="w-full bg-cream border-clay-border text-[13px]">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  {/* Render above the dialog popup (z-modal); z-modal-popover = 400. */}
+                  <SelectContent className="z-modal-popover">
                     {/* Keep a legacy value (e.g. old "pc") selectable so existing rows survive. */}
                     {form.unit && !UNITS.some(u => u.value === form.unit) && (
                       <SelectItem value={form.unit}>{form.unit}</SelectItem>
