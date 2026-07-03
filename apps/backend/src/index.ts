@@ -269,6 +269,57 @@ app.post('/api/admin/set-merchant-status', async (c) => {
   return c.json({ ok: true, status })
 })
 
+// ── Superadmin: comp a merchant to free Pro (no Stripe payment) ────────────────
+// Grants active + pro without any Stripe subscription — for partners, staff, and
+// promo shops. Writes an 'active' billing row with a far-future period end and no
+// trial, so the trial/past-due banners stay silent and nothing expires the shop.
+// The shop is decoupled from Stripe: it has no real subscription, so the
+// webhook-driven suspension path never touches it. Revoke by suspending in the
+// console (set-merchant-status → suspended). If the merchant already carries a
+// real Stripe subscription this overwrites its local status to active — don't comp
+// a paying shop.
+app.post('/api/admin/comp-merchant', async (c) => {
+  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+  const user = await getUserFromToken(token)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+  const { data: callerProfile } = await admin
+    .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
+  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors approve-merchant).
+  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
+  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
+
+  const { merchantId } = await c.req.json().catch(() => ({}))
+  if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
+
+  const { data: merchant } = await admin
+    .from('merchants').select('id').eq('id', merchantId).maybeSingle()
+  if (!merchant) return c.json({ error: 'Merchant not found' }, 404)
+
+  // Activate + mark pro. Service role bypasses the guard_merchant_status trigger.
+  const { error: mErr } = await admin
+    .from('merchants').update({ status: 'active', plan: 'pro' }).eq('id', merchantId)
+  if (mErr) {
+    console.error('comp-merchant merchants update failed:', mErr.message)
+    return c.json({ error: 'Comp failed' }, 500)
+  }
+
+  // Silence billing banners: active status, far-future period end, no trial. Merge
+  // (upsert) so any existing stripe_customer_id survives, but the local state reads active.
+  try {
+    const farFuture = new Date(Date.now() + 100 * 365 * 24 * 60 * 60 * 1000).toISOString()
+    await upsertBilling(merchantId, {
+      status: 'active',
+      trial_ends_at: null,
+      current_period_end: farFuture,
+    })
+  } catch (err) {
+    console.error('comp-merchant billing upsert failed:', err instanceof Error ? err.message : String(err))
+    return c.json({ error: 'Comp failed' }, 500)
+  }
+
+  return c.json({ ok: true })
+})
+
 // ── Stripe billing portal for the signed-in merchant ───────────────────────────
 // Where a trialing merchant adds their card, and a past_due one updates it.
 // Requires the portal to be enabled once in the Stripe Dashboard.
