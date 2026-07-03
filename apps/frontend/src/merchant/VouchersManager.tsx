@@ -11,6 +11,22 @@ import type { Voucher } from '../types'
 
 const BLANK = { code: '', kind: 'percent', amount: '', maxUses: '' }
 
+// Unambiguous alphabet (no 0/O/1/I) so codes read cleanly aloud
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+function randomChars(len: number) {
+  let out = ''
+  for (let i = 0; i < len; i++) out += CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)]
+  return out
+}
+// Per-merchant voucher code: <SLUG-PREFIX>-XXXXX — prefix keeps codes unique across shops
+function voucherPrefix(slug: string) {
+  const alnum = String(slug ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return alnum.slice(0, 4) || 'SHOP'
+}
+function generateVoucherCode(slug: string) {
+  return `${voucherPrefix(slug)}-${randomChars(5)}`
+}
+
 // Self-contained select classes — pixel-match of .admin-field select in .admin-field.full context
 const SELECT_CLS =
   'w-full py-[7px] pl-[10px] pr-[32px] border border-clay-border rounded-sm text-[13px] ' +
@@ -115,14 +131,26 @@ export default function VouchersManager() {
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-[6px]">
               <Label htmlFor="vm-code">{t('Code', '优惠码')}</Label>
-              <Input
-                id="vm-code"
-                variant="compact"
-                value={form.code}
-                onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                required
-                placeholder={t('e.g. SAVE10', '如：SAVE10')}
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="vm-code"
+                  variant="compact"
+                  className="flex-1"
+                  value={form.code}
+                  onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })}
+                  required
+                  placeholder={t('e.g. SAVE10', '如：SAVE10')}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="none"
+                  className="shrink-0 rounded-sm px-3 text-[12px] bg-surface-raised whitespace-nowrap hover:border-oxblood hover:text-oxblood hover:bg-oxblood-tint"
+                  onClick={() => setForm({ ...form, code: generateVoucherCode(merchant!.slug) })}
+                >
+                  {t('Generate', '生成')}
+                </Button>
+              </div>
             </div>
             <div className="flex flex-col gap-[6px]">
               <Label htmlFor="vm-kind">{t('Type', '类型')}</Label>
