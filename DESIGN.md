@@ -177,9 +177,10 @@ A warm, low-glow palette: one committed oxblood accent over a ladder of cream-to
 
 ## 3. Typography
 
-**Display Font:** Lora (with Georgia, serif fallback)
-**Body Font:** DM Sans (with sans-serif fallback)
+**Display Font:** Lora (with Noto Serif SC → Georgia, serif fallback)
+**Body Font:** DM Sans (with Noto Sans SC → sans-serif fallback)
 **Label/Mono Font:** DM Mono (with 'Courier New', monospace) — order numbers, voucher codes, AWB
+**CJK Font:** Noto Serif SC (headings) / Noto Sans SC (body) — the bilingual EN/ZH siblings. Latin glyphs never reach them; they render only Chinese, so the storefront/dashboard keep a single consistent type voice across both languages instead of a browser fallback face.
 
 **Character:** A clean serif/sans contrast pairing. Lora is the painted shop sign — humanist, slightly bookish, used at modest sizes with warmth rather than grandeur. DM Sans is the legible counter-clerk handwriting underneath: neutral, quiet, sized small and dense for forms and tables. Monospace appears only where a code must be read character-by-character.
 
@@ -187,8 +188,9 @@ A warm, low-glow palette: one committed oxblood accent over a ladder of cream-to
 - **Display** (Lora 500, 26px, lh 1.15, +0.3px): The brand wordmark and primary screen headings. The landing hero scales up from here.
 - **Headline** (Lora 500, 22px, +0.5px): Sidebar logo, section heads.
 - **Title** (Lora 500, 15px): Panel titles, card headings — serif used small to keep warmth in dense UI.
-- **Body** (DM Sans 400, 13–15px, lh 1.5): All running copy, form values, table cells. Cap measure at 65–75ch in prose.
-- **Label** (DM Sans 500, 10–11px, +0.09em, uppercase): Field group labels, section eyebrows, role tags.
+- **Body** (DM Sans 400, 16px, lh 1.5): All running copy, form values, inputs, buttons, table cells. This is the `text-sm` utility (redefined to 16px in `index.css`) — the readability floor. Cap measure at 65–75ch in prose. Dense compact variants (product rows, admin fields) may drop to 14px.
+- **Field Label** (DM Sans, 14px): Input/field labels above controls (`label.tsx`) — sits just under body.
+- **Eyebrow/Tag** (DM Sans 500, 10–11px, +0.09em, uppercase): Section eyebrows, role tags. Stays small — `text-xs`/`text-[11px]`, unaffected by the body floor.
 - **Mono** (DM Mono 700, 14px, +1px): Order numbers (`PREFIX-YYYYMMDD-XXXX`), voucher codes, AWB only.
 
 ### Named Rules
