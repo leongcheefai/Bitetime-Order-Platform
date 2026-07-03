@@ -25,8 +25,6 @@ interface ProductTableMeta {
   t: (en: string, zh: string) => string
   currency?: string
   onEdit: (p: any) => void
-  onPhotos: (id: string) => void
-  onToggle: (p: any) => void
   onRemove: (p: any) => void
 }
 
@@ -102,12 +100,6 @@ const columns: ColumnDef<any>[] = [
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem className="cursor-pointer" onClick={() => meta.onEdit(p)}>{t('Edit', '编辑')}</DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => meta.onPhotos(p.id)}>
-                {t('Photos', '图片')}{p.image_urls?.length ? ` (${p.image_urls.length})` : ''}
-              </DropdownMenuItem>
-              <DropdownMenuItem className="cursor-pointer" onClick={() => meta.onToggle(p)}>
-                {p.active ? t('Hide', '隐藏') : t('Show', '显示')}
-              </DropdownMenuItem>
               <DropdownMenuItem className="cursor-pointer" onClick={() => meta.onRemove(p)}>{t('Delete', '删除')}</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -129,7 +121,6 @@ export default function ProductsManager() {
   const [draftId, setDraftId] = useState(() => crypto.randomUUID())
   // Photos being edited in the add/edit dialog (add: new draft; edit: the row's).
   const [images, setImages] = useState<string[]>([])
-  const [photoTargetId, setPhotoTargetId] = useState<string | null>(null)
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
 
@@ -173,7 +164,6 @@ export default function ProductsManager() {
     } finally { setBusy(false) }
   }
 
-  async function toggleActive(p: any) { await upsertProduct({ ...p, active: !p.active }); await load() }
   async function setProductImages(p: any, image_urls: string[]) {
     await upsertProduct({ ...p, image_urls }); await load()
   }
@@ -186,12 +176,8 @@ export default function ProductsManager() {
   const meta: ProductTableMeta = {
     t, currency,
     onEdit: openEdit,
-    onPhotos: setPhotoTargetId,
-    onToggle: toggleActive,
     onRemove: remove,
   }
-
-  const photoProduct = rows?.find(p => p.id === photoTargetId) ?? null
 
   if (!rows) return (
     <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
@@ -297,29 +283,29 @@ export default function ProductsManager() {
                   t={t}
                 />
               </div>
+              <div className="flex items-center justify-between gap-3 pt-1">
+                <div className="flex flex-col">
+                  <Label htmlFor="pm-active">{t('Visible in storefront', '在店面显示')}</Label>
+                  <span className="text-[12px] text-text-tertiary">
+                    {form.active ? t('Customers can order this', '顾客可下单') : t('Hidden from customers', '对顾客隐藏')}
+                  </span>
+                </div>
+                <button
+                  id="pm-active"
+                  type="button"
+                  role="switch"
+                  aria-checked={form.active}
+                  onClick={() => setForm({ ...form, active: !form.active })}
+                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors cursor-pointer ${form.active ? 'bg-oxblood' : 'bg-clay-border'}`}
+                >
+                  <span className={`inline-block size-5 rounded-full bg-white shadow-sm transition-transform ${form.active ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                </button>
+              </div>
             </div>
             <Button type="submit" size="md" className="mt-4 w-full" disabled={busy}>
               {busy ? t('Saving…', '保存中…') : editingProduct ? t('Save changes', '保存更改') : t('Add product', '添加产品')}
             </Button>
           </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Photo management for an existing product */}
-      <Dialog open={!!photoTargetId} onOpenChange={o => { if (!o) setPhotoTargetId(null) }}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>{photoProduct ? `${t('Photos', '图片')} — ${photoProduct.name}` : t('Photos', '图片')}</DialogTitle>
-          </DialogHeader>
-          {photoProduct && (
-            <ImagePicker
-              merchantId={merchant!.id}
-              productId={photoProduct.id}
-              value={photoProduct.image_urls ?? []}
-              onChange={paths => setProductImages(photoProduct, paths)}
-              t={t}
-            />
-          )}
         </DialogContent>
       </Dialog>
     </div>
