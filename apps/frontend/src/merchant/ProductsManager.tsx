@@ -14,10 +14,26 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '../components/ui/dropdown-menu'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import ImagePicker from './ProductImages'
 
-const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pc', active: true }
+// Canonical unit options (value stored as-is; label is bilingual).
+const UNITS: { value: string; en: string; zh: string }[] = [
+  { value: 'pcs', en: 'pcs', zh: '件' },
+  { value: 'box', en: 'box', zh: '盒' },
+  { value: 'set', en: 'set', zh: '套' },
+  { value: 'pack', en: 'pack', zh: '包' },
+  { value: 'dozen', en: 'dozen', zh: '打' },
+  { value: 'bottle', en: 'bottle', zh: '瓶' },
+  { value: 'jar', en: 'jar', zh: '罐' },
+  { value: 'tray', en: 'tray', zh: '盘' },
+  { value: 'slice', en: 'slice', zh: '片' },
+  { value: 'kg', en: 'kg', zh: '公斤' },
+  { value: 'g', en: 'g', zh: '克' },
+]
+
+const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pcs', active: true }
 
 // Handlers + language + currency ride on table.options.meta so the column defs stay
 // stable (defined once) and never reset sorting when a row action refetches.
@@ -260,13 +276,20 @@ export default function ProductsManager() {
               </div>
               <div className="flex flex-col gap-[6px]">
                 <Label htmlFor="pm-5">{t('Unit', '单位')}</Label>
-                <Input
-                  id="pm-5"
-                  variant="compact"
-                  value={form.unit}
-                  onChange={e => setForm({ ...form, unit: e.target.value })}
-                  placeholder="pc / box / kg"
-                />
+                <Select value={form.unit} onValueChange={v => setForm({ ...form, unit: v })}>
+                  <SelectTrigger id="pm-5" className="w-full bg-cream border-clay-border text-[13px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {/* Keep a legacy value (e.g. old "pc") selectable so existing rows survive. */}
+                    {form.unit && !UNITS.some(u => u.value === form.unit) && (
+                      <SelectItem value={form.unit}>{form.unit}</SelectItem>
+                    )}
+                    {UNITS.map(u => (
+                      <SelectItem key={u.value} value={u.value}>{t(u.en, u.zh)}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="flex flex-col gap-[6px]">
                 <Label>{t('Photos (optional)', '图片（可选）')}</Label>
