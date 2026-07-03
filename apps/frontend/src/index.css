@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@400;500&family=Noto+Serif+SC:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap');
 @import 'tailwindcss';
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -161,7 +161,7 @@ html { scroll-behavior: smooth; }
   }
 }
 
-body { font-family: 'DM Sans', sans-serif; background: var(--color-cream); color: var(--color-ink); min-height: 100vh; padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; scrollbar-gutter: stable; overflow-x: hidden; }
+body { font-family: 'DM Sans', 'Noto Sans SC', sans-serif; background: var(--color-cream); color: var(--color-ink); min-height: 100vh; padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; scrollbar-gutter: stable; overflow-x: hidden; }
 /* AA-passing placeholder (browser default fails contrast on cream) */
 input::placeholder, textarea::placeholder { color: var(--color-text-tertiary); opacity: 1; }
 .form-wrap { max-width: 600px; width: calc(100vw - 2rem); }
@@ -188,8 +188,14 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 /* shadcn semantic color bridges → Tailwind utilities (e.g. bg-primary, text-muted-foreground).
    Radius entries sm–2xl removed here — brand @theme inline (top of file) owns those. */
 @theme inline {
-  --font-heading: 'Lora', serif;
-  --font-sans: 'DM Sans', sans-serif;
+  --font-heading: 'Lora', 'Noto Serif SC', serif;
+  --font-sans: 'DM Sans', 'Noto Sans SC', sans-serif;
+  /* Body floor: text-sm is the app's de-facto body utility (buttons, inputs,
+     card/prose copy). Raised from Tailwind's 14px default to 16px for
+     readability + to stop iOS input-focus zoom. Eyebrows/labels stay small
+     via text-xs / text-[11px], which are unaffected. */
+  --text-sm: 1rem;
+  --text-sm--line-height: 1.5;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
