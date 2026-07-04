@@ -480,6 +480,25 @@ export async function setOrderNote(orderId: string, note: string) {
   return data
 }
 
+export async function setOrderTracking(orderId: string, courier: string | null, awb: string) {
+  const trimmed = awb.trim()
+  const { data, error } = await supabase
+    .from('orders')
+    .update({ courier: courier || null, awb: trimmed || null })
+    .eq('id', orderId).select().single()
+  if (error) throw error
+  return data
+}
+
+export async function fetchOrderTracking(merchantId: string, orderNumber: string) {
+  const trimmed = orderNumber.trim()
+  if (!merchantId || !trimmed) return null
+  const { data, error } = await supabase
+    .rpc('track_order', { p_merchant: merchantId, p_order_number: trimmed })
+  if (error || !data || !data.length) return null
+  return data[0] as { status: string; mode: string; courier: string | null; awb: string | null; created_at: string }
+}
+
 export async function fetchMerchantCustomers(merchantId: string) {
   const orders = await fetchMerchantOrders(merchantId)
   const byWa = new Map()
