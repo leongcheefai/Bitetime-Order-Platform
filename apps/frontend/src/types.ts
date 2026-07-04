@@ -51,6 +51,7 @@ export interface Product {
   description?: string
   price: number
   unit?: string
+  unit_quantity?: number  // display-only quantity paired with unit; defaults to 1
   sort?: number
   image_urls?: string[]
   created_at?: string
