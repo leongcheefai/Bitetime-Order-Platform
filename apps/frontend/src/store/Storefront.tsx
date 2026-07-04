@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
+import { Link } from 'react-router-dom'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
@@ -249,9 +250,14 @@ export default function Storefront() {
               </div>
             )}
 
-            <button type="button" className="text-[13px] text-rose-muted cursor-pointer underline mt-5 inline-block" onClick={handleReset}>
-              {t('Place another order', '再下一单')}
-            </button>
+            <div className="flex flex-col items-center gap-2 mt-5">
+              <Link to={`/s/${merchant.slug}/track`} className="text-[13px] text-oxblood font-medium underline">
+                {t('Track your order', '追踪订单')}
+              </Link>
+              <button type="button" className="text-[13px] text-rose-muted cursor-pointer underline inline-block" onClick={handleReset}>
+                {t('Place another order', '再下一单')}
+              </button>
+            </div>
           </div>
         </motion.div>
       ) : (
@@ -264,6 +270,9 @@ export default function Storefront() {
               <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">
                 {t('Powered by BiteTime', 'BiteTime 提供技术支持')}
               </p>
+              <Link to={`/s/${merchant.slug}/track`} className="text-[12px] text-oxblood underline mt-1 inline-block">
+                {t('Track an order', '追踪订单')}
+              </Link>
             </div>
             <div className="flex justify-end flex-shrink-0 max-[480px]:justify-start">
               <LanguageSelect />
