@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { MoreHorizontal } from 'lucide-react'
+import { MoreHorizontal, Package } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
 import { fetchProducts, upsertProduct, deleteProduct, deleteProductImages, productImageUrl } from '../store'
@@ -17,6 +17,7 @@ import {
 } from '../components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { DataTable, SortableHeader } from '../components/ui/data-table'
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '../components/ui/empty'
 import ImagePicker from './ProductImages'
 
 // Canonical unit options (value stored as-is; label is bilingual).
@@ -214,15 +215,34 @@ export default function ProductsManager() {
         </Button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        meta={meta}
-        searchPlaceholder={t('Search products…', '搜索产品…')}
-        emptyText={t('No products yet — tap “Add product” to create your first.', '还没有产品 — 点击“添加产品”创建第一个。')}
-        prevLabel={t('Previous', '上一页')}
-        nextLabel={t('Next', '下一页')}
-      />
+      {rows.length === 0 ? (
+        <Empty className="border-[1.5px] border-dashed border-clay-border bg-cream/50">
+          <EmptyHeader>
+            <EmptyMedia variant="icon" className="bg-oxblood-tint text-oxblood">
+              <Package />
+            </EmptyMedia>
+            <EmptyTitle className="text-oxblood">{t('No products yet', '还没有产品')}</EmptyTitle>
+            <EmptyDescription className="text-rose-muted">
+              {t('Add your first product to start taking orders in your storefront.', '添加第一个产品，开始在店面接收订单。')}
+            </EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button type="button" size="none" className="rounded-pill py-[6px] px-[14px] text-[13px]" onClick={openAdd}>
+              {t('+ Add product', '+ 添加产品')}
+            </Button>
+          </EmptyContent>
+        </Empty>
+      ) : (
+        <DataTable
+          columns={columns}
+          data={rows}
+          meta={meta}
+          searchPlaceholder={t('Search products…', '搜索产品…')}
+          emptyText={t('No products match your search.', '没有匹配的产品。')}
+          prevLabel={t('Previous', '上一页')}
+          nextLabel={t('Next', '下一页')}
+        />
+      )}
 
       {/* Add / edit product details. disablePointerDismissal: the unit Select
           portals its menu to <body>, so an item click would otherwise read as an

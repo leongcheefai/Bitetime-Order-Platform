@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Ticket } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
 import { fetchMerchantVouchers, createMerchantVoucher, deleteMerchantVoucher } from '../store'
@@ -7,6 +8,7 @@ import { SkeletonText } from '../components/Loaders'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription } from '../components/ui/empty'
 import type { Voucher } from '../types'
 
 const BLANK = { code: '', kind: 'percent', amount: '', maxUses: '' }
@@ -93,7 +95,17 @@ export default function VouchersManager() {
           {t('Your vouchers', '您的优惠券')}
         </h3>
         {rows.length === 0 ? (
-          <p className="text-[13px] text-text-tertiary italic">{t('No vouchers yet — create your first below.', '还没有优惠券 — 在下方创建。')}</p>
+          <Empty className="border-[1.5px] border-dashed border-clay-border bg-cream/50">
+            <EmptyHeader>
+              <EmptyMedia variant="icon" className="bg-oxblood-tint text-oxblood">
+                <Ticket />
+              </EmptyMedia>
+              <EmptyTitle className="text-oxblood">{t('No vouchers yet', '还没有优惠券')}</EmptyTitle>
+              <EmptyDescription className="text-rose-muted">
+                {t('Create your first voucher below to offer discounts at checkout.', '在下方创建第一张优惠券，为结账提供折扣。')}
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : (
           <div className="flex flex-col gap-2">
             {rows.map((v: Voucher) => (

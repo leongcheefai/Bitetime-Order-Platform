@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-06-27T17:00:00.000Z",
+  "generatedAt": "2026-07-04T05:45:12.000Z",
   "title": "Design System: BiteTime",
   "extensions": {
     "colorMeta": {
@@ -99,6 +99,14 @@
       "description": "Signature receipt stamp — the only monospace in customer UI.",
       "html": "<span class=\"ds-order-stamp\">BT-20260627-0042</span>",
       "css": ".ds-order-stamp { font-family: 'DM Mono', 'Courier New', monospace; font-size: 14px; font-weight: 700; letter-spacing: 1px; color: #7A1028; }"
+    },
+    {
+      "name": "Empty State",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "No-records placeholder for merchant lists (products, vouchers) — dashed clay frame on a faint cream wash, oxblood-tint icon tile, optional action.",
+      "html": "<div class=\"ds-empty\"><div class=\"ds-empty-icon\"><svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M16.5 9.4 7.55 4.24\"/><path d=\"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z\"/><path d=\"m3.3 7 8.7 5 8.7-5\"/><path d=\"M12 22V12\"/></svg></div><div class=\"ds-empty-title\">No products yet</div><div class=\"ds-empty-desc\">Add your first product to start taking orders in your storefront.</div><button class=\"ds-empty-action\">+ Add product</button></div>",
+      "css": ".ds-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; padding: 24px; border: 1.5px dashed #C9A090; border-radius: 12px; background: rgba(242,234,224,0.5); } .ds-empty-icon { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-bottom: 8px; border-radius: 8px; background: #F5E6E8; color: #7A1028; } .ds-empty-icon svg { width: 16px; height: 16px; } .ds-empty-title { font-family: 'Lora', Georgia, serif; font-size: 15px; font-weight: 500; color: #7A1028; } .ds-empty-desc { max-width: 24rem; font-family: 'DM Sans', sans-serif; font-size: 13px; line-height: 1.6; color: #7A4F55; } .ds-empty-action { margin-top: 2px; font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500; color: #F2EAE0; background: #7A1028; border: none; border-radius: 20px; padding: 6px 14px; cursor: pointer; transition: background 0.15s; } .ds-empty-action:hover { background: #550A1A; }"
     }
   ],
   "narrative": {
