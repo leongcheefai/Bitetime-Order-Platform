@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl } from '../store'
 import { priceOrder, voucherError } from '../pricing'
 import { formatMoney } from '../currency'
+import { formatUnit } from '../productUnit'
 import type { Product, Voucher } from '../types'
 import LanguageSelect from '../components/LanguageSelect'
 import ImageLightbox from '../components/ImageLightbox'
@@ -307,7 +308,7 @@ export default function Storefront() {
                         <div className="text-[12px] text-rose-muted mt-0.5 leading-[1.4]">{productDescr(p)}</div>
                       )}
                       <div className="text-[13px] font-medium text-oxblood mt-[5px]">
-                        {formatMoney(p.price, currency)} / {p.unit || t('unit', '个')}
+                        {formatMoney(p.price, currency)} / {formatUnit(p.unit_quantity, p.unit || t('unit', '个'))}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
