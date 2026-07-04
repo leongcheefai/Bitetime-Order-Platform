@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
 import { resolveReferredByCode } from './referralCode'
-import type { Voucher } from './types';
+import type { ReferredShop, Voucher } from './types';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -389,6 +389,15 @@ export async function deleteMerchantVoucher(id: string) {
 // profiles.referral_code for lookup.
 export function referralCodeOf(userId: string) {
   return (userId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+// Shops that signed up with the current user's referral code. Reads the
+// my_referred_shops SECURITY DEFINER RPC, which filters by the caller's own code and
+// returns only name/created_at/status.
+export async function fetchReferredShops(): Promise<ReferredShop[]> {
+  const { data, error } = await supabase.rpc('my_referred_shops')
+  if (error) throw error
+  return (data ?? []) as ReferredShop[]
 }
 
 // ── Multi-tenant order placement ─────────────────────────────────────────────

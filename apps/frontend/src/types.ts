@@ -30,6 +30,12 @@ export interface Merchant {
   [key: string]: any
 }
 
+export interface ReferredShop {
+  name: string
+  created_at: string
+  status: MerchantStatus
+}
+
 export interface Profile {
   id: string
   name?: string
