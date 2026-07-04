@@ -383,9 +383,14 @@ export default function Storefront() {
             {mode === 'pickup' && merchant?.pickup_address && (
               <div className="flex flex-col gap-1.5 mt-3">
                 <div className="text-[13px] font-medium text-oxblood">{t('Pickup address', '自取地址')}</div>
-                <div className="text-[14px] text-ink whitespace-pre-line leading-[1.5]">
+                <a
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(merchant.pickup_address)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[14px] text-oxblood whitespace-pre-line leading-[1.5] underline decoration-oxblood/30 underline-offset-2 hover:decoration-oxblood transition-colors"
+                >
                   {merchant.pickup_address}
-                </div>
+                </a>
               </div>
             )}
             {mode === 'delivery' && (
