@@ -27,6 +27,8 @@ interface DataTableProps<TData, TValue> {
   pageSize?: number
   /** Forwarded to TanStack as table.options.meta — cells read handlers/state from it. */
   meta?: unknown
+  /** When set, clicking a row calls this with the row's original data. */
+  onRowClick?: (row: TData) => void
 }
 
 // Generic TanStack-backed table: global search, sortable columns, client pagination.
@@ -41,6 +43,7 @@ export function DataTable<TData, TValue>({
   nextLabel = 'Next',
   pageSize = 10,
   meta,
+  onRowClick,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = React.useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = React.useState('')
@@ -88,7 +91,11 @@ export function DataTable<TData, TValue>({
         <TableBody>
           {table.getRowModel().rows.length ? (
             table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id}>
+              <TableRow
+                key={row.id}
+                onClick={onRowClick ? () => onRowClick(row.original) : undefined}
+                className={onRowClick ? 'cursor-pointer' : undefined}
+              >
                 {row.getVisibleCells().map((cell) => (
                   <TableCell key={cell.id} className="p-3">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
