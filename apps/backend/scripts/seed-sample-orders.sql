@@ -67,7 +67,7 @@ begin
      '[{"id":"chewy","name":"Soft & chewy cookies","qty":1,"price":12},
        {"id":"crinkle","name":"Crinkle cookies","qty":1,"price":12},
        {"id":"lava","name":"Stuffed / lava cookies","qty":1,"price":15}]'::jsonb,
-     47, v_prefix || '-' || v_day || '-0053', 'shipped', 'AWB SPX123456789'),
+     47, v_prefix || '-' || v_day || '-0053', 'ready', 'AWB SPX123456789'),
 
     (v_mid, now() - interval '1 day', null, 'Daniel Lim', '60134567890',
      current_date, 'pickup', null, null, 0,
