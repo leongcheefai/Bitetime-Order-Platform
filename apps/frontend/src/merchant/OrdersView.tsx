@@ -5,7 +5,6 @@ import { fetchMerchantOrders, setOrderStatus, setOrderNote, setOrderTracking } f
 import { formatMoney } from '../currency'
 import { SkeletonText } from '../components/Loaders'
 import { toast } from 'sonner'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
@@ -14,16 +13,7 @@ import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet'
 import { COURIERS, trackingUrl, courierName } from '../couriers'
-
-const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
-
-const STATUS_LABELS: Record<string, { en: string; zh: string }> = {
-  new:       { en: 'New',       zh: '新订单' },
-  preparing: { en: 'Preparing', zh: '备料中' },
-  ready:     { en: 'Ready',     zh: '已备好' },
-  completed: { en: 'Completed', zh: '已完成' },
-  cancelled: { en: 'Cancelled', zh: '已取消' },
-}
+import { ORDER_STATUSES, STATUS_LABELS, StatusBadge } from '../orderStatus'
 
 // Delivery mode → display label. Unknown modes fall back to capitalized raw.
 const MODE_LABELS: Record<string, { en: string; zh: string }> = {
@@ -36,16 +26,6 @@ function modeLabel(mode: string | null | undefined, t: (en: string, zh: string) 
   if (!mode) return '—'
   const m = MODE_LABELS[mode]
   return m ? t(m.en, m.zh) : mode.charAt(0).toUpperCase() + mode.slice(1)
-}
-
-// Status → Badge config (unchanged from the card version).
-type BadgeConfig = { variant?: 'infoBlue' | 'danger'; className?: string }
-const STATUS_BADGE: Record<string, BadgeConfig> = {
-  new:       { variant: 'infoBlue' },
-  preparing: { className: 'bg-warn-bg-alt text-warn-fg-alt border-transparent' },
-  ready:     { className: 'bg-success-bg-soft text-success-deep border-transparent' },
-  completed: { className: 'bg-prep-bg-alt text-prep-fg-alt border-transparent' },
-  cancelled: { className: 'bg-danger-bg text-danger-fg border-transparent' },
 }
 
 // 11px semibold uppercase rose-muted label.
@@ -63,15 +43,6 @@ function fmtTime(iso: string | null | undefined) {
   if (!iso) return '—'
   const d = new Date(iso)
   return d.toLocaleString('en-MY', { dateStyle: 'short', timeStyle: 'short' })
-}
-
-function StatusBadge({ status, t }: { status: string; t: (en: string, zh: string) => string }) {
-  const badge = STATUS_BADGE[status] ?? { variant: 'infoBlue' as const }
-  return (
-    <Badge variant={badge.variant} className={badge.className}>
-      {t(STATUS_LABELS[status]?.en ?? status, STATUS_LABELS[status]?.zh ?? status)}
-    </Badge>
-  )
 }
 
 // Handlers + language + currency ride on table.options.meta so the column defs
