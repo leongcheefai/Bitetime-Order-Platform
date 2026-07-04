@@ -40,53 +40,68 @@ Apply locally with `pnpm --filter @bitetime/backend db:migrate` so PostgREST's s
 
 ### Type
 
+The frontend uses **raw snake_case DB columns** — `fetchProducts` does `select('*')` and returns rows untouched; `upsertProduct` writes the object as-is. There is no snake↔camel mapper. So the field is `unit_quantity` everywhere (matching `merchant_id`, `name_zh`, `image_urls`).
+
 `apps/frontend/src/types.ts` — add to `Product`:
 
 ```ts
-unitQuantity: number  // defaults to 1
+unit_quantity?: number  // defaults to 1
 ```
 
-`apps/frontend/src/store.ts` — map `unit_quantity` ↔ `unitQuantity` in the product read/write mappers, alongside the existing `unit` mapping.
+No `store.ts` change needed (`Product` already has `[key: string]: any`; the explicit field is for documentation).
+
+### Helper module
+
+New pure module `apps/frontend/src/productUnit.ts` (no React) so both the dashboard and storefront share one implementation and it's unit-testable:
+
+```ts
+// Coerce a form/DB value to a valid positive quantity; fall back to 1.
+export function coerceQuantity(v: unknown): number {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
+// Display: "<quantity> <unit>", always a single space. Legacy rows without a
+// quantity render as "1 <unit>". `unit` is the raw enum value / label string
+// the caller already resolves (display does not localize the unit today).
+export function formatUnit(quantity: unknown, unit: string): string {
+  return `${coerceQuantity(quantity)} ${unit}`
+}
+```
+
+Displays currently show the **raw** `p.unit` string (not localized) — that behavior is unchanged; `formatUnit` only prefixes the quantity.
 
 ### Edit UI
 
 `apps/frontend/src/merchant/ProductsManager.tsx`:
-- `BLANK.unitQuantity = 1` (default when adding).
-- On edit load, fall back to `1` if absent (legacy rows).
-- In the dialog (near the existing unit `Select`, ~:281), add a number input **before** the unit dropdown:
+- `BLANK.unit_quantity = 1` (default when adding).
+- `openEdit` loads `unit_quantity: p.unit_quantity ?? 1` (legacy rows).
+- In the dialog (the existing unit `Select` block, :279–296), put a number input and the unit dropdown side by side, quantity **before** the unit:
   `[ 100 ] [ g ▾ ]`
-  - `type=number`, `min` > 0 (e.g. `step="0.01"`, `min="0.01"`), default `1`.
-  - Reject blank / non-positive on save (coerce to `1` or block save — see Error handling).
+  - `type=number`, `step="0.01"`, `min="0.01"`, bound to `form.unit_quantity`.
+- `save` writes `unit_quantity: coerceQuantity(form.unit_quantity)` so `0`, blank, negative, or `NaN` never persist.
 
 ### Display
 
-Add a pure helper (co-locate with the UNITS map in `ProductsManager.tsx`, exported for reuse and testing):
+Replace bare-unit rendering with `formatUnit(...)` from `productUnit.ts`:
+- Dashboard table cell — `ProductsManager.tsx:90`: `{formatMoney(p.price, currency)} / {formatUnit(p.unit_quantity, p.unit)}`
+- Storefront menu item — `Storefront.tsx:310`: `{formatMoney(p.price, currency)} / {formatUnit(p.unit_quantity, p.unit || t('unit', '个'))}`
 
-```ts
-formatUnit(quantity: number, unitLabel: string): string
-// => `${quantity} ${unitLabel}`  e.g. "100 g", "1 pcs", "1.5 kg"
-```
-
-- **Always a single space** between quantity and unit (locked decision — no per-unit spacing rule).
-- `unitLabel` is the already-localized label from the existing UNITS map (EN/ZH), so bilingual display is preserved.
-
-Replace bare-unit rendering with `formatUnit(...)` at:
-- Dashboard table cell — `ProductsManager.tsx:90`
-- Storefront menu item — `Storefront.tsx:310`
+**Always a single space** between quantity and unit (locked decision — no per-unit spacing rule).
 
 ### Pricing
 
-Untouched. `pricing.ts` does not read `unit` or `unitQuantity`. Zero change to order math or totals.
+Untouched. `pricing.ts` does not read `unit` or `unit_quantity`. Zero change to order math or totals.
 
 ### Error handling
 
-- Empty / non-positive quantity input: on save, coerce to `1` (never persist `0`, negative, or `NaN`). Keeps the invariant that every product has a valid positive quantity.
-- Legacy rows / missing value on load: treat as `1`.
+- `coerceQuantity` guarantees every saved product has a finite positive quantity (never `0`, negative, or `NaN`).
+- Legacy rows / missing value on load or display: treated as `1`.
 
 ## Testing
 
-- Unit test for `formatUnit`: whole number (`1 pcs`), decimal (`1.5 kg`), with both EN and ZH unit labels, confirming the single-space format.
-- Existing `store.ts` / pricing tests unaffected; add coverage for the `unitQuantity` mapper round-trip if the store mapper has existing tests.
+- Unit test for `productUnit.ts`: `formatUnit` whole number (`1 pcs`), decimal (`1.5 kg`); `coerceQuantity` for blank / `0` / negative / `NaN` / valid decimal → correct fallback to `1` or pass-through.
+- Existing `store.ts` / pricing tests unaffected.
 - UI verified by run-and-verify (per repo convention — no component tests).
 
 ## Files touched
@@ -94,8 +109,8 @@ Untouched. `pricing.ts` does not read `unit` or `unitQuantity`. Zero change to o
 | File | Change |
 |------|--------|
 | `apps/backend/supabase/migrations/<new>.sql` | add `unit_quantity numeric not null default 1` |
-| `apps/frontend/src/types.ts` | add `unitQuantity` to `Product` |
-| `apps/frontend/src/store.ts` | map `unit_quantity` ↔ `unitQuantity` |
-| `apps/frontend/src/merchant/ProductsManager.tsx` | default, edit-load fallback, dialog number input, `formatUnit` helper, table display |
+| `apps/frontend/src/productUnit.ts` | new — `coerceQuantity`, `formatUnit` |
+| `apps/frontend/src/productUnit.test.ts` | new — unit tests |
+| `apps/frontend/src/types.ts` | add `unit_quantity?: number` to `Product` |
+| `apps/frontend/src/merchant/ProductsManager.tsx` | default, edit-load, dialog number input, save coerce, table display |
 | `apps/frontend/src/store/Storefront.tsx` | use `formatUnit` in menu item display |
-| `apps/frontend/src/merchant/*.test.ts` | `formatUnit` unit test |
