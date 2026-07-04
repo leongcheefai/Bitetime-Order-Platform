@@ -75,6 +75,12 @@ export default function TrackOrder() {
             <span className="font-mono text-[15px] text-oxblood">{orderNo.trim().toUpperCase()}</span>
             <StatusBadge status={result.status || 'new'} t={t} />
           </div>
+          {result.created_at && (
+            <div className="text-[13px] text-ink">
+              <span className="text-rose-muted">{t('Ordered', '下单日期')}: </span>
+              {new Date(result.created_at).toLocaleDateString('en-MY', { dateStyle: 'medium' })}
+            </div>
+          )}
           {result.courier && (
             <div className="text-[13px] text-ink">
               <span className="text-rose-muted">{t('Courier', '快递公司')}: </span>

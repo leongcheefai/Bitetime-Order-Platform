@@ -142,7 +142,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
   const [orders, setOrders] = useState<any[] | null>(null)
   const [selected, setSelected] = useState<any | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
-  const [noteFor, setNoteFor] = useState<string | undefined>(undefined)
+  const [drawerFor, setDrawerFor] = useState<string | undefined>(undefined)
   const [savingNote, setSavingNote] = useState(false)
   const [courierDraft, setCourierDraft] = useState('')
   const [awbDraft, setAwbDraft] = useState('')
@@ -152,10 +152,11 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
     fetchMerchantOrders(merchant!.id).then(setOrders)
   }, [merchant!.id])
 
-  // Re-seed the note draft when a different order opens (adjust-state-during-render:
-  // keyed on id so a status/note patch that replaces `selected` mid-view keeps typing).
-  if (selected && selected.id !== noteFor) {
-    setNoteFor(selected.id)
+  // Re-seed the drawer's editable drafts (note, courier, awb) when a different order
+  // opens (adjust-state-during-render: keyed on id so a status/note/tracking patch that
+  // replaces `selected` mid-view keeps typing).
+  if (selected && selected.id !== drawerFor) {
+    setDrawerFor(selected.id)
     setNoteDraft(selected.note ?? '')
     setCourierDraft(selected.courier ?? '')
     setAwbDraft(selected.awb ?? '')
@@ -222,7 +223,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
         nextLabel={t('Next', '下一页')}
       />
 
-      <Sheet open={selected !== null} onOpenChange={open => { if (!open) { setSelected(null); setNoteFor(undefined) } }}>
+      <Sheet open={selected !== null} onOpenChange={open => { if (!open) { setSelected(null); setDrawerFor(undefined) } }}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           {selected && (
             <>
