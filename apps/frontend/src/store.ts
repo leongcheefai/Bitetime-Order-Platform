@@ -472,6 +472,14 @@ export async function setOrderStatus(orderId: string, status: string) {
   return data
 }
 
+export async function setOrderNote(orderId: string, note: string) {
+  const trimmed = note.trim()
+  const { data, error } = await supabase
+    .from('orders').update({ note: trimmed || null }).eq('id', orderId).select().single()
+  if (error) throw error
+  return data
+}
+
 export async function fetchMerchantCustomers(merchantId: string) {
   const orders = await fetchMerchantOrders(merchantId)
   const byWa = new Map()

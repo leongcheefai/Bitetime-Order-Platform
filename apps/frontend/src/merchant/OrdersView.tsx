@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useSession } from '../SessionContext'
-import { fetchMerchantOrders, setOrderStatus } from '../store'
+import { fetchMerchantOrders, setOrderStatus, setOrderNote } from '../store'
 import { formatMoney } from '../currency'
 import { SkeletonText } from '../components/Loaders'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { DataTable, SortableHeader } from '@/components/ui/data-table'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
@@ -19,6 +21,19 @@ const STATUS_LABELS: Record<string, { en: string; zh: string }> = {
   ready:     { en: 'Ready',     zh: '已备好' },
   completed: { en: 'Completed', zh: '已完成' },
   cancelled: { en: 'Cancelled', zh: '已取消' },
+}
+
+// Delivery mode → display label. Unknown modes fall back to capitalized raw.
+const MODE_LABELS: Record<string, { en: string; zh: string }> = {
+  pickup:   { en: 'Pickup',   zh: '自取' },
+  delivery: { en: 'Delivery', zh: '送货' },
+  sameday:  { en: 'Same-day', zh: '当日送达' },
+}
+
+function modeLabel(mode: string | null | undefined, t: (en: string, zh: string) => string) {
+  if (!mode) return '—'
+  const m = MODE_LABELS[mode]
+  return m ? t(m.en, m.zh) : mode.charAt(0).toUpperCase() + mode.slice(1)
 }
 
 // Status → Badge config (unchanged from the card version).
@@ -41,11 +56,6 @@ const SELECT_CLS =
   'focus:outline-none focus:border-oxblood focus:shadow-[0_0_0_2px_rgba(122,16,40,0.1)]'
 
 const CHEVRON_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A4F55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`
-
-function itemsSummary(items: any[] | null | undefined) {
-  if (!items || !items.length) return '—'
-  return items.map((i: any) => `${i.qty}× ${i.name}`).join(', ')
-}
 
 function fmtTime(iso: string | null | undefined) {
   if (!iso) return '—'
@@ -132,13 +142,25 @@ const columns: ColumnDef<any>[] = [
   },
 ]
 
-// A labelled key/value line in the detail sheet — value hidden when empty.
+// A labelled key/value line in the detail sheet — label in a fixed left column,
+// value aligned in the right column so rows scan like a receipt.
 function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex gap-2 flex-wrap text-[13px] text-ink">
+    <div className="grid grid-cols-[84px_1fr] gap-x-3 items-baseline text-[13px]">
       <span className={LBL}>{label}</span>
-      <span className="min-w-0 break-words">{children}</span>
+      <span className="min-w-0 break-words text-ink">{children}</span>
     </div>
+  )
+}
+
+// A visually separated group in the detail sheet. Sections after the first get a
+// top divider + spacing; an optional caption heads the group.
+function Section({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2 pt-4 mt-4 border-t border-surface-sunken first:pt-0 first:mt-0 first:border-t-0">
+      {title && <span className={LBL}>{title}</span>}
+      {children}
+    </section>
   )
 }
 
@@ -146,21 +168,46 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
   const { t, merchant } = useSession()
   const [orders, setOrders] = useState<any[] | null>(null)
   const [selected, setSelected] = useState<any | null>(null)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [noteFor, setNoteFor] = useState<string | undefined>(undefined)
+  const [savingNote, setSavingNote] = useState(false)
 
   useEffect(() => {
     fetchMerchantOrders(merchant!.id).then(setOrders)
   }, [merchant!.id])
 
+  // Re-seed the note draft when a different order opens (adjust-state-during-render:
+  // keyed on id so a status/note patch that replaces `selected` mid-view keeps typing).
+  if (selected && selected.id !== noteFor) {
+    setNoteFor(selected.id)
+    setNoteDraft(selected.note ?? '')
+  }
+
+  function patchOrder(updated: any) {
+    setOrders(prev => (prev ? prev.map(o => (o.id === updated.id ? updated : o)) : prev))
+    setSelected((cur: any) => (cur && cur.id === updated.id ? updated : cur))
+  }
+
   function handleStatusChange(order: any, status: string) {
-    setOrderStatus(order.id, status).then(updated => {
-      setOrders(prev => (prev ? prev.map(o => (o.id === updated.id ? updated : o)) : prev))
-      setSelected((cur: any) => (cur && cur.id === updated.id ? updated : cur))
-    }).catch(() => {
+    setOrderStatus(order.id, status).then(patchOrder).catch(() => {
       toast.error(t('Could not update order status.', '无法更新订单状态。'))
     })
   }
 
+  function handleNoteSave() {
+    if (!selected) return
+    setSavingNote(true)
+    setOrderNote(selected.id, noteDraft).then(updated => {
+      patchOrder(updated)
+      toast.success(t('Note saved', '备注已保存'))
+    }).catch(() => {
+      toast.error(t('Could not save note.', '无法保存备注。'))
+    }).finally(() => setSavingNote(false))
+  }
+
   const meta: OrderTableMeta = { t, currency: merchant?.currency }
+  const orderCurrency = selected?.currency ?? merchant?.currency
+  const noteDirty = selected != null && noteDraft.trim() !== (selected.note ?? '')
 
   if (orders === null) {
     return (
@@ -184,7 +231,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
         nextLabel={t('Next', '下一页')}
       />
 
-      <Sheet open={selected !== null} onOpenChange={open => { if (!open) setSelected(null) }}>
+      <Sheet open={selected !== null} onOpenChange={open => { if (!open) { setSelected(null); setNoteFor(undefined) } }}>
         <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
           {selected && (
             <>
@@ -196,48 +243,94 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                 <span className="text-[12px] text-text-tertiary">{fmtTime(selected.created_at)}</span>
               </SheetHeader>
 
-              <div className="flex flex-col gap-[10px] px-4 pb-4">
-                <DetailRow label={t('Customer', '顾客')}>
-                  {selected.customer_name || '—'}
+              <div className="flex flex-col px-4 pb-4">
+                {/* Customer */}
+                <Section title={t('Customer', '顾客')}>
+                  <span className="text-[14px] font-medium text-ink">{selected.customer_name || '—'}</span>
                   {selected.customer_wa && (
-                    <>
-                      {'  '}
-                      <a
-                        href={`https://wa.me/${selected.customer_wa.replace(/\D/g, '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-oxblood no-underline font-medium hover:underline"
-                      >
-                        {selected.customer_wa}
-                      </a>
-                    </>
+                    <a
+                      href={`https://wa.me/${selected.customer_wa.replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[13px] text-oxblood no-underline font-medium hover:underline w-fit"
+                    >
+                      {selected.customer_wa}
+                    </a>
                   )}
-                </DetailRow>
+                </Section>
 
-                <DetailRow label={t('Items', '商品')}>{itemsSummary(selected.items)}</DetailRow>
+                {/* Items + totals */}
+                <Section title={t('Items', '商品')}>
+                  <ul className="flex flex-col gap-1.5">
+                    {(selected.items ?? []).map((it: any, i: number) => (
+                      <li key={i} className="flex justify-between gap-3 text-[13px] text-ink">
+                        <span className="min-w-0 break-words">
+                          <span className="text-rose-muted tabular-nums">{it.qty}×</span> {it.name}
+                        </span>
+                        <span className="tabular-nums text-text-secondary whitespace-nowrap">
+                          {formatMoney((it.price ?? 0) * (it.qty ?? 0), orderCurrency)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-col gap-1 pt-2 mt-1 border-t border-dashed border-clay-border text-[13px]">
+                    {selected.shipping_fee != null && (
+                      <div className="flex justify-between">
+                        <span className="text-rose-muted">{t('Shipping', '运费')}</span>
+                        <span className="tabular-nums text-ink">{formatMoney(selected.shipping_fee, orderCurrency)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-medium">
+                      <span className="text-ink">{t('Total', '总计')}</span>
+                      <span className="tabular-nums text-oxblood">{formatMoney(selected.total, orderCurrency)}</span>
+                    </div>
+                  </div>
+                </Section>
 
-                <DetailRow label={t('Total', '总计')}>
-                  <strong>{formatMoney(selected.total, selected.currency ?? merchant?.currency)}</strong>
-                </DetailRow>
+                {/* Fulfilment */}
+                <Section title={t('Fulfilment', '配送')}>
+                  <DetailRow label={t('Mode', '方式')}>{modeLabel(selected.mode, t)}</DetailRow>
+                  {selected.region && <DetailRow label={t('Region', '地区')}>{selected.region}</DetailRow>}
+                  {selected.address && <DetailRow label={t('Address', '地址')}>{selected.address}</DetailRow>}
+                  {selected.preferred_date && (
+                    <DetailRow label={t('Date', '日期')}>{selected.preferred_date}</DetailRow>
+                  )}
+                  {selected.awb && <DetailRow label={t('AWB', '运单号')}>{selected.awb}</DetailRow>}
+                </Section>
 
-                {selected.shipping_fee != null && (
-                  <DetailRow label={t('Shipping', '运费')}>
-                    {formatMoney(selected.shipping_fee, selected.currency ?? merchant?.currency)}
-                  </DetailRow>
+                {/* Note — editable for the live merchant view, read-only when suspended */}
+                {readOnly ? (
+                  selected.note && (
+                    <Section title={t('Note', '备注')}>
+                      <p className="rounded-md bg-cream border border-clay-border px-3 py-2 text-[13px] text-ink break-words">
+                        {selected.note}
+                      </p>
+                    </Section>
+                  )
+                ) : (
+                  <Section title={t('Note', '备注')}>
+                    <Textarea
+                      value={noteDraft}
+                      onChange={e => setNoteDraft(e.target.value)}
+                      rows={3}
+                      placeholder={t('Add a note for this order…', '为此订单添加备注…')}
+                      className="text-[13px] bg-cream border-clay-border resize-none"
+                    />
+                    <Button
+                      type="button"
+                      size="none"
+                      className="self-end rounded-pill py-[6px] px-[14px] text-[13px]"
+                      disabled={!noteDirty || savingNote}
+                      onClick={handleNoteSave}
+                    >
+                      {savingNote ? t('Saving…', '保存中…') : t('Save note', '保存备注')}
+                    </Button>
+                  </Section>
                 )}
 
-                <DetailRow label={t('Mode', '方式')}>{selected.mode || '—'}</DetailRow>
-                {selected.region && <DetailRow label={t('Region', '地区')}>{selected.region}</DetailRow>}
-                {selected.address && <DetailRow label={t('Address', '地址')}>{selected.address}</DetailRow>}
-                {selected.preferred_date && (
-                  <DetailRow label={t('Preferred date', '首选日期')}>{selected.preferred_date}</DetailRow>
-                )}
-                {selected.note && <DetailRow label={t('Note', '备注')}>{selected.note}</DetailRow>}
-                {selected.awb && <DetailRow label={t('AWB', '运单号')}>{selected.awb}</DetailRow>}
-
+                {/* Status control */}
                 {!readOnly && (
-                  <div className="flex flex-col gap-1 pt-[10px] border-t border-surface-sunken">
-                    <label className={LBL} htmlFor={`status-${selected.id}`}>{t('Status', '状态')}</label>
+                  <Section title={t('Status', '状态')}>
                     <select
                       id={`status-${selected.id}`}
                       className={SELECT_CLS}
@@ -249,7 +342,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                         <option key={s} value={s}>{t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}</option>
                       ))}
                     </select>
-                  </div>
+                  </Section>
                 )}
               </div>
             </>
