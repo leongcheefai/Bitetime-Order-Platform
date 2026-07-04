@@ -1,2 +1,5 @@
 node_modules/
 .env
+
+# Impeccable hook cache (per-session state, not source)
+supabase/migrations/.impeccable/
