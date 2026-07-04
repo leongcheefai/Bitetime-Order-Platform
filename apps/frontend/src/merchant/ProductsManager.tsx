@@ -4,6 +4,7 @@ import { MoreHorizontal } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
 import { fetchProducts, upsertProduct, deleteProduct, deleteProductImages, productImageUrl } from '../store'
+import { coerceQuantity, formatUnit } from '../productUnit'
 import { formatMoney, currencyDef } from '../currency'
 import { SkeletonText } from '../components/Loaders'
 import { Button } from '../components/ui/button'
@@ -33,7 +34,7 @@ const UNITS: { value: string; en: string; zh: string }[] = [
   { value: 'g', en: 'g', zh: '克' },
 ]
 
-const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pcs', active: true }
+const BLANK = { name: '', name_zh: '', descr: '', price: '', unit: 'pcs', unit_quantity: 1, active: true }
 
 // Handlers + language + currency ride on table.options.meta so the column defs stay
 // stable (defined once) and never reset sorting when a row action refetches.
@@ -87,7 +88,7 @@ const columns: ColumnDef<any>[] = [
     cell: ({ row, table }) => {
       const { currency } = table.options.meta as ProductTableMeta
       const p = row.original
-      return <span className="text-[13px] text-rose-muted whitespace-nowrap">{formatMoney(p.price, currency)} / {p.unit}</span>
+      return <span className="text-[13px] text-rose-muted whitespace-nowrap">{formatMoney(p.price, currency)} / {formatUnit(p.unit_quantity, p.unit)}</span>
     },
   },
   {
@@ -153,7 +154,7 @@ export default function ProductsManager() {
     setEditingProduct(p)
     setForm({
       name: p.name ?? '', name_zh: p.name_zh ?? '', descr: p.descr ?? '',
-      price: String(p.price ?? ''), unit: p.unit ?? 'pc', active: p.active,
+      price: String(p.price ?? ''), unit: p.unit ?? 'pc', unit_quantity: p.unit_quantity ?? 1, active: p.active,
     })
     setImages(p.image_urls ?? [])
     setFormOpen(true)
@@ -164,13 +165,14 @@ export default function ProductsManager() {
     try {
       if (editingProduct) {
         // Spread the original row first so sort / active / etc. survive the upsert.
-        await upsertProduct({ ...editingProduct, ...form, image_urls: images, price: Number(form.price) || 0 })
+        await upsertProduct({ ...editingProduct, ...form, image_urls: images, price: Number(form.price) || 0, unit_quantity: coerceQuantity(form.unit_quantity) })
       } else {
         await upsertProduct({
           ...form,
           id: draftId,
           image_urls: images,
           price: Number(form.price) || 0,
+          unit_quantity: coerceQuantity(form.unit_quantity),
           merchant_id: merchant!.id,
         })
       }
@@ -278,21 +280,35 @@ export default function ProductsManager() {
               </div>
               <div className="flex flex-col gap-[6px]">
                 <Label htmlFor="pm-5">{t('Unit', '单位')}</Label>
-                <Select value={form.unit} onValueChange={v => setForm({ ...form, unit: v })}>
-                  <SelectTrigger id="pm-5" className="w-full bg-cream border-clay-border text-[13px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  {/* z-modal-popover (400) floats above the dialog popup (z-modal). */}
-                  <SelectContent className="z-modal-popover">
-                    {/* Keep a legacy value (e.g. old "pc") selectable so existing rows survive. */}
-                    {form.unit && !UNITS.some(u => u.value === form.unit) && (
-                      <SelectItem value={form.unit}>{form.unit}</SelectItem>
-                    )}
-                    {UNITS.map(u => (
-                      <SelectItem key={u.value} value={u.value}>{t(u.en, u.zh)}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Input
+                    id="pm-qty"
+                    variant="compact"
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    className="w-24"
+                    value={form.unit_quantity}
+                    onChange={e => setForm({ ...form, unit_quantity: e.target.value })}
+                    aria-label={t('Unit quantity', '单位数量')}
+                    placeholder="1"
+                  />
+                  <Select value={form.unit} onValueChange={v => setForm({ ...form, unit: v })}>
+                    <SelectTrigger id="pm-5" className="flex-1 bg-cream border-clay-border text-[13px]">
+                      <SelectValue />
+                    </SelectTrigger>
+                    {/* z-modal-popover (400) floats above the dialog popup (z-modal). */}
+                    <SelectContent className="z-modal-popover">
+                      {/* Keep a legacy value (e.g. old "pc") selectable so existing rows survive. */}
+                      {form.unit && !UNITS.some(u => u.value === form.unit) && (
+                        <SelectItem value={form.unit}>{form.unit}</SelectItem>
+                      )}
+                      {UNITS.map(u => (
+                        <SelectItem key={u.value} value={u.value}>{t(u.en, u.zh)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex flex-col gap-[6px]">
                 <Label>{t('Photos (optional)', '图片（可选）')}</Label>
