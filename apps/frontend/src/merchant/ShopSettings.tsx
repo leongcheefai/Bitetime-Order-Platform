@@ -6,6 +6,7 @@ import { CURRENCIES, CURRENCY_CODES, DEFAULT_CURRENCY, currencyDef } from '../cu
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { Textarea } from '../components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { useNavGuard } from './NavGuard'
@@ -93,6 +94,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
     currency: merchant!.currency ?? DEFAULT_CURRENCY,
     wm: String(merchant!.shipping?.WM ?? 8),
     em: String(merchant!.shipping?.EM ?? 18),
+    pickupAddress: merchant!.pickup_address ?? '',
   }))
   const [fields, setFields] = useState<SettingsFields>(saved)
   const [busy, setBusy] = useState(false)
@@ -118,6 +120,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         // currency when it is still editable.
         ...(currencyLocked ? {} : { currency: fields.currency }),
         shipping: { WM: Number(fields.wm) || 0, EM: Number(fields.em) || 0 },
+        pickup_address: fields.pickupAddress.trim() || null,
       })
       await refreshMerchant()
       setSaved(fields)
@@ -170,6 +173,16 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             <Input id="shop-em" type="number" step="0.01" value={fields.em}
               onChange={e => setFields(f => ({ ...f, em: e.target.value }))} variant="compact" />
           </div>
+        </div>
+      </div>
+      <div className={CARD}>
+        <h3 className={HEADING}>{t('Pickup address', '自取地址')}</h3>
+        <div className="flex flex-col gap-[6px]">
+          <Label htmlFor="shop-pickup">{t('Shown to customers who choose pickup', '选择自取的顾客可见')}</Label>
+          <Textarea id="shop-pickup" value={fields.pickupAddress}
+            onChange={e => setFields(f => ({ ...f, pickupAddress: e.target.value }))}
+            rows={3} placeholder={t('e.g. 12 Jalan Example, 50000 Kuala Lumpur', '例如：吉隆坡某某路12号')}
+            className="resize-y min-h-[72px] max-w-[420px]" />
         </div>
       </div>
       <SaveRow busy={busy} label={{ idle: t('Save shipping', '保存运费'), busy: t('Saving…', '保存中…') }} />

@@ -25,6 +25,7 @@ export interface Merchant {
   plan?: string
   billing_cycle?: string
   currency?: string
+  pickup_address?: string
   created_at?: string
   [key: string]: any
 }

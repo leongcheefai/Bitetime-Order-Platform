@@ -380,6 +380,14 @@ export default function Storefront() {
                 {t('Delivery', '送货')} (+{formatMoney(deliveryFee, currency)})
               </button>
             </div>
+            {mode === 'pickup' && merchant?.pickup_address && (
+              <div className="flex flex-col gap-1.5 mt-3">
+                <div className="text-[13px] font-medium text-oxblood">{t('Pickup address', '自取地址')}</div>
+                <div className="text-[14px] text-ink whitespace-pre-line leading-[1.5]">
+                  {merchant.pickup_address}
+                </div>
+              </div>
+            )}
             {mode === 'delivery' && (
               <div className="flex flex-col gap-1.5 mt-3">
                 <Label htmlFor="sf-address">{t('Delivery address', '送货地址')}</Label>
