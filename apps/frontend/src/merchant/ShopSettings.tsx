@@ -11,8 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { useNavGuard } from './NavGuard'
 import { isDirty, type SettingsFields } from './settingsDirty'
+import ReferralTab from './ReferralTab'
 
-type TabKey = 'shipping' | 'payment' | 'notifications'
+type TabKey = 'shipping' | 'payment' | 'notifications' | 'referral'
 
 // Tabbed Shop Settings (issue #19). A container renders a horizontal tab bar and
 // the active tab's form; each tab is its own form with its own Save. Only the
@@ -49,6 +50,7 @@ export default function ShopSettings() {
     { key: 'shipping', label: t('Shipping', '运费') },
     { key: 'payment', label: t('Payment', '付款') },
     { key: 'notifications', label: t('Notifications', '通知') },
+    { key: 'referral', label: t('Referral', '推荐') },
   ]
 
   return (
@@ -64,6 +66,7 @@ export default function ShopSettings() {
       {tab === 'shipping' && <ShippingTab onDirtyChange={setDirty} />}
       {tab === 'payment' && <PaymentTab onDirtyChange={setDirty} />}
       {tab === 'notifications' && <NotificationsTab onDirtyChange={setDirty} />}
+      {tab === 'referral' && <ReferralTab />}
     </div>
   )
 }
