@@ -4,6 +4,7 @@ import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, setOrderStatus } from '../store'
 import { formatMoney } from '../currency'
 import { SkeletonText } from '../components/Loaders'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { DataTable, SortableHeader } from '@/components/ui/data-table'
 import {
@@ -154,6 +155,8 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
     setOrderStatus(order.id, status).then(updated => {
       setOrders(prev => (prev ? prev.map(o => (o.id === updated.id ? updated : o)) : prev))
       setSelected((cur: any) => (cur && cur.id === updated.id ? updated : cur))
+    }).catch(() => {
+      toast.error(t('Could not update order status.', '无法更新订单状态。'))
     })
   }
 
