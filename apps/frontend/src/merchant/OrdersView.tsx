@@ -66,7 +66,6 @@ function StatusBadge({ status, t }: { status: string; t: (en: string, zh: string
 interface OrderTableMeta {
   t: (en: string, zh: string) => string
   currency?: string
-  onSelect: (o: any) => void
 }
 
 const columns: ColumnDef<any>[] = [
@@ -158,7 +157,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
     })
   }
 
-  const meta: OrderTableMeta = { t, currency: merchant?.currency, onSelect: setSelected }
+  const meta: OrderTableMeta = { t, currency: merchant?.currency }
 
   if (orders === null) {
     return (
