@@ -22,6 +22,7 @@ export default function SignupScreen() {
   const plan = PLANS.includes(params.get('plan') as string) ? (params.get('plan') as string) : 'basic'
   const billing = CYCLES.includes(params.get('billing') as string) ? (params.get('billing') as string) : 'monthly'
   const canceled = params.get('canceled') === '1'
+  const ref = params.get('ref') ?? undefined
 
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
@@ -53,7 +54,7 @@ export default function SignupScreen() {
                  '账号已创建。请查收邮件确认，然后登录以完成店铺设置。'))
         setBusy(false); return
       }
-      await createMerchant({ name, plan, billing, region: pricing.region })
+      await createMerchant({ name, plan, billing, region: pricing.region, referredByCode: ref })
       await refreshMerchant()
       if (plan === 'basic') {
         // Cardless trial: no Checkout. The shop waits for platform approval,

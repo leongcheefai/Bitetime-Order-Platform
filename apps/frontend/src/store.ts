@@ -2,6 +2,7 @@ import type { User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
+import { resolveReferredByCode } from './referralCode'
 import type { Voucher } from './types';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -146,7 +147,7 @@ export async function fetchMyMerchant(userId: string) {
   return data ?? null
 }
 
-export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US' }: { name: string; plan?: string; billing?: string; region?: string }) {
+export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US', referredByCode }: { name: string; plan?: string; billing?: string; region?: string; referredByCode?: string }) {
   const user = await getCurrentUser()
   if (!user) throw new Error('Not signed in')
   const taken = await listTakenSlugs()
@@ -156,6 +157,7 @@ export async function createMerchant({ name, plan = 'basic', billing = 'monthly'
     .insert({
       name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending',
       plan, billing_cycle: billing, billing_region: region,
+      referred_by_code: resolveReferredByCode(referredByCode, referralCodeOf(user.id)),
     })
     .select().single()
   if (error) throw error
