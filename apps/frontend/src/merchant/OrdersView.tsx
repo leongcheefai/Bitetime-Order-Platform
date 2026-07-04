@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { useSession } from '../SessionContext'
-import { fetchMerchantOrders, setOrderStatus, setOrderNote } from '../store'
+import { fetchMerchantOrders, setOrderStatus, setOrderNote, setOrderTracking } from '../store'
 import { formatMoney } from '../currency'
 import { SkeletonText } from '../components/Loaders'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { DataTable, SortableHeader } from '@/components/ui/data-table'
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet'
+import { COURIERS, trackingUrl, courierName } from '../couriers'
 
 const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
 
@@ -171,6 +173,9 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
   const [noteDraft, setNoteDraft] = useState('')
   const [noteFor, setNoteFor] = useState<string | undefined>(undefined)
   const [savingNote, setSavingNote] = useState(false)
+  const [courierDraft, setCourierDraft] = useState('')
+  const [awbDraft, setAwbDraft] = useState('')
+  const [savingTrack, setSavingTrack] = useState(false)
 
   useEffect(() => {
     fetchMerchantOrders(merchant!.id).then(setOrders)
@@ -181,6 +186,8 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
   if (selected && selected.id !== noteFor) {
     setNoteFor(selected.id)
     setNoteDraft(selected.note ?? '')
+    setCourierDraft(selected.courier ?? '')
+    setAwbDraft(selected.awb ?? '')
   }
 
   function patchOrder(updated: any) {
@@ -205,9 +212,22 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
     }).finally(() => setSavingNote(false))
   }
 
+  function handleTrackingSave() {
+    if (!selected) return
+    setSavingTrack(true)
+    setOrderTracking(selected.id, courierDraft || null, awbDraft).then(updated => {
+      patchOrder(updated)
+      toast.success(t('Tracking saved', '物流已保存'))
+    }).catch(() => {
+      toast.error(t('Could not save tracking.', '无法保存物流。'))
+    }).finally(() => setSavingTrack(false))
+  }
+
   const meta: OrderTableMeta = { t, currency: merchant?.currency }
   const orderCurrency = selected?.currency ?? merchant?.currency
   const noteDirty = selected != null && noteDraft.trim() !== (selected.note ?? '')
+  const trackDirty = selected != null &&
+    (courierDraft !== (selected.courier ?? '') || awbDraft.trim() !== (selected.awb ?? ''))
 
   if (orders === null) {
     return (
@@ -295,8 +315,63 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                   {selected.preferred_date && (
                     <DetailRow label={t('Date', '日期')}>{selected.preferred_date}</DetailRow>
                   )}
-                  {selected.awb && <DetailRow label={t('AWB', '运单号')}>{selected.awb}</DetailRow>}
+                  {!(selected.mode === 'delivery' && !readOnly) && selected.courier && (
+                    <DetailRow label={t('Courier', '快递公司')}>{courierName(selected.courier) || selected.courier}</DetailRow>
+                  )}
+                  {!(selected.mode === 'delivery' && !readOnly) && selected.awb && (
+                    <DetailRow label={t('AWB', '运单号')}>{selected.awb}</DetailRow>
+                  )}
                 </Section>
+
+                {/* Delivery tracking — merchant enters courier + AWB (delivery orders only) */}
+                {selected.mode === 'delivery' && !readOnly && (
+                  <Section title={t('Delivery tracking', '物流追踪')}>
+                    <div className="flex flex-col gap-1">
+                      <label className={LBL} htmlFor={`courier-${selected.id}`}>{t('Courier', '快递公司')}</label>
+                      <select
+                        id={`courier-${selected.id}`}
+                        className={SELECT_CLS}
+                        style={{ backgroundImage: CHEVRON_SVG, backgroundPosition: 'right 10px center' }}
+                        value={courierDraft}
+                        onChange={e => setCourierDraft(e.target.value)}
+                      >
+                        <option value="">{t('Select courier…', '选择快递…')}</option>
+                        {COURIERS.map(c => (
+                          <option key={c.code} value={c.code}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className={LBL} htmlFor={`awb-${selected.id}`}>{t('AWB / Tracking no.', '运单号')}</label>
+                      <Input
+                        id={`awb-${selected.id}`}
+                        value={awbDraft}
+                        onChange={e => setAwbDraft(e.target.value)}
+                        placeholder={t('e.g. 630123456789', '例如 630123456789')}
+                        className="text-[13px] bg-cream border-clay-border"
+                      />
+                    </div>
+                    {trackingUrl(courierDraft, awbDraft) && (
+                      <a
+                        href={trackingUrl(courierDraft, awbDraft)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[13px] text-oxblood font-medium hover:underline w-fit"
+                      >
+                        {t('Preview track link →', '预览追踪链接 →')}
+                      </a>
+                    )}
+                    <Button
+                      type="button"
+                      size="none"
+                      className="self-end rounded-pill py-[6px] px-[14px] text-[13px]"
+                      disabled={!trackDirty || savingTrack}
+                      onClick={handleTrackingSave}
+                    >
+                      {savingTrack ? t('Saving…', '保存中…') : t('Save tracking', '保存物流')}
+                    </Button>
+                  </Section>
+                )}
 
                 {/* Note — editable for the live merchant view, read-only when suspended */}
                 {readOnly ? (
