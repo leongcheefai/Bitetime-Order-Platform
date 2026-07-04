@@ -2,7 +2,8 @@ import type { User } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
-import type { Voucher } from './types';
+import { resolveReferredByCode } from './referralCode'
+import type { ReferredShop, Voucher } from './types';
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -146,7 +147,7 @@ export async function fetchMyMerchant(userId: string) {
   return data ?? null
 }
 
-export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US' }: { name: string; plan?: string; billing?: string; region?: string }) {
+export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US', referredByCode }: { name: string; plan?: string; billing?: string; region?: string; referredByCode?: string }) {
   const user = await getCurrentUser()
   if (!user) throw new Error('Not signed in')
   const taken = await listTakenSlugs()
@@ -156,6 +157,7 @@ export async function createMerchant({ name, plan = 'basic', billing = 'monthly'
     .insert({
       name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending',
       plan, billing_cycle: billing, billing_region: region,
+      referred_by_code: resolveReferredByCode(referredByCode, referralCodeOf(user.id)),
     })
     .select().single()
   if (error) throw error
@@ -387,6 +389,15 @@ export async function deleteMerchantVoucher(id: string) {
 // profiles.referral_code for lookup.
 export function referralCodeOf(userId: string) {
   return (userId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
+}
+
+// Shops that signed up with the current user's referral code. Reads the
+// my_referred_shops SECURITY DEFINER RPC, which filters by the caller's own code and
+// returns only name/created_at/status.
+export async function fetchReferredShops(): Promise<ReferredShop[]> {
+  const { data, error } = await supabase.rpc('my_referred_shops')
+  if (error) throw error
+  return (data ?? []) as ReferredShop[]
 }
 
 // ── Multi-tenant order placement ─────────────────────────────────────────────
