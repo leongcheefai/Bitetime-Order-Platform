@@ -17,6 +17,7 @@ const SignupScreen = lazy(() => import('./merchant/SignupScreen'))
 const LoginScreen = lazy(() => import('./merchant/LoginScreen'))
 const MerchantHome = lazy(() => import('./merchant/MerchantHome'))
 const Storefront = lazy(() => import('./store/Storefront'))
+const TrackOrder = lazy(() => import('./store/TrackOrder'))
 
 function RouteFallback() {
   return (
@@ -66,7 +67,12 @@ function StorefrontShell() {
     </div>
   )
 
-  return <Storefront />
+  return (
+    <Routes>
+      <Route index element={<Storefront />} />
+      <Route path="track" element={<TrackOrder />} />
+    </Routes>
+  )
 }
 
 export default function AppRouter() {

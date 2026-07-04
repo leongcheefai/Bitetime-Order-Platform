@@ -1,52 +1,43 @@
 import { useEffect, useState } from 'react'
+import type { ColumnDef } from '@tanstack/react-table'
 import { useSession } from '../SessionContext'
-import { fetchMerchantOrders, setOrderStatus } from '../store'
+import { fetchMerchantOrders, setOrderStatus, setOrderNote, setOrderTracking } from '../store'
 import { formatMoney } from '../currency'
 import { SkeletonText } from '../components/Loaders'
-import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
+import { DataTable, SortableHeader } from '@/components/ui/data-table'
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from '@/components/ui/sheet'
+import { COURIERS, trackingUrl, courierName } from '../couriers'
+import { ORDER_STATUSES, STATUS_LABELS, StatusBadge } from '../orderStatus'
 
-const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
-
-const STATUS_LABELS: Record<string, { en: string; zh: string }> = {
-  new:       { en: 'New',       zh: '新订单' },
-  preparing: { en: 'Preparing', zh: '备料中' },
-  ready:     { en: 'Ready',     zh: '已备好' },
-  completed: { en: 'Completed', zh: '已完成' },
-  cancelled: { en: 'Cancelled', zh: '已取消' },
+// Delivery mode → display label. Unknown modes fall back to capitalized raw.
+const MODE_LABELS: Record<string, { en: string; zh: string }> = {
+  pickup:   { en: 'Pickup',   zh: '自取' },
+  delivery: { en: 'Delivery', zh: '送货' },
+  sameday:  { en: 'Same-day', zh: '当日送达' },
 }
 
-// Status → Badge config map.
-// Verified against .mm-badge--order-* CSS literals:
-//   new       → info-blue-bg / info-blue-fg  → infoBlue variant (exact match)
-//   preparing → warn-bg-alt / warn-fg-alt    → no named variant; className override
-//   ready     → success-bg-soft / success-deep → no named variant; className override
-//   completed → prep-bg-alt / prep-fg-alt    → no named variant; className override
-//   cancelled → danger-bg / danger-fg        → className override (danger variant adds a border the original lacked)
-type BadgeConfig = { variant?: 'infoBlue' | 'danger'; className?: string }
-const STATUS_BADGE: Record<string, BadgeConfig> = {
-  new:       { variant: 'infoBlue' },
-  preparing: { className: 'bg-warn-bg-alt text-warn-fg-alt border-transparent' },
-  ready:     { className: 'bg-success-bg-soft text-success-deep border-transparent' },
-  completed: { className: 'bg-prep-bg-alt text-prep-fg-alt border-transparent' },
-  cancelled: { className: 'bg-danger-bg text-danger-fg border-transparent' },
+function modeLabel(mode: string | null | undefined, t: (en: string, zh: string) => string) {
+  if (!mode) return '—'
+  const m = MODE_LABELS[mode]
+  return m ? t(m.en, m.zh) : mode.charAt(0).toUpperCase() + mode.slice(1)
 }
 
-// mm-order-label equivalent: 11px semibold uppercase, letter-spacing 0.06em, rose-muted, shrink-0
+// 11px semibold uppercase rose-muted label.
 const LBL = 'text-[11px] font-semibold uppercase tracking-[0.06em] text-rose-muted shrink-0'
 
-// Self-contained select classes — pixel-match of .admin-field-select (no dependency on that class)
+// Self-contained select classes (pixel-match of .admin-field-select).
 const SELECT_CLS =
   'w-full py-[7px] pl-[10px] pr-[32px] border border-clay-border rounded-sm text-[13px] ' +
   'bg-cream text-ink font-sans appearance-none bg-no-repeat cursor-pointer min-w-[140px] ' +
   'focus:outline-none focus:border-oxblood focus:shadow-[0_0_0_2px_rgba(122,16,40,0.1)]'
 
-// Chevron SVG data-URI — matches the one in .admin-field-select
 const CHEVRON_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A4F55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`
-
-function itemsSummary(items: any[] | null | undefined) {
-  if (!items || !items.length) return '—'
-  return items.map((i: any) => `${i.qty}× ${i.name}`).join(', ')
-}
 
 function fmtTime(iso: string | null | undefined) {
   if (!iso) return '—'
@@ -54,130 +45,357 @@ function fmtTime(iso: string | null | undefined) {
   return d.toLocaleString('en-MY', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+// Handlers + language + currency ride on table.options.meta so the column defs
+// stay stable (defined once) and never reset sorting when the data refetches.
+interface OrderTableMeta {
+  t: (en: string, zh: string) => string
+  currency?: string
+}
+
+const columns: ColumnDef<any>[] = [
+  {
+    accessorKey: 'order_number',
+    header: ({ column, table }) => (
+      <SortableHeader column={column} label={(table.options.meta as OrderTableMeta).t('Order #', '订单号')} />
+    ),
+    cell: ({ row }) => (
+      <span className="font-heading text-[14px] font-medium text-oxblood whitespace-nowrap">
+        {row.original.order_number || '—'}
+      </span>
+    ),
+  },
+  {
+    accessorKey: 'created_at',
+    header: ({ column, table }) => (
+      <SortableHeader column={column} label={(table.options.meta as OrderTableMeta).t('Time', '时间')} />
+    ),
+    cell: ({ row }) => (
+      <span className="whitespace-nowrap text-text-tertiary">{fmtTime(row.original.created_at)}</span>
+    ),
+  },
+  {
+    accessorKey: 'customer_name',
+    header: ({ table }) => (
+      <span>{(table.options.meta as OrderTableMeta).t('Customer', '顾客')}</span>
+    ),
+    cell: ({ row }) => <span>{row.original.customer_name || '—'}</span>,
+  },
+  {
+    accessorKey: 'total',
+    header: ({ column, table }) => (
+      <div className="text-right">
+        <SortableHeader column={column} label={(table.options.meta as OrderTableMeta).t('Total', '总计')} />
+      </div>
+    ),
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as OrderTableMeta
+      return (
+        <div className="text-right whitespace-nowrap font-medium">
+          {formatMoney(row.original.total, row.original.currency ?? meta.currency)}
+        </div>
+      )
+    },
+  },
+  {
+    accessorKey: 'mode',
+    header: ({ table }) => (
+      <span>{(table.options.meta as OrderTableMeta).t('Mode', '方式')}</span>
+    ),
+    cell: ({ row }) => <span>{row.original.mode || '—'}</span>,
+  },
+  {
+    accessorKey: 'status',
+    enableSorting: false,
+    header: ({ table }) => (
+      <span>{(table.options.meta as OrderTableMeta).t('Status', '状态')}</span>
+    ),
+    cell: ({ row, table }) => (
+      <StatusBadge status={row.original.status || 'new'} t={(table.options.meta as OrderTableMeta).t} />
+    ),
+  },
+]
+
+// A labelled key/value line in the detail sheet — label in a fixed left column,
+// value aligned in the right column so rows scan like a receipt.
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[84px_1fr] gap-x-3 items-baseline text-[13px]">
+      <span className={LBL}>{label}</span>
+      <span className="min-w-0 break-words text-ink">{children}</span>
+    </div>
+  )
+}
+
+// A visually separated group in the detail sheet. Sections after the first get a
+// top divider + spacing; an optional caption heads the group.
+function Section({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2 pt-4 mt-4 border-t border-surface-sunken first:pt-0 first:mt-0 first:border-t-0">
+      {title && <span className={LBL}>{title}</span>}
+      {children}
+    </section>
+  )
+}
+
 export default function OrdersView({ readOnly = false }: { readOnly?: boolean } = {}) {
   const { t, merchant } = useSession()
   const [orders, setOrders] = useState<any[] | null>(null)
+  const [selected, setSelected] = useState<any | null>(null)
+  const [noteDraft, setNoteDraft] = useState('')
+  const [drawerFor, setDrawerFor] = useState<string | undefined>(undefined)
+  const [savingNote, setSavingNote] = useState(false)
+  const [courierDraft, setCourierDraft] = useState('')
+  const [awbDraft, setAwbDraft] = useState('')
+  const [savingTrack, setSavingTrack] = useState(false)
 
   useEffect(() => {
     fetchMerchantOrders(merchant!.id).then(setOrders)
   }, [merchant!.id])
 
-  function reload() {
-    fetchMerchantOrders(merchant!.id).then(setOrders)
+  // Re-seed the drawer's editable drafts (note, courier, awb) when a different order
+  // opens (adjust-state-during-render: keyed on id so a status/note/tracking patch that
+  // replaces `selected` mid-view keeps typing).
+  if (selected && selected.id !== drawerFor) {
+    setDrawerFor(selected.id)
+    setNoteDraft(selected.note ?? '')
+    setCourierDraft(selected.courier ?? '')
+    setAwbDraft(selected.awb ?? '')
   }
 
-  function handleStatusChange(order: any, status: any) {
-    setOrderStatus(order.id, status).then(reload)
+  function patchOrder(updated: any) {
+    setOrders(prev => (prev ? prev.map(o => (o.id === updated.id ? updated : o)) : prev))
+    setSelected((cur: any) => (cur && cur.id === updated.id ? updated : cur))
   }
+
+  function handleStatusChange(order: any, status: string) {
+    setOrderStatus(order.id, status).then(patchOrder).catch(() => {
+      toast.error(t('Could not update order status.', '无法更新订单状态。'))
+    })
+  }
+
+  function handleNoteSave() {
+    if (!selected) return
+    setSavingNote(true)
+    setOrderNote(selected.id, noteDraft).then(updated => {
+      patchOrder(updated)
+      toast.success(t('Note saved', '备注已保存'))
+    }).catch(() => {
+      toast.error(t('Could not save note.', '无法保存备注。'))
+    }).finally(() => setSavingNote(false))
+  }
+
+  function handleTrackingSave() {
+    if (!selected) return
+    setSavingTrack(true)
+    setOrderTracking(selected.id, courierDraft || null, awbDraft).then(updated => {
+      patchOrder(updated)
+      toast.success(t('Tracking saved', '物流已保存'))
+    }).catch(() => {
+      toast.error(t('Could not save tracking.', '无法保存物流。'))
+    }).finally(() => setSavingTrack(false))
+  }
+
+  const meta: OrderTableMeta = { t, currency: merchant?.currency }
+  const orderCurrency = selected?.currency ?? merchant?.currency
+  const noteDirty = selected != null && noteDraft.trim() !== (selected.note ?? '')
+  const trackDirty = selected != null &&
+    (courierDraft !== (selected.courier ?? '') || awbDraft.trim() !== (selected.awb ?? ''))
 
   if (orders === null) {
-    return <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border"><SkeletonText lines={4} /></div>
-  }
-
-  if (orders.length === 0) {
     return (
-      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border text-center text-rose-muted text-sm">
-        <p>{t('No orders yet.', '暂无订单。')}</p>
+      <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
+        <SkeletonText lines={4} />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {orders.map((o: any) => {
-        const badge = STATUS_BADGE[o.status || 'new'] ?? { variant: 'infoBlue' as const }
-        return (
-          // admin-panel provides bg/border/rounded/width; !py-4 overrides py 1.25rem→1rem
-          <div key={o.id} className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border !py-4 flex flex-col gap-[10px]">
+    <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border">
+      <DataTable
+        columns={columns}
+        data={orders}
+        meta={meta}
+        onRowClick={setSelected}
+        pageSize={15}
+        searchPlaceholder={t('Search orders…', '搜索订单…')}
+        emptyText={t('No orders yet.', '暂无订单。')}
+        prevLabel={t('Previous', '上一页')}
+        nextLabel={t('Next', '下一页')}
+      />
 
-            {/* ── Header: order number · time · status badge ── */}
-            <div className="flex items-center gap-[10px] flex-wrap">
-              <span className="font-heading text-[15px] font-medium text-oxblood">
-                {o.order_number}
-              </span>
-              <span className="text-[12px] text-text-tertiary ml-auto whitespace-nowrap max-[600px]:ml-0">
-                {fmtTime(o.created_at)}
-              </span>
-              <Badge variant={badge.variant} className={badge.className}>
-                {t(STATUS_LABELS[o.status]?.en ?? o.status, STATUS_LABELS[o.status]?.zh ?? o.status)}
-              </Badge>
-            </div>
+      <Sheet open={selected !== null} onOpenChange={open => { if (!open) { setSelected(null); setDrawerFor(undefined) } }}>
+        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+          {selected && (
+            <>
+              <SheetHeader className="border-b border-surface-sunken">
+                <div className="flex items-center gap-[10px] flex-wrap">
+                  <SheetTitle className="text-[15px]">{selected.order_number || '—'}</SheetTitle>
+                  <StatusBadge status={selected.status || 'new'} t={t} />
+                </div>
+                <span className="text-[12px] text-text-tertiary">{fmtTime(selected.created_at)}</span>
+              </SheetHeader>
 
-            {/* ── Body: customer · items · meta · address ── */}
-            <div className="flex flex-col gap-[6px] text-[13px] text-ink">
+              <div className="flex flex-col px-4 pb-4">
+                {/* Customer */}
+                <Section title={t('Customer', '顾客')}>
+                  <span className="text-[14px] font-medium text-ink">{selected.customer_name || '—'}</span>
+                  {selected.customer_wa && (
+                    <a
+                      href={`https://wa.me/${selected.customer_wa.replace(/\D/g, '')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[13px] text-oxblood no-underline font-medium hover:underline w-fit"
+                    >
+                      {selected.customer_wa}
+                    </a>
+                  )}
+                </Section>
 
-              {/* Customer */}
-              <div className="flex items-baseline gap-2 flex-wrap">
-                <span className={LBL}>{t('Customer', '顾客')}</span>
-                <span>{o.customer_name || '—'}</span>
-                {o.customer_wa && (
-                  <a
-                    href={`https://wa.me/${o.customer_wa.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    // pixel-match of .mm-order-wa + :hover
-                    className="text-oxblood no-underline font-medium hover:underline"
-                  >
-                    {o.customer_wa}
-                  </a>
+                {/* Items + totals */}
+                <Section title={t('Items', '商品')}>
+                  <ul className="flex flex-col gap-1.5">
+                    {(selected.items ?? []).map((it: any, i: number) => (
+                      <li key={i} className="flex justify-between gap-3 text-[13px] text-ink">
+                        <span className="min-w-0 break-words">
+                          <span className="text-rose-muted tabular-nums">{it.qty}×</span> {it.name}
+                        </span>
+                        <span className="tabular-nums text-text-secondary whitespace-nowrap">
+                          {formatMoney((it.price ?? 0) * (it.qty ?? 0), orderCurrency)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="flex flex-col gap-1 pt-2 mt-1 border-t border-dashed border-clay-border text-[13px]">
+                    {selected.shipping_fee != null && (
+                      <div className="flex justify-between">
+                        <span className="text-rose-muted">{t('Shipping', '运费')}</span>
+                        <span className="tabular-nums text-ink">{formatMoney(selected.shipping_fee, orderCurrency)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-medium">
+                      <span className="text-ink">{t('Total', '总计')}</span>
+                      <span className="tabular-nums text-oxblood">{formatMoney(selected.total, orderCurrency)}</span>
+                    </div>
+                  </div>
+                </Section>
+
+                {/* Fulfilment */}
+                <Section title={t('Fulfilment', '配送')}>
+                  <DetailRow label={t('Mode', '方式')}>{modeLabel(selected.mode, t)}</DetailRow>
+                  {selected.region && <DetailRow label={t('Region', '地区')}>{selected.region}</DetailRow>}
+                  {selected.address && <DetailRow label={t('Address', '地址')}>{selected.address}</DetailRow>}
+                  {selected.preferred_date && (
+                    <DetailRow label={t('Date', '日期')}>{selected.preferred_date}</DetailRow>
+                  )}
+                  {!(selected.mode === 'delivery' && !readOnly) && selected.courier && (
+                    <DetailRow label={t('Courier', '快递公司')}>{courierName(selected.courier) || selected.courier}</DetailRow>
+                  )}
+                  {!(selected.mode === 'delivery' && !readOnly) && selected.awb && (
+                    <DetailRow label={t('AWB', '运单号')}>{selected.awb}</DetailRow>
+                  )}
+                </Section>
+
+                {/* Delivery tracking — merchant enters courier + AWB (delivery orders only) */}
+                {selected.mode === 'delivery' && !readOnly && (
+                  <Section title={t('Delivery tracking', '物流追踪')}>
+                    <div className="flex flex-col gap-1">
+                      <label className={LBL} htmlFor={`courier-${selected.id}`}>{t('Courier', '快递公司')}</label>
+                      <select
+                        id={`courier-${selected.id}`}
+                        className={SELECT_CLS}
+                        style={{ backgroundImage: CHEVRON_SVG, backgroundPosition: 'right 10px center' }}
+                        value={courierDraft}
+                        onChange={e => setCourierDraft(e.target.value)}
+                      >
+                        <option value="">{t('Select courier…', '选择快递…')}</option>
+                        {COURIERS.map(c => (
+                          <option key={c.code} value={c.code}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <label className={LBL} htmlFor={`awb-${selected.id}`}>{t('AWB / Tracking no.', '运单号')}</label>
+                      <Input
+                        id={`awb-${selected.id}`}
+                        value={awbDraft}
+                        onChange={e => setAwbDraft(e.target.value)}
+                        placeholder={t('e.g. 630123456789', '例如 630123456789')}
+                        className="text-[13px] bg-cream border-clay-border"
+                      />
+                    </div>
+                    {trackingUrl(courierDraft, awbDraft) && (
+                      <a
+                        href={trackingUrl(courierDraft, awbDraft)!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[13px] text-oxblood font-medium hover:underline w-fit"
+                      >
+                        {t('Preview track link →', '预览追踪链接 →')}
+                      </a>
+                    )}
+                    <Button
+                      type="button"
+                      size="none"
+                      className="self-end rounded-pill py-[6px] px-[14px] text-[13px]"
+                      disabled={!trackDirty || savingTrack}
+                      onClick={handleTrackingSave}
+                    >
+                      {savingTrack ? t('Saving…', '保存中…') : t('Save tracking', '保存物流')}
+                    </Button>
+                  </Section>
+                )}
+
+                {/* Note — editable for the live merchant view, read-only when suspended */}
+                {readOnly ? (
+                  selected.note && (
+                    <Section title={t('Note', '备注')}>
+                      <p className="rounded-md bg-cream border border-clay-border px-3 py-2 text-[13px] text-ink break-words">
+                        {selected.note}
+                      </p>
+                    </Section>
+                  )
+                ) : (
+                  <Section title={t('Note', '备注')}>
+                    <Textarea
+                      value={noteDraft}
+                      onChange={e => setNoteDraft(e.target.value)}
+                      rows={3}
+                      placeholder={t('Add a note for this order…', '为此订单添加备注…')}
+                      className="text-[13px] bg-cream border-clay-border resize-none"
+                    />
+                    <Button
+                      type="button"
+                      size="none"
+                      className="self-end rounded-pill py-[6px] px-[14px] text-[13px]"
+                      disabled={!noteDirty || savingNote}
+                      onClick={handleNoteSave}
+                    >
+                      {savingNote ? t('Saving…', '保存中…') : t('Save note', '保存备注')}
+                    </Button>
+                  </Section>
+                )}
+
+                {/* Status control */}
+                {!readOnly && (
+                  <Section title={t('Status', '状态')}>
+                    <select
+                      id={`status-${selected.id}`}
+                      className={SELECT_CLS}
+                      style={{ backgroundImage: CHEVRON_SVG, backgroundPosition: 'right 10px center' }}
+                      value={selected.status || 'new'}
+                      onChange={e => handleStatusChange(selected, e.target.value)}
+                    >
+                      {ORDER_STATUSES.map(s => (
+                        <option key={s} value={s}>{t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}</option>
+                      ))}
+                    </select>
+                  </Section>
                 )}
               </div>
-
-              {/* Items */}
-              <div className="flex gap-2 flex-wrap">
-                <span className={LBL}>{t('Items', '商品')}</span>
-                <span>{itemsSummary(o.items)}</span>
-              </div>
-
-              {/* Meta: total + mode */}
-              <div className="flex gap-4 flex-wrap max-[600px]:gap-[10px]">
-                <span>
-                  <span className={LBL}>{t('Total', '总计')}</span>{' '}
-                  <strong>{formatMoney(o.total, o.currency ?? merchant?.currency)}</strong>
-                </span>
-                <span>
-                  <span className={LBL}>{t('Mode', '方式')}</span>{' '}
-                  {o.mode || '—'}
-                </span>
-              </div>
-
-              {/* Address */}
-              {o.address && (
-                <div className="flex gap-2 flex-wrap">
-                  <span className={LBL}>{t('Address', '地址')}</span>
-                  <span>{o.address}</span>
-                </div>
-              )}
-            </div>
-
-            {/* ── Footer: status select (hidden for suspended read-only view) ── */}
-            {!readOnly && (
-              <div className="flex items-center gap-[10px] flex-wrap pt-[6px] border-t border-surface-sunken">
-                <label className={LBL} htmlFor={`status-${o.id}`}>
-                  {t('Status', '状态')}
-                </label>
-                {/* Self-contained stack wrapper (replaces admin-field--stack dependency) */}
-                <div className="flex flex-col gap-1 min-w-[200px] items-start">
-                  <select
-                    id={`status-${o.id}`}
-                    className={SELECT_CLS}
-                    style={{ backgroundImage: CHEVRON_SVG, backgroundPosition: 'right 10px center' }}
-                    value={o.status || 'new'}
-                    onChange={e => handleStatusChange(o, e.target.value)}
-                  >
-                    {ORDER_STATUSES.map(s => (
-                      <option key={s} value={s}>
-                        {t(STATUS_LABELS[s].en, STATUS_LABELS[s].zh)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
-
-          </div>
-        )
-      })}
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
