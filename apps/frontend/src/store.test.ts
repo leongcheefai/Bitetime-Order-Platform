@@ -242,6 +242,7 @@ describe('createMerchant', () => {
       plan: 'basic',
       billing_cycle: 'monthly',
       billing_region: 'US',
+      referred_by_code: null,
     })
     expect(result).toEqual(merchantRow)
   })
