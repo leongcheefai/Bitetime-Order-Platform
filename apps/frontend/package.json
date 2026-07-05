@@ -48,6 +48,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
     "jiti": "^2.7.0",
+    "malaysia-postcodes": "^3.0.0",
     "tailwindcss": "^4.3.2",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.62.0",

@@ -74,6 +74,13 @@ export interface OrderItem {
   [key: string]: any
 }
 
+export interface AddressParts {
+  line1: string
+  postcode: string
+  city: string
+  state: string
+}
+
 export interface Order {
   id?: string
   order_number?: string
