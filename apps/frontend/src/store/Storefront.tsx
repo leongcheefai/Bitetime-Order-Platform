@@ -95,6 +95,10 @@ export default function Storefront() {
     mode,
     state: mode === 'delivery' ? address.state : null,
     rates: { WM: rateWM, EM: rateEM },
+    // Before a state is resolved, show the WM base estimate so the summary
+    // matches the Delivery toggle instead of flashing RM 0.00; once the
+    // postcode fills the state, region logic (WM/EM) takes over.
+    resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     voucher: appliedVoucher,
   })
   const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice }))
