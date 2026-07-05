@@ -31,6 +31,17 @@ export function formatMoney(amount: number | null | undefined, code?: string | n
   return def.symbolAfter ? `${num} ${def.symbol}` : `${def.symbol} ${num}`
 }
 
+// Delivery address may be a structured object { line1, postcode, city, state }
+// (current) or a legacy free-text string. Mirrors the frontend formatAddress;
+// the backend can't import frontend code, so this is an intentional twin.
+export function formatAddress(addr: unknown): string {
+  if (!addr) return ''
+  if (typeof addr === 'string') return addr
+  const a = addr as { line1?: string; postcode?: string; city?: string; state?: string }
+  const cityLine = [a.postcode, a.city].filter(Boolean).join(' ')
+  return [a.line1, cityLine, a.state].filter(Boolean).join(', ')
+}
+
 // Pure: render the Telegram message from an order row, in the order's own
 // stamped currency (falls back to MYR for legacy rows without one).
 export function buildOrderMessage(order: any, merchantName?: string): string {
@@ -44,7 +55,7 @@ export function buildOrderMessage(order: any, merchantName?: string): string {
   msg += `*Name:* ${order.customer_name ?? ''}\n`
   if (order.customer_wa) msg += `*WhatsApp:* ${order.customer_wa}\n`
   if (order.mode) msg += `*Mode:* ${order.mode}\n`
-  if (order.address) msg += `*Address:* ${order.address}\n`
+  if (order.address) msg += `*Address:* ${formatAddress(order.address)}\n`
   msg += `\n*Items:*\n${lines}\n`
   if (order.shipping_fee) msg += `*Shipping:* ${formatMoney(order.shipping_fee, cur)}\n`
   msg += `\n*Total: ${formatMoney(order.total ?? 0, cur)}*`
