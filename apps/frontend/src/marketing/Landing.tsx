@@ -194,7 +194,7 @@ export default function Landing() {
           </HeroItem>
           <HeroItem>
             <p className="mt-6 mb-12 text-[13px] text-rose-muted">
-              {t('Made for Malaysian home kitchens and small food businesses.', '专为马来西亚家厨与小型食品业者打造。')}
+              {t('Made for home kitchens and small food businesses.', '专为家厨与小型食品业者打造。')}
             </p>
           </HeroItem>
           <HeroItem>
@@ -249,7 +249,7 @@ export default function Landing() {
           </div>
           <div>
             <dt className="font-heading text-base font-medium text-ink mb-2">{t('Bilingual, out of the box', '中英双语，开箱即用')}</dt>
-            <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('Your storefront speaks both English and Chinese — perfect for Malaysian food businesses.', '店面自动支持中英文，专为马来西亚小食企业设计。')}</dd>
+            <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('Your storefront speaks both English and Chinese — perfect for bilingual food businesses.', '店面自动支持中英文，专为双语小食企业设计。')}</dd>
           </div>
         </dl>
         </Reveal>
@@ -383,7 +383,7 @@ export default function Landing() {
       <footer className="mt-auto px-8 py-6 border-t border-clay-border flex items-center justify-center gap-3 text-[13px] text-text-tertiary">
         <span className="font-heading text-oxblood font-medium">BiteTime</span>
         <span className="text-clay-border">·</span>
-        <span>{t('Built for Malaysian food businesses', '专为马来西亚食品业者打造')}</span>
+        <span>{t('Built for food businesses', '专为食品业者打造')}</span>
       </footer>
     </div>
   )

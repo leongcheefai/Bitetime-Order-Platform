@@ -152,8 +152,8 @@ export const StorefrontPreview = memo(function StorefrontPreview({ t }: { t: TFn
   }, [reduced])
 
   const products = [
-    { name: t('Pandan Kaya Cake', '班兰咖椰蛋糕'), price: 'RM 38' },
-    { name: t('Kuih Lapis · box of 10', '娘惹千层糕 · 10 件装'), price: 'RM 18' },
+    { name: t('Pandan Kaya Cake', '班兰咖椰蛋糕'), price: '$ 38' },
+    { name: t('Kuih Lapis · box of 10', '娘惹千层糕 · 10 件装'), price: '$ 18' },
   ]
 
   return (
