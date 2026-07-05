@@ -160,6 +160,9 @@ importers:
       jiti:
         specifier: ^2.7.0
         version: 2.7.0
+      malaysia-postcodes:
+        specifier: ^3.0.0
+        version: 3.0.0
       tailwindcss:
         specifier: ^4.3.2
         version: 4.3.2
@@ -2611,6 +2614,10 @@ packages:
 
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
+
+  malaysia-postcodes@3.0.0:
+    resolution: {integrity: sha512-acz2qzL/Qlm1hG24f98jK8m3ig1W6Q1FicbknX6PTpy55HtSoJlm38Hb+QiBRp1ZxJT8hCcFVZsdQ66oMYBd5g==}
+    engines: {node: '>=18.0.0'}
 
   math-intrinsics@1.1.0:
     resolution: {integrity: sha512-/IXtbwEk5HTPyEwyKX6hGkYXxM9nbj64B+ilVJnC/R6B0pH5G4V3b0pVbL7DBj4tkhBAppbQUlf6F6Xl9LHu1g==}
@@ -5667,6 +5674,8 @@ snapshots:
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
+
+  malaysia-postcodes@3.0.0: {}
 
   math-intrinsics@1.1.0: {}
 
