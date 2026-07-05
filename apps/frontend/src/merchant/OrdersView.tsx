@@ -101,7 +101,9 @@ const columns: ColumnDef<any>[] = [
     header: ({ table }) => (
       <span>{(table.options.meta as OrderTableMeta).t('Mode', '方式')}</span>
     ),
-    cell: ({ row }) => <span>{row.original.mode || '—'}</span>,
+    cell: ({ row, table }) => (
+      <span>{modeLabel(row.original.mode, (table.options.meta as OrderTableMeta).t)}</span>
+    ),
   },
   {
     accessorKey: 'status',
