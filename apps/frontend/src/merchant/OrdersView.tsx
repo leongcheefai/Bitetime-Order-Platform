@@ -3,6 +3,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, setOrderStatus, setOrderNote, setOrderTracking } from '../store'
 import { formatMoney } from '../currency'
+import { formatAddress } from '../address'
 import { SkeletonText } from '../components/Loaders'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -285,7 +286,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                 <Section title={t('Fulfilment', '配送')}>
                   <DetailRow label={t('Mode', '方式')}>{modeLabel(selected.mode, t)}</DetailRow>
                   {selected.region && <DetailRow label={t('Region', '地区')}>{selected.region}</DetailRow>}
-                  {selected.address && <DetailRow label={t('Address', '地址')}>{selected.address}</DetailRow>}
+                  {selected.address && <DetailRow label={t('Address', '地址')}>{formatAddress(selected.address)}</DetailRow>}
                   {selected.preferred_date && (
                     <DetailRow label={t('Date', '日期')}>{selected.preferred_date}</DetailRow>
                   )}
