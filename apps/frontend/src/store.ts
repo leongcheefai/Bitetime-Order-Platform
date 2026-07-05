@@ -4,6 +4,7 @@ import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
 import { resolveReferredByCode } from './referralCode'
 import type { ReferredShop, Voucher } from './types';
+import type { AddressParts } from './types'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -409,7 +410,7 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   customerName: string
   customerWa: string
   mode: string
-  address?: any
+  address?: AddressParts | string
   shippingFee?: number
   items: any
   total: number
