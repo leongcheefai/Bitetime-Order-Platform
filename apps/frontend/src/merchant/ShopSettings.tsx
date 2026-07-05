@@ -7,7 +7,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Textarea } from '../components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
 import { useNavGuard } from './NavGuard'
 import { isDirty, type SettingsFields } from './settingsDirty'
@@ -56,9 +56,11 @@ export default function ShopSettings() {
   return (
     <div className="w-full">
       <Tabs value={tab} onValueChange={(v) => changeTab(v as TabKey)} className="mb-6">
-        <TabsList>
+        {/* Mobile: 4 nowrap tabs exceed the narrow column, so scroll horizontally
+            with natural widths instead of clipping the last tab off-screen. */}
+        <TabsList className="max-sm:justify-start max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
           {TABS.map(({ key, label }) => (
-            <TabsTrigger key={key} value={key}>{label}</TabsTrigger>
+            <TabsTrigger key={key} value={key} className="max-sm:flex-none">{label}</TabsTrigger>
           ))}
         </TabsList>
       </Tabs>
@@ -73,7 +75,7 @@ export default function ShopSettings() {
 
 interface TabProps { onDirtyChange: (dirty: boolean) => void }
 
-const CARD = 'bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border'
+const CARD = 'bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border max-sm:p-4 max-sm:mb-6'
 const HEADING = 'font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2'
 
 // Reports dirty state up whenever `saved` vs `fields` diverge. Returns a stable helper set.
@@ -144,7 +146,11 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             disabled={currencyLocked}
           >
             <SelectTrigger id="shop-currency" className="w-full max-w-[280px]" aria-label={t('Base currency', '基础货币')}>
-              <SelectValue />
+              {/* Trigger shows the short code + symbol so it never truncates the
+                  country name mid-word on mobile; the full label lives in the list. */}
+              <span className="truncate">
+                {currencyDef(fields.currency).code} — {currencyDef(fields.currency).symbol}
+              </span>
             </SelectTrigger>
             <SelectContent>
               {CURRENCY_CODES.map(code => (
