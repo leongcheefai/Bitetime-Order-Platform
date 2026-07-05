@@ -17,7 +17,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   // Superadmin "view as shop": when set, the dashboard subtree reads this merchant
   // instead of the signed-in user's own. RLS already grants is_superadmin() full access.
   const [impersonatedMerchant, setImpersonatedMerchant] = useState<Merchant | null>(null)
-  const [lang, setLang] = useState<Lang>('en')
+  const [lang, setLang] = useState<Lang>(() => {
+    const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('lang') : null
+    return stored === 'zh' || stored === 'en' ? stored : 'en'
+  })
+  useEffect(() => { try { localStorage.setItem('lang', lang) } catch { /* storage unavailable */ } }, [lang])
 
   const loadProfile = useCallback(async (user: User | null) => {
     if (!user) { setProfile(null); return }
