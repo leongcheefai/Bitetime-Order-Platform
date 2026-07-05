@@ -9,14 +9,15 @@ import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, vouche
 import { priceOrder, voucherError } from '../pricing'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
-import type { Product, Voucher } from '../types'
+import { lookupPostcode } from '../postcodes'
+import { MY_STATES } from '../states-my'
+import type { Product, Voucher, AddressParts } from '../types'
 import LanguageSelect from '../components/LanguageSelect'
 import ImageLightbox from '../components/ImageLightbox'
 import { cn } from '@/lib/utils'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-import { Textarea } from '../components/ui/textarea'
 
 interface CartLine {
   id: string
@@ -43,7 +44,7 @@ export default function Storefront() {
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }
   const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup')  // 'pickup' | 'delivery'
-  const [address, setAddress] = useState('')
+  const [address, setAddress] = useState<AddressParts>({ line1: '', postcode: '', city: '', state: '' })
   const [name, setName] = useState('')
   const [wa, setWa] = useState('')
   const [busy, setBusy] = useState(false)
@@ -66,9 +67,19 @@ export default function Storefront() {
     fetchMerchantVouchers(merchantId).then(setVouchers)
   }, [merchantId])
 
+  const onPostcodeChange = async (raw: string) => {
+    const pc = raw.replace(/\D/g, '').slice(0, 5)
+    setAddress(a => ({ ...a, postcode: pc }))
+    if (pc.length === 5) {
+      const hit = await lookupPostcode(pc)
+      if (hit) setAddress(a => ({ ...a, postcode: pc, city: hit.city, state: hit.state }))
+    }
+  }
+
   const activeProducts = products.filter(p => p.active)
-  const deliveryFee = merchant?.shipping?.WM ?? 8
-  const fee = mode === 'delivery' ? deliveryFee : 0
+  const rateWM = merchant?.shipping?.WM ?? 8
+  const rateEM = merchant?.shipping?.EM ?? rateWM
+  const baseDeliveryFee = rateWM // shown on the Delivery toggle before a state is known
   // One-per-customer identity: account email when signed in, else the WhatsApp number.
   const voucherEntry = (account?.email || wa || '').trim().toLowerCase()
 
@@ -82,15 +93,22 @@ export default function Storefront() {
     products: activeProducts,
     cart,
     mode,
-    rates: { WM: deliveryFee, EM: deliveryFee },
-    resolvedShipping: fee,
+    state: mode === 'delivery' ? address.state : null,
+    rates: { WM: rateWM, EM: rateEM },
     voucher: appliedVoucher,
   })
   const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice }))
   const subtotal = bd.subtotal
   const discount = bd.discount
   const total = bd.total
-  const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy
+  const fee = bd.shipping
+  const deliveryReady =
+    mode !== 'delivery' ||
+    (address.line1.trim() !== '' &&
+      address.postcode.length === 5 &&
+      address.city.trim() !== '' &&
+      address.state.trim() !== '')
+  const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady
 
   const applyVoucher = () => {
     const code = voucherInput.trim().toUpperCase()
@@ -178,7 +196,7 @@ export default function Storefront() {
     setCart({})
     setName('')
     setWa('')
-    setAddress('')
+    setAddress({ line1: '', postcode: '', city: '', state: '' })
     setError(null)
     removeVoucher()
   }
@@ -386,7 +404,7 @@ export default function Storefront() {
                 aria-pressed={mode === 'delivery'}
                 onClick={() => setMode('delivery')}
               >
-                {t('Delivery', '送货')} (+{formatMoney(deliveryFee, currency)})
+                {t('Delivery', '送货')} (+{formatMoney(baseDeliveryFee, currency)})
               </button>
             </div>
             {mode === 'pickup' && merchant?.pickup_address && (
@@ -403,16 +421,52 @@ export default function Storefront() {
               </div>
             )}
             {mode === 'delivery' && (
-              <div className="flex flex-col gap-1.5 mt-3">
-                <Label htmlFor="sf-address">{t('Delivery address', '送货地址')}</Label>
-                <Textarea
-                  id="sf-address"
-                  value={address}
-                  onChange={e => setAddress(e.target.value)}
-                  rows={3}
-                  placeholder={t('Enter your full address…', '请输入完整地址…')}
-                  className="resize-y min-h-[72px]"
-                />
+              <div className="flex flex-col gap-3 mt-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="sf-line1">{t('Address line', '地址')}</Label>
+                  <Input
+                    id="sf-line1"
+                    value={address.line1}
+                    onChange={e => setAddress(a => ({ ...a, line1: e.target.value }))}
+                    placeholder={t('Street, building, unit…', '街道、建筑、单位…')}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <div className="flex flex-col gap-1.5 w-1/3">
+                    <Label htmlFor="sf-postcode">{t('Postcode', '邮编')}</Label>
+                    <Input
+                      id="sf-postcode"
+                      value={address.postcode}
+                      onChange={e => onPostcodeChange(e.target.value)}
+                      inputMode="numeric"
+                      maxLength={5}
+                      placeholder="43000"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5 flex-1">
+                    <Label htmlFor="sf-city">{t('City', '城市')}</Label>
+                    <Input
+                      id="sf-city"
+                      value={address.city}
+                      onChange={e => setAddress(a => ({ ...a, city: e.target.value }))}
+                      placeholder={t('City', '城市')}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="sf-state">{t('State', '州属')}</Label>
+                  <select
+                    id="sf-state"
+                    value={address.state}
+                    onChange={e => setAddress(a => ({ ...a, state: e.target.value }))}
+                    className="w-full min-w-0 rounded-md border border-clay-border bg-surface-raised px-[13px] py-2.5 text-[16px] text-ink transition-colors outline-none focus-visible:border-oxblood focus-visible:ring-3 focus-visible:ring-oxblood/10"
+                  >
+                    <option value="">{t('Select state…', '选择州属…')}</option>
+                    {MY_STATES.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             )}
           </div>
