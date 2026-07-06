@@ -5,7 +5,7 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
-import { fetchProducts, placeOrder, fetchMerchantVouchers, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl } from '../store'
+import { fetchProducts, placeOrder, fetchMerchantVoucher, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl } from '../store'
 import { priceOrder, voucherError } from '../pricing'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
@@ -53,10 +53,10 @@ export default function Storefront() {
 
   const [gallery, setGallery] = useState<Product | null>(null)
 
-  const [vouchers, setVouchers] = useState<Voucher[]>([])
   const [voucherInput, setVoucherInput] = useState('')
   const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null)
   const [voucherMsg, setVoucherMsg] = useState('')
+  const [voucherBusy, setVoucherBusy] = useState(false)
 
   const merchantId = merchant?.id
   const currency = merchant?.currency
@@ -64,7 +64,6 @@ export default function Storefront() {
   useEffect(() => {
     if (!merchantId) return
     fetchProducts(merchantId).then(setProducts)
-    fetchMerchantVouchers(merchantId).then(setVouchers)
   }, [merchantId])
 
   const onPostcodeChange = async (raw: string) => {
@@ -114,22 +113,35 @@ export default function Storefront() {
       address.state.trim() !== '')
   const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady
 
-  const applyVoucher = () => {
+  const applyVoucher = async () => {
     const code = voucherInput.trim().toUpperCase()
     if (!code) return
-    const v = vouchers.find(x => x.code === code)
-    const err = voucherError(v ?? null, {
+    // A voucher is tracked one-per-customer by WhatsApp/email; without one the
+    // redemption can't be attributed and the server rejects it. Ask up front.
+    if (!voucherEntry) {
+      setAppliedVoucher(null)
+      setVoucherMsg(t('❌ Enter your WhatsApp number before applying a voucher.', '❌ 请先填写 WhatsApp 号码再使用优惠券。'))
+      return
+    }
+    // Validate against fresh DB state, not a page-load snapshot — otherwise a
+    // customer who already redeemed this code (even earlier in this session)
+    // sees a false "applied" that only fails at Place Order. Catch reuse here.
+    setVoucherBusy(true)
+    setVoucherMsg(t('Checking voucher…', '验证优惠券…'))
+    const v = await fetchMerchantVoucher(merchant.id, code)
+    setVoucherBusy(false)
+    const err = voucherError(v, {
       subtotal: bd.subtotal + bd.shipping,
       userEmail: voucherEntry,
       now: new Date(),
-      fullyUsed: v ? voucherFullyUsed(v) : false,
+      fullyUsed: v ? voucherFullyUsed(v) : true,
     })
-    if (err) {
+    if (err || !v) {
       setAppliedVoucher(null)
-      setVoucherMsg(voucherErrorText(err, v))
+      setVoucherMsg(voucherErrorText(err ?? 'invalid', v))
       return
     }
-    setAppliedVoucher(v!)
+    setAppliedVoucher(v)
     const label = (v as any).type === 'percent' ? `${(v as any).value}% off` : `${formatMoney((v as any).value, currency)} off`
     setVoucherMsg(t(`✓ Voucher applied: ${label}`, `✓ 优惠券已应用：${label}`))
   }
@@ -168,6 +180,27 @@ export default function Storefront() {
     setBusy(true)
     setError(null)
     try {
+      // Re-validate the voucher against fresh DB state, not the page-load
+      // snapshot — that snapshot never reflects this session's own redemption,
+      // so a customer could otherwise re-apply and be granted the discount again
+      // while used_by stayed at 1. On a fetch miss, fall through to the RPC guard.
+      if (appliedVoucher) {
+        const fresh = await fetchMerchantVoucher(merchant.id, appliedVoucher.code)
+        if (fresh) {
+          const verr = voucherError(fresh, {
+            subtotal: bd.subtotal + bd.shipping,
+            userEmail: voucherEntry,
+            now: new Date(),
+            fullyUsed: voucherFullyUsed(fresh),
+          })
+          if (verr) {
+            setAppliedVoucher(null)
+            setVoucherMsg(voucherErrorText(verr, fresh))
+            setError(voucherErrorText(verr, fresh))
+            return
+          }
+        }
+      }
       const result = await placeOrder({
         merchantId: merchant.id,
         customerName: name.trim(),
@@ -178,6 +211,8 @@ export default function Storefront() {
         items: cartItems,
         total,
         currency,
+        discount,
+        voucherCode: appliedVoucher?.code ?? null,
       })
       if (appliedVoucher) {
         // Best-effort: failure to record usage must not fail a placed order.
@@ -525,10 +560,11 @@ export default function Storefront() {
                 />
                 <button
                   type="button"
-                  className="w-full border border-clay-border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-ink text-center bg-surface-raised transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2 whitespace-nowrap"
+                  disabled={voucherBusy}
+                  className="w-full border border-clay-border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-ink text-center bg-surface-raised transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2 whitespace-nowrap disabled:opacity-60"
                   onClick={applyVoucher}
                 >
-                  {t('Apply', '应用')}
+                  {voucherBusy ? t('Checking…', '验证中…') : t('Apply', '应用')}
                 </button>
               </div>
             )}

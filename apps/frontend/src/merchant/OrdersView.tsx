@@ -275,6 +275,14 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                         <span className="tabular-nums text-ink">{formatMoney(selected.shipping_fee, orderCurrency)}</span>
                       </div>
                     )}
+                    {selected.discount != null && selected.discount > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-rose-muted">
+                          {t('Discount', '折扣')}{selected.voucher_code ? ` (${selected.voucher_code})` : ''}
+                        </span>
+                        <span className="tabular-nums text-ink">−{formatMoney(selected.discount, orderCurrency)}</span>
+                      </div>
+                    )}
                     <div className="flex justify-between font-medium">
                       <span className="text-ink">{t('Total', '总计')}</span>
                       <span className="tabular-nums text-oxblood">{formatMoney(selected.total, orderCurrency)}</span>

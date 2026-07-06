@@ -351,6 +351,18 @@ export async function fetchMerchantVouchers(merchantId: string): Promise<Voucher
   return (data ?? []).map(voucherFromRow);
 }
 
+// Fetch one voucher by code with its current used_by, bypassing any stale
+// in-memory snapshot. Used to re-validate one-per-customer just before an order
+// is placed (the page-load snapshot never sees this session's own redemption).
+export async function fetchMerchantVoucher(merchantId: string, code: string): Promise<Voucher | null> {
+  if (!merchantId || !code) return null;
+  const { data, error } = await supabase
+    .from('vouchers').select('*')
+    .eq('merchant_id', merchantId).eq('code', code).maybeSingle();
+  if (error || !data) return null;
+  return voucherFromRow(data);
+}
+
 // Record a redemption. Customers cannot write the vouchers table under RLS, so
 // this goes through a security-definer RPC that enforces max_uses / one-per-
 // customer server-side.
@@ -405,7 +417,7 @@ export async function fetchReferredShops(): Promise<ReferredShop[]> {
 
 const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
 
-export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total, currency }: {
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total, currency, discount, voucherCode }: {
   merchantId: string
   customerName: string
   customerWa: string
@@ -415,6 +427,8 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   items: any
   total: number
   currency?: string
+  discount?: number
+  voucherCode?: string | null
 }) {
   const { data: orderNumber, error: rpcErr } = await supabase
     .rpc('next_order_number', { p_merchant: merchantId })
@@ -427,6 +441,8 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     shipping_fee: shippingFee ?? 0,
     items, total,
     currency: currency ?? 'MYR',
+    discount: discount && discount > 0 ? discount : null,
+    voucher_code: discount && discount > 0 ? (voucherCode ?? null) : null,
     order_number: orderNumber,
     status: 'new',
   }).select().single()
