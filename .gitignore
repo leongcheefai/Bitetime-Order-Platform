@@ -10,3 +10,6 @@ dist
 # Supabase CLI local state
 apps/backend/supabase/.branches
 apps/backend/supabase/.temp
+
+# Wayfinder research notes: may carry live infra posture — keep out of the public repo
+docs/research/
