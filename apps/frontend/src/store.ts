@@ -433,7 +433,16 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   const { data: orderNumber, error: rpcErr } = await supabase
     .rpc('next_order_number', { p_merchant: merchantId })
   if (rpcErr) throw rpcErr
-  const { data, error } = await supabase.from('orders').insert({
+  // No .select(). A guest's order is invisible to them — orders_select_scoped
+  // matches on user_id = auth.uid(), which is NULL for a guest — and Postgres
+  // rejects an INSERT ... RETURNING whose row the caller may not read back. So
+  // asking for the row killed guest checkout outright. That was already true
+  // before user_id was ever stamped (the select policy is unchanged); it only
+  // went unnoticed because production's policies have drifted from these
+  // migrations. Nothing consumed the row anyway — callers use the order number.
+  //
+  // user_id is stamped by a BEFORE INSERT trigger from the JWT, never sent here.
+  const { error } = await supabase.from('orders').insert({
     merchant_id: merchantId,
     customer_name: customerName,
     customer_wa: customerWa,
@@ -445,9 +454,9 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     voucher_code: discount && discount > 0 ? (voucherCode ?? null) : null,
     order_number: orderNumber,
     status: 'new',
-  }).select().single()
+  })
   if (error) throw error
-  return { order: data, orderNumber }
+  return { orderNumber }
 }
 
 // Trigger the server-side order notification (Telegram). The bot token stays on

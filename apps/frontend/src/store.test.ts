@@ -516,11 +516,7 @@ describe('upsertMerchantSecret', () => {
 describe('placeOrder', () => {
   it('calls rpc(next_order_number, {p_merchant}) then inserts with correct fields', async () => {
     __mocks.rpc.mockResolvedValueOnce({ data: 'BT-0001', error: null })
-    const orderRow = {
-      id: 'ord-1', merchant_id: 'm1', order_number: 'BT-0001',
-      status: 'new', items: [{ id: 'p1', qty: 2 }], total: 24,
-    }
-    __mocks.single.mockResolvedValueOnce({ data: orderRow, error: null })
+    __mocks.insert.mockResolvedValueOnce({ error: null })
 
     const result = await placeOrder({
       merchantId: 'm1',
@@ -542,7 +538,20 @@ describe('placeOrder', () => {
       items: [{ id: 'p1', qty: 2 }],
       total: 24,
     }))
-    expect(result).toEqual({ order: orderRow, orderNumber: 'BT-0001' })
+    expect(result).toEqual({ orderNumber: 'BT-0001' })
+  })
+
+  // A guest's own order is invisible to them under RLS (orders_select_scoped
+  // matches on user_id = auth.uid(), which is NULL for a guest). So asking for
+  // the row back with .select() makes Postgres reject the whole insert — guest
+  // checkout dies. Nothing consumes the row; only the order number is used.
+  it('never reads the inserted row back, so a guest checkout is not blocked by RLS', async () => {
+    __mocks.rpc.mockResolvedValueOnce({ data: 'BT-0002', error: null })
+    __mocks.insert.mockResolvedValueOnce({ error: null })
+
+    await placeOrder({ merchantId: 'm1', items: [], total: 0 } as any)
+
+    expect(__mocks.insertSelect).not.toHaveBeenCalled()
   })
 
   it('throws when rpc returns an error without calling insert', async () => {
@@ -553,7 +562,7 @@ describe('placeOrder', () => {
 
   it('throws when insert returns an error', async () => {
     __mocks.rpc.mockResolvedValueOnce({ data: 'BT-0001', error: null })
-    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('insert failed') })
+    __mocks.insert.mockResolvedValueOnce({ error: new Error('insert failed') })
     await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any)).rejects.toThrow('insert failed')
   })
 })
