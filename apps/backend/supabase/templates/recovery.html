@@ -1,0 +1,40 @@
+<!--
+  The password-reset email. Both languages in ONE body: the app's t(en, zh) cannot reach Supabase's
+  templates under any design, so this is not a limitation to work around — it is simply where the
+  copy lives. A reader takes the half they need.
+
+  {{ .ConfirmationURL }} carries the recovery token and returns to /reset-password?shop=<slug>,
+  which is why that URL must be on the redirect allow-list (config.toml locally, dashboard in prod).
+-->
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; line-height: 1.6; color: #2c2422; max-width: 480px;">
+  <h2 style="font-size: 18px; color: #6d1f2c; margin: 0 0 12px;">Reset your password</h2>
+  <p style="margin: 0 0 16px;">
+    Someone asked to reset the password for this BiteTime account. If that was you, set a new one:
+  </p>
+  <p style="margin: 0 0 20px;">
+    <a href="{{ .ConfirmationURL }}"
+       style="display: inline-block; background: #6d1f2c; color: #ffffff; text-decoration: none; padding: 10px 18px; border-radius: 6px; font-weight: 500;">
+      Set a new password
+    </a>
+  </p>
+  <p style="margin: 0 0 24px; font-size: 13px; color: #8a6f6a;">
+    If it wasn't you, ignore this email — your password stays as it is. The link can only be used
+    once, and expires shortly.
+  </p>
+
+  <hr style="border: 0; border-top: 1px solid #e6d9d4; margin: 24px 0;" />
+
+  <h2 style="font-size: 18px; color: #6d1f2c; margin: 0 0 12px;">重设你的密码</h2>
+  <p style="margin: 0 0 16px;">
+    有人申请重设此 BiteTime 账户的密码。如果是你本人，请设置新密码：
+  </p>
+  <p style="margin: 0 0 20px;">
+    <a href="{{ .ConfirmationURL }}"
+       style="display: inline-block; background: #6d1f2c; color: #ffffff; text-decoration: none; padding: 10px 18px; border-radius: 6px; font-weight: 500;">
+      设置新密码
+    </a>
+  </p>
+  <p style="margin: 0; font-size: 13px; color: #8a6f6a;">
+    如果不是你本人操作，请忽略此邮件——你的密码不会改变。此链接仅可使用一次，并会很快失效。
+  </p>
+</div>

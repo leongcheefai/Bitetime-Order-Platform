@@ -37,10 +37,35 @@ file_size_limit = "5MiB"
 [auth]
 enabled = true
 site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173"]
+# The password-reset landing URL must be allow-listed or Supabase silently drops `redirectTo` and
+# sends the customer to site_url instead — signed in, but not back where they were ordering.
+# One static entry, no wildcard, because the route is top-level (see src/resetPassword.ts).
+# ⚠ The PRODUCTION allow-list is dashboard config, not this file. It needs the same URL.
+additional_redirect_urls = ["http://localhost:5173", "http://localhost:5173/reset-password"]
 jwt_expiry = 3600
 enable_signup = true
+# The floor from @bitetime/shared, enforced where it is actually a boundary. Signup goes through
+# our own backend, which checks it; password RESET calls GoTrue straight from the browser, and
+# GoTrue's own default floor is 6 — lower than ours. Without this line the client check is the only
+# one, and a 6-character password set with curl would be accepted.
+# ⚠ PRODUCTION: this is dashboard config too (Auth → Providers → Email → Minimum password length).
+minimum_password_length = 8
 
 [auth.email]
 enable_signup = true
 enable_confirmations = false
+
+# Bilingual in one body: the app's t(en, zh) cannot reach Supabase's templates under any design,
+# so both languages ship together and the reader takes the half they need.
+#
+# ⚠ PRODUCTION: this block configures the LOCAL stack only — `db:push` ships migrations, not auth
+# config. The template and subject must also be applied to the linked project, either by
+# `supabase config push` or by pasting them into Dashboard → Auth → Email Templates → Reset
+# Password. Until then production sends Supabase's default English-only email.
+#
+# ⚠ PRODUCTION: reset is also the one email that CANNOT be worked around — it is the only way back
+# into an account — so custom SMTP (Resend, verified sending domain) must be enabled on the project
+# before this ships. Auth mail currently rides Supabase's testing-only sender.
+[auth.email.template.recovery]
+subject = "Reset your BiteTime password / 重设你的 BiteTime 密码"
+content_path = "./supabase/templates/recovery.html"

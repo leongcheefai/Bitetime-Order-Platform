@@ -63,7 +63,9 @@ vi.mock('./supabase', () => {
   const getSession = vi.fn()
   // signUp() → supabase.auth.signUp() for signUp() store fn
   const signUp = vi.fn()
-  const auth = { getUser, getSession, signUp }
+  // resetPasswordForEmail() → supabase.auth.resetPasswordForEmail() for requestPasswordReset()
+  const resetPasswordForEmail = vi.fn()
+  const auth = { getUser, getSession, signUp, resetPasswordForEmail }
 
   // rpc mock — top-level supabase.rpc(name, params) → awaited directly.
   const rpc = vi.fn()
@@ -73,7 +75,7 @@ vi.mock('./supabase', () => {
     __mocks: {
       from, select, eq, is, single, maybeSingle, insert, update,
       insertSelect, updateEqSelect, upsertSelect, getUser, getSession, signUp: auth.signUp, order, limit,
-      upsert, del, deleteEq, rpc,
+      upsert, del, deleteEq, rpc, resetPasswordForEmail,
     },
   }
 })
@@ -98,6 +100,7 @@ import {
   fetchMerchantOrders,
   fetchMyOrdersAtShop,
   saveCustomerDetails,
+  requestPasswordReset,
   ORDER_HISTORY_LIMIT,
   setOrderStatus,
   fetchMerchantCustomers,
@@ -704,6 +707,34 @@ describe('saveCustomerDetails', () => {
     await saveCustomerDetails({})
     expect(__mocks.getUser).not.toHaveBeenCalled()
     expect(__mocks.from).not.toHaveBeenCalled()
+  })
+})
+
+// ── requestPasswordReset (#57: non-enumeration is the whole point) ────────────
+
+describe('requestPasswordReset', () => {
+  beforeEach(() => {
+    vi.stubGlobal('window', { location: { origin: 'https://bitetime.co' } })
+  })
+
+  it('reports nothing when Supabase errors — an error here is an enumeration oracle', async () => {
+    // Supabase's per-email cooldown fires only when a mail is actually SENT, i.e. only for an
+    // address that HAS an account. If this function surfaced that, two requests a minute apart
+    // would tell an attacker which addresses are registered. It must be silent either way, so the
+    // caller has nothing to render but the neutral message.
+    __mocks.resetPasswordForEmail.mockResolvedValueOnce({ error: { message: 'over_email_send_rate_limit' } })
+    await expect(requestPasswordReset('taken@example.com', 'cookie-lab')).resolves.toBeUndefined()
+
+    __mocks.resetPasswordForEmail.mockRejectedValueOnce(new Error('network down'))
+    await expect(requestPasswordReset('taken@example.com', 'cookie-lab')).resolves.toBeUndefined()
+  })
+
+  it('sends the customer back to the shop they were ordering from', async () => {
+    __mocks.resetPasswordForEmail.mockResolvedValueOnce({ error: null })
+    await requestPasswordReset('  ah.meng@example.com ', 'cookie-lab')
+    expect(__mocks.resetPasswordForEmail).toHaveBeenCalledWith('ah.meng@example.com', {
+      redirectTo: 'https://bitetime.co/reset-password?shop=cookie-lab',
+    })
   })
 })
 

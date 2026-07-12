@@ -6,6 +6,7 @@ import { resolveReferredByCode } from './referralCode'
 import { SignupError, signupErrorCode } from './signupError'
 import type { Order, ReferredShop, Voucher } from './types';
 import type { SavedDetails } from './savedDetails';
+import { resetRedirectUrl } from './resetPassword';
 import type { AddressParts } from './types'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -339,6 +340,38 @@ export async function updateMerchantSlug(id: string, slug: string) {
     .from('merchants').update({ slug: s }).eq('id', id).select().single()
   if (error) throw error
   return data
+}
+
+/**
+ * Ask Supabase to email a recovery link. Deliberately NOT mirrored on the custom signup endpoint:
+ * going through Supabase buys two things for free that a custom endpoint would force us to rebuild
+ * — its own rate limiting, and NON-ENUMERATION (the call succeeds whether or not the address has an
+ * account, so the caller can only ever show the neutral message).
+ *
+ * Note the asymmetry with signup, which DOES disclose that an email already has an account. That
+ * was accepted knowingly there. Do not "fix" reset to match it: the leak exists once already, and
+ * there is no reason to open a second.
+ */
+export async function requestPasswordReset(email: string, shopSlug: string | null): Promise<void> {
+  // NEVER throws, and never reports the outcome. That is the whole guarantee, and it lives here so
+  // that no caller can leak it by accident: Supabase's per-email cooldown only fires when a mail is
+  // actually SENT — i.e. only for an address that has an account — so an error surfaced to the UI
+  // would tell an attacker which addresses are registered. Two requests a minute apart is the whole
+  // attack. Callers show the neutral message unconditionally because there is nothing else to show.
+  //
+  // The cost is real and accepted: a genuine failure (network down) looks like success to the
+  // customer, who waits for a mail that never comes. Enumeration is the worse of the two.
+  try {
+    await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: resetRedirectUrl(window.location.origin, shopSlug),
+    })
+  } catch { /* swallowed on purpose — see above */ }
+}
+
+/** Set the new password for the session the recovery link just established. */
+export async function updatePassword(password: string) {
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error) throw error
 }
 
 export async function signOut() {
