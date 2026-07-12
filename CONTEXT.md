@@ -24,6 +24,16 @@ A per-merchant promotion code. `percent` (subtotal×value/100) or fixed (`min(va
 
 A discount earned by referring a new customer. Capped at the post-voucher total. The cap math is in `priceOrder`; the referrer lookup and new-customer check are I/O in the caller (`fetchProfileByReferralCode`, `isNewCustomer`).
 
+## Customer signup
+
+How a customer account comes into being. Email confirmation is on **project-wide** and stays on — it is shared with merchants, and a merchant account controls a shop and its Stripe billing. A client-side `signUp` would therefore return no session, stranding a customer mid-checkout in their inbox holding a cart, so customers are minted **pre-confirmed** by the backend instead (`POST /api/customer/signup` → `admin.auth.admin.createUser({ email_confirm: true })`), and the client signs in normally. Pure seams: `customerSignup` (policy; the account-creation and profile writes are injected adapters), `rateLimit` (clock-injected sliding window), `clientIp` (backend), `signupError` (frontend).
+
+Three trade-offs are load-bearing, not incidental:
+
+- **A customer's email is never verified.** Self-correcting: whoever owns the address reclaims it by password reset, and we send customers no other mail.
+- **A duplicate email is disclosed** ("You already have an account — sign in"), which makes the endpoint an email-enumeration oracle. Accepted: the alternative strands a returning customer with no session and no actionable error. Password reset deliberately does *not* disclose — do not "fix" the asymmetry.
+- **The rate limit is the only control** (CORS constrains browsers, not servers), and it is **in-memory**. It resets on redeploy (harmless) and silently stops protecting anything if the backend is scaled past one instance (not harmless). Its IP key reads the *rightmost* `X-Forwarded-For` entry, because the leftmost is caller-supplied.
+
 ## Billing lifecycle
 
 A merchant's platform-subscription journey. Basic signup is cardless and lands

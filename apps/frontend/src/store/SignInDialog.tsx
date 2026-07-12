@@ -4,15 +4,17 @@ import { Dialog, DialogContent, DialogTitle } from '../components/ui/dialog'
 
 /**
  * The storefront's sign-in host: a modal, never a route. Email+password has no
- * redirect round-trip, so `Storefront` never unmounts and the cart survives by
- * construction — no lifting state, no storage, no restore logic.
+ * redirect round-trip — not even for a brand-new account, which the backend mints
+ * pre-confirmed — so `Storefront` never unmounts and the cart survives by
+ * construction: no lifting state, no storage, no restore logic.
  */
 export default function SignInDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const { t } = useSession()
+  const label = t('Sign in or create an account', '登录或创建账户')
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="p-6" aria-label={t('Sign in', '登录')}>
-        <DialogTitle className="sr-only">{t('Sign in', '登录')}</DialogTitle>
+      <DialogContent className="p-6" aria-label={label}>
+        <DialogTitle className="sr-only">{label}</DialogTitle>
         {/* Promises only what already ships: the order is recorded against the account.
             The prefill half of the interstitial's copy ("your name and address fill in
             automatically next time") lands with the profile prefill, not before it. */}

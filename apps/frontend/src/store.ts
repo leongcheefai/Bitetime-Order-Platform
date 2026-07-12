@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
 import { resolveReferredByCode } from './referralCode'
+import { SignupError, signupErrorCode } from './signupError'
 import type { ReferredShop, Voucher } from './types';
 import type { AddressParts } from './types'
 
@@ -33,6 +34,37 @@ export async function signUp(name: string, email: string, password: string) {
     });
   }
   return data.user;
+}
+
+// Customer sign-up. Goes through the backend rather than supabase.auth.signUp because
+// email confirmation is on project-wide (it protects merchants, who own shops and Stripe
+// billing) — a client-side signUp would return no session and strand the customer in their
+// inbox holding a cart. The backend creates the account pre-confirmed with the service role;
+// signing in here is what puts the session in this tab, so the cart survives and the order
+// they were placing is recorded against them.
+export async function signUpCustomer(email: string, password: string) {
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}/api/customer/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+  } catch {
+    throw new SignupError('network')
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new SignupError(signupErrorCode(res.status, body))
+  }
+  try {
+    return await signIn(email, password)
+  } catch {
+    // The account exists from here on, so a failure now is NOT a wrong password — telling
+    // the customer it was would be a lie about credentials we just set for them. Distinct
+    // code, so the panel can say what actually happened and offer sign-in.
+    throw new SignupError('signin_failed')
+  }
 }
 
 // The profiles restructure made `id` a surrogate PK and moved auth identity to
