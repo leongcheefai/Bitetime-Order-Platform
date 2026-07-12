@@ -34,6 +34,22 @@ Three trade-offs are load-bearing, not incidental:
 - **A duplicate email is disclosed** ("You already have an account — sign in"), which makes the endpoint an email-enumeration oracle. Accepted: the alternative strands a returning customer with no session and no actionable error. Password reset deliberately does *not* disclose — do not "fix" the asymmetry.
 - **The rate limit is the only control** (CORS constrains browsers, not servers), and it is **in-memory**. It resets on redeploy (harmless) and silently stops protecting anything if the backend is scaled past one instance (not harmless). Its IP key reads the *rightmost* `X-Forwarded-For` entry, because the leftmost is caller-supplied.
 
+## Checkout gate
+
+The one step between a cart and the checkout form, and the only place a customer is ever *required*
+to choose: *sign in / create account / continue as guest*. (Sign-in is also *offered* elsewhere — the
+storefront header, the guest strip — but only the gate stands in the way.) Whether it fires is a pure decision
+(`checkoutGate.ts` → `checkoutStep`), not a consequence of clicking through a checkout — signed
+in, it never renders; first-time guest, it does; returning guest, it is skipped and a quiet
+"Ordering as a guest / Sign in" strip stands in its place. The guest choice is remembered in
+`localStorage` **keyed by shop slug**: a choice made at one shop must not silence the gate at
+another. Signing in overrides a remembered guest choice, always.
+
+Guest is one tap, and the warning ("Guest orders can't be traced back…") is on screen before
+they take it — a confirm step is only honest when the consequence is hidden, and it isn't. The
+warning is muted, not alarming: as a danger box it out-shouted the headline and made the guest
+path the loudest thing on a screen whose purpose is to offer an account.
+
 ## Billing lifecycle
 
 A merchant's platform-subscription journey. Basic signup is cardless and lands

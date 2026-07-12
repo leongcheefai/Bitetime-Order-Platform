@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { Link } from 'react-router-dom'
 import { useMerchant } from '../MerchantContext'
@@ -15,6 +15,8 @@ import type { Product, Voucher, AddressParts } from '../types'
 import LanguageSelect from '../components/LanguageSelect'
 import ImageLightbox from '../components/ImageLightbox'
 import SignInDialog from './SignInDialog'
+import CheckoutGate, { GuestStrip } from './CheckoutGate'
+import { checkoutStep, readGuestChoice, rememberGuestChoice } from '../checkoutGate'
 import { cn } from '@/lib/utils'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -62,11 +64,25 @@ export default function Storefront() {
 
   const merchantId = merchant?.id
   const currency = merchant?.currency
+  const slug = merchant?.slug
 
   useEffect(() => {
     if (!merchantId) return
     fetchProducts(merchantId).then(setProducts)
   }, [merchantId])
+
+  // The guest choice is remembered per shop, so the gate is met once here and never again —
+  // and a choice made at another shop cannot silence it at this one. `chosenAt` carries the
+  // slug rather than a bare flag: this component can be reused across shops, and a bare flag
+  // would follow the customer to the next storefront and swallow its gate.
+  const [chosenAt, setChosenAt] = useState<string | null>(null)
+  const guestRemembered = useMemo(() => (slug ? readGuestChoice(slug) : false), [slug])
+  const guestChosen = guestRemembered || (!!slug && chosenAt === slug)
+  const chooseGuest = () => {
+    if (!slug) return
+    rememberGuestChoice(slug)
+    setChosenAt(slug)
+  }
 
   const onPostcodeChange = async (raw: string) => {
     const pc = raw.replace(/\D/g, '').slice(0, 5)
@@ -114,6 +130,11 @@ export default function Storefront() {
       address.city.trim() !== '' &&
       address.state.trim() !== '')
   const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady
+
+  // The one decision that says whether this customer is ever asked to sign in. `account` is
+  // `undefined` until the session resolves — 'pending' holds the checkout back for that beat
+  // so a signed-in customer never sees the gate flash.
+  const step = checkoutStep({ sessionLoading: account === undefined, signedIn: !!account, guestChosen })
 
   const applyVoucher = async () => {
     const code = voucherInput.trim().toUpperCase()
@@ -527,14 +548,23 @@ export default function Storefront() {
 
           <hr className="border-0 border-t border-clay-border my-6" />
 
+          {/* The gate stands where the checkout form would be, and replaces it top to bottom:
+              details, voucher, summary, Place Order. The cart above it is untouched, so it
+              survives the gate — and survives signing in through it, since AuthPanel never
+              leaves the page. 'pending' renders neither: it is one beat of a resolving session. */}
+          {step === 'pending' ? null : step === 'gate' ? (
+            <CheckoutGate onGuest={chooseGuest} />
+          ) : (
+          <>
           {/* Customer details */}
           <div className="mb-7">
             <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Your Details', '您的资料')}</div>
+            {step === 'guest' && <GuestStrip onSignIn={() => setSignInOpen(true)} />}
             {/* On a storefront every signed-in user is a customer, whatever role they hold
                 elsewhere: a shop owner buying lunch here is a customer, and a merchant
                 ordering from their *own* storefront gets the order attributed to themselves.
                 That looks like a bug and isn't — they can already read it as the owner. */}
-            {account && (
+            {step === 'account' && account && (
               <div className="flex items-center gap-2 mb-3 px-[13px] py-2.5 bg-surface-raised border-[1.5px] border-divider rounded-md text-[13px] text-rose-muted leading-[1.5]">
                 <span>{t('Signed in as', '已登录：')} <strong className="text-ink font-medium">{account.email}</strong></span>
               </div>
@@ -657,6 +687,8 @@ export default function Storefront() {
           >
             {busy ? t('Placing order…', '提交中…') : t('Place Order', '提交订单')}
           </Button>
+          </>
+          )}
         </motion.div>
       )}
     </AnimatePresence>

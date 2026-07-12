@@ -11,6 +11,8 @@ import { Label } from '../components/ui/label'
 interface AuthPanelProps {
   heading: string
   subheading?: string
+  /** Which form opens first. The checkout gate asks for one by name; the modal starts at sign-in. */
+  initialMode?: 'signin' | 'signup'
   onSignedIn?: () => void
   /** Rendered under the form — where a host adds "Continue as guest" or similar. */
   footer?: React.ReactNode
@@ -29,9 +31,9 @@ interface AuthPanelProps {
  * merchant dashboard, and merchant auth drags in the pinyin dictionary used for slug
  * transliteration, which is code-split out of the customer bundle on purpose.
  */
-export default function AuthPanel({ heading, subheading, onSignedIn, footer }: AuthPanelProps) {
+export default function AuthPanel({ heading, subheading, initialMode = 'signin', onSignedIn, footer }: AuthPanelProps) {
   const { t } = useSession()
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
