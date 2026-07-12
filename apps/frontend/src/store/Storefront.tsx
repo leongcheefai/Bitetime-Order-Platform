@@ -14,6 +14,7 @@ import { MY_STATES } from '../states-my'
 import type { Product, Voucher, AddressParts } from '../types'
 import LanguageSelect from '../components/LanguageSelect'
 import ImageLightbox from '../components/ImageLightbox'
+import SignInDialog from './SignInDialog'
 import { cn } from '@/lib/utils'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -52,6 +53,7 @@ export default function Storefront() {
   const [success, setSuccess] = useState<SuccessState | null>(null)
 
   const [gallery, setGallery] = useState<Product | null>(null)
+  const [signInOpen, setSignInOpen] = useState(false)
 
   const [voucherInput, setVoucherInput] = useState('')
   const [appliedVoucher, setAppliedVoucher] = useState<Voucher | null>(null)
@@ -327,14 +329,27 @@ export default function Storefront() {
               <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">
                 {t('Powered by BiteTime', 'BiteTime 提供技术支持')}
               </p>
-              <Link to={`/s/${merchant.slug}/track`} className="text-[12px] text-oxblood underline mt-1 inline-block">
-                {t('Track an order', '追踪订单')}
-              </Link>
+              <div className="flex items-center gap-3 mt-1">
+                <Link to={`/s/${merchant.slug}/track`} className="text-[12px] text-oxblood underline inline-block">
+                  {t('Track an order', '追踪订单')}
+                </Link>
+                {!account && (
+                  <button
+                    type="button"
+                    onClick={() => setSignInOpen(true)}
+                    className="text-[12px] text-oxblood underline inline-block cursor-pointer"
+                  >
+                    {t('Sign in', '登录')}
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex justify-end flex-shrink-0 max-[480px]:justify-start">
               <LanguageSelect />
             </div>
           </div>
+
+          <SignInDialog open={signInOpen} onOpenChange={setSignInOpen} />
 
           {/* Product list */}
           <div className="mb-7">
@@ -515,6 +530,15 @@ export default function Storefront() {
           {/* Customer details */}
           <div className="mb-7">
             <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Your Details', '您的资料')}</div>
+            {/* On a storefront every signed-in user is a customer, whatever role they hold
+                elsewhere: a shop owner buying lunch here is a customer, and a merchant
+                ordering from their *own* storefront gets the order attributed to themselves.
+                That looks like a bug and isn't — they can already read it as the owner. */}
+            {account && (
+              <div className="flex items-center gap-2 mb-3 px-[13px] py-2.5 bg-surface-raised border-[1.5px] border-divider rounded-md text-[13px] text-rose-muted leading-[1.5]">
+                <span>{t('Signed in as', '已登录：')} <strong className="text-ink font-medium">{account.email}</strong></span>
+              </div>
+            )}
             <div className="flex flex-col gap-1.5 mb-3">
               <Label htmlFor="sf-name">{t('Name', '姓名')} *</Label>
               <Input
