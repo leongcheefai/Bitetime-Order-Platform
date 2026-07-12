@@ -7,15 +7,16 @@
   "scripts": {
     "dev": "node --import jiti/register --watch --env-file=.env src/index.ts",
     "start": "node dist/server.js",
-    "build": "esbuild src/index.ts --bundle --packages=external --platform=node --format=esm --target=node20 --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "build": "esbuild src/index.ts --bundle --external:@hono/node-server --external:hono --external:@supabase/supabase-js --external:stripe --platform=node --format=esm --target=node20 --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run tests/unit",
-    "test:rls": "vitest run tests/rls",
+    "test:rls": "vitest run --config vitest.rls.config.ts",
     "db:migrate": "supabase migration up",
     "db:push": "supabase db push"
   },
   "dependencies": {
+    "@bitetime/shared": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@supabase/supabase-js": "^2.107.0",
     "hono": "^4.6.0",

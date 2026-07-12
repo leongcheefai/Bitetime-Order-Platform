@@ -4,9 +4,9 @@
 //   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 // Without those vars the suite is skipped so `npm test` stays green.
 import { describe, it, expect, beforeAll } from 'vitest'
-import { hasEnv, makeUser, serviceClient } from './helpers.js'
+import { makeUser, seedMerchant, serviceClient } from './helpers.js'
 
-describe.skipIf(!hasEnv)('tenant isolation (RLS)', () => {
+describe('tenant isolation (RLS)', () => {
   let merchantA: any, merchantB: any, idA: any, idB: any
 
   beforeAll(async () => {
@@ -18,21 +18,8 @@ describe.skipIf(!hasEnv)('tenant isolation (RLS)', () => {
     const uA = (await merchantA.auth.getUser()).data.user!.id
     const uB = (await merchantB.auth.getUser()).data.user!.id
 
-    // Insert merchant A (owned by uA)
-    const resA = await svc
-      .from('merchants')
-      .insert({ name: 'A', slug: 'shop-rls-a', order_prefix: 'AA', owner_id: uA, status: 'active' })
-      .select('id')
-      .single()
-    idA = resA.data!.id
-
-    // Insert merchant B (owned by uB)
-    const resB = await svc
-      .from('merchants')
-      .insert({ name: 'B', slug: 'shop-rls-b', order_prefix: 'BB', owner_id: uB, status: 'active' })
-      .select('id')
-      .single()
-    idB = resB.data!.id
+    idA = await seedMerchant({ name: 'A', slug: 'shop-rls-a', order_prefix: 'AA', owner_id: uA })
+    idB = await seedMerchant({ name: 'B', slug: 'shop-rls-b', order_prefix: 'BB', owner_id: uB })
 
     // Seed an INACTIVE product for merchant B (active=false means merchantA
     // cannot see it via the public "active products" policy).

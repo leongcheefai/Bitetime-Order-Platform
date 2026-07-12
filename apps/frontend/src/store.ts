@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
 import { resolveReferredByCode } from './referralCode'
+import { SignupError, signupErrorCode } from './signupError'
 import type { ReferredShop, Voucher } from './types';
 import type { AddressParts } from './types'
 
@@ -33,6 +34,37 @@ export async function signUp(name: string, email: string, password: string) {
     });
   }
   return data.user;
+}
+
+// Customer sign-up. Goes through the backend rather than supabase.auth.signUp because
+// email confirmation is on project-wide (it protects merchants, who own shops and Stripe
+// billing) — a client-side signUp would return no session and strand the customer in their
+// inbox holding a cart. The backend creates the account pre-confirmed with the service role;
+// signing in here is what puts the session in this tab, so the cart survives and the order
+// they were placing is recorded against them.
+export async function signUpCustomer(email: string, password: string) {
+  let res: Response
+  try {
+    res = await fetch(`${API_URL}/api/customer/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+  } catch {
+    throw new SignupError('network')
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => null)
+    throw new SignupError(signupErrorCode(res.status, body))
+  }
+  try {
+    return await signIn(email, password)
+  } catch {
+    // The account exists from here on, so a failure now is NOT a wrong password — telling
+    // the customer it was would be a lie about credentials we just set for them. Distinct
+    // code, so the panel can say what actually happened and offer sign-in.
+    throw new SignupError('signin_failed')
+  }
 }
 
 // The profiles restructure made `id` a surrogate PK and moved auth identity to
@@ -433,7 +465,16 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   const { data: orderNumber, error: rpcErr } = await supabase
     .rpc('next_order_number', { p_merchant: merchantId })
   if (rpcErr) throw rpcErr
-  const { data, error } = await supabase.from('orders').insert({
+  // No .select(). A guest's order is invisible to them — orders_select_scoped
+  // matches on user_id = auth.uid(), which is NULL for a guest — and Postgres
+  // rejects an INSERT ... RETURNING whose row the caller may not read back. So
+  // asking for the row killed guest checkout outright. That was already true
+  // before user_id was ever stamped (the select policy is unchanged); it only
+  // went unnoticed because production's policies have drifted from these
+  // migrations. Nothing consumed the row anyway — callers use the order number.
+  //
+  // user_id is stamped by a BEFORE INSERT trigger from the JWT, never sent here.
+  const { error } = await supabase.from('orders').insert({
     merchant_id: merchantId,
     customer_name: customerName,
     customer_wa: customerWa,
@@ -445,9 +486,9 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     voucher_code: discount && discount > 0 ? (voucherCode ?? null) : null,
     order_number: orderNumber,
     status: 'new',
-  }).select().single()
+  })
   if (error) throw error
-  return { order: data, orderNumber }
+  return { orderNumber }
 }
 
 // Trigger the server-side order notification (Telegram). The bot token stays on

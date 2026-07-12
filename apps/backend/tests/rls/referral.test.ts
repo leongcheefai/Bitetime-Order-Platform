@@ -2,14 +2,14 @@
 // invited shops (three safe columns), never others'. Requires a running local Supabase
 // with SUPABASE_URL / SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY set.
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import { hasEnv, makeUser, serviceClient } from './helpers.js'
+import { makeUser, serviceClient } from './helpers.js'
 
 // Same derivation as referralCodeOf() in the frontend store.
 const codeOf = (uid: string) => uid.replace(/-/g, '').slice(0, 8).toUpperCase()
 
 const SLUGS = ['ref-shop-a', 'ref-shop-b', 'ref-shop-c']
 
-describe.skipIf(!hasEnv)('referral capture & track (RLS)', () => {
+describe('referral capture & track (RLS)', () => {
   let userA: any, userC: any
   let uA: string
 

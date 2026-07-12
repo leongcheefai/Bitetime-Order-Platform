@@ -1,21 +1,95 @@
-// tests/rls/helpers.js
+// tests/rls/helpers.ts
 // Builds Supabase clients for RLS integration tests.
-// Credentials are injected via env vars (see `supabase status`).
+// Credentials come from env vars, which vitest.rls.config.ts fills in from the
+// running local stack when they are not already set.
 import { createClient } from '@supabase/supabase-js'
 
-export const SUPABASE_URL = process.env.SUPABASE_URL
-export const ANON_KEY = process.env.SUPABASE_ANON_KEY
-export const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+/**
+ * Missing credentials are a hard failure, never a skip. This suite is the only
+ * proof that an order cannot be spoofed onto a stranger's account; a version of
+ * it that quietly asserts nothing and still reports green is worse than no suite
+ * at all, because it is trusted.
+ */
+function required(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(
+      `${name} is not set, so the RLS suite cannot reach a database. It must fail rather than skip. ` +
+        `Run it via \`pnpm test:rls\`, which reads the local stack's credentials for you.`,
+    )
+  }
+  return value
+}
 
-/** True when all required env vars are present — use with describe.skipIf */
-export const hasEnv = Boolean(SUPABASE_URL && ANON_KEY && SERVICE_KEY)
+export const SUPABASE_URL = required('SUPABASE_URL')
+export const ANON_KEY = required('SUPABASE_ANON_KEY')
+export const SERVICE_KEY = required('SUPABASE_SERVICE_ROLE_KEY')
 
 export function anonClient() {
-  return createClient(SUPABASE_URL!, ANON_KEY!, { auth: { persistSession: false } })
+  return createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
 }
 
 export function serviceClient() {
-  return createClient(SUPABASE_URL!, SERVICE_KEY!, { auth: { persistSession: false } })
+  return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
+}
+
+export type MerchantStatus = 'pending' | 'active' | 'suspended'
+
+/**
+ * These helpers DELETE rows with the service role, which bypasses RLS. Pointed
+ * at a real project they would destroy live orders, so refuse to run anywhere
+ * but a local Supabase.
+ */
+function assertLocal() {
+  const host = new URL(SUPABASE_URL).hostname
+  if (host !== '127.0.0.1' && host !== 'localhost') {
+    throw new Error(
+      `RLS fixtures delete data with the service role and must only run against a local Supabase. Refusing to touch ${host}.`,
+    )
+  }
+}
+
+/**
+ * Drop a merchant and everything hanging off it, so a suite can be re-run
+ * against a database that already has its fixtures in it. Without this the
+ * unique slug collides, the insert quietly returns null, and the suite dies in
+ * `beforeAll` with an unhelpful "cannot read properties of null".
+ */
+export async function resetMerchant(slug: string) {
+  assertLocal()
+  const svc = serviceClient()
+  const { data } = await svc.from('merchants').select('id').eq('slug', slug).maybeSingle()
+  if (!data) return
+  // Children first — they carry FKs back to the merchant. Mirrors the
+  // tenant-scoped tables in CLAUDE.md → Data layer; a new one means adding it here.
+  for (const table of ['orders', 'products', 'merchant_secrets', 'order_counters', 'vouchers', 'settings']) {
+    await svc.from(table).delete().eq('merchant_id', data.id)
+  }
+  await svc.from('merchants').delete().eq('id', data.id)
+}
+
+/** Seed a merchant, clearing any prior run's copy first. Returns its id. */
+export async function seedMerchant(fields: {
+  slug: string
+  owner_id: string
+  name?: string
+  order_prefix?: string
+  status?: MerchantStatus
+}) {
+  await resetMerchant(fields.slug)
+  const { data, error } = await serviceClient()
+    .from('merchants')
+    .insert({
+      slug: fields.slug,
+      owner_id: fields.owner_id,
+      name: fields.name ?? fields.slug,
+      order_prefix: fields.order_prefix ?? 'XX',
+      status: fields.status ?? 'active',
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(`seeding merchant ${fields.slug}: ${error.message}`)
+  return data!.id as string
 }
 
 /**

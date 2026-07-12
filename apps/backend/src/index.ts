@@ -8,6 +8,9 @@ import { upsertBilling, setMerchantStatus, billingFromSubscription } from './bil
 import { canStartTrial, buildTrialReminderEmail } from './billingLifecycle.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
+import { signUpCustomer, isDuplicateEmailError } from './customerSignup.js'
+import { createSlidingWindow } from './rateLimit.js'
+import { clientIp } from './clientIp.js'
 import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
 import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
 
@@ -338,6 +341,91 @@ app.post('/api/billing/portal', async (c) => {
     return_url: `${env.frontendUrl}/merchant`,
   })
   return c.json({ url: session.url })
+})
+
+// ── Customer sign-up — creates the account pre-confirmed ───────────────────────
+// Email confirmation stays ON project-wide (it is shared with merchants, who own shops
+// and Stripe billing), so a client-side signUp returns no session and strands a customer
+// in their inbox holding a cart. Created here with the service role instead, pre-confirmed,
+// and the client signs in normally. See src/customerSignup.ts for what that costs.
+//
+// RATE LIMITING — read before touching the deploy shape:
+// The window below lives in this process's memory. That works only because the backend is
+// a long-lived Node process (`node dist/server.js` + @hono/node-server), and it comes with
+// two consequences:
+//   • it resets on redeploy — harmless;
+//   • it SILENTLY STOPS PROTECTING ANYTHING if the backend is ever scaled past one
+//     instance, or moved to serverless. Each instance would count its own hits, and this
+//     endpoint goes around Supabase's own sign-up rate limits by design. If that day comes,
+//     move the counter to a shared store (or put a captcha in front).
+// CORS is not the guard: /api/* is pinned to env.frontendUrl, but that only constrains
+// browsers — any server can POST here. The rate limit is the control.
+// Escalation, if abuse ever actually happens, is a captcha — deliberately not now, because
+// a captcha widget in the checkout path costs orders.
+const signupIpWindow = createSlidingWindow({ limit: 10, windowMs: 60 * 60_000, now: () => Date.now() })
+const signupEmailWindow = createSlidingWindow({ limit: 3, windowMs: 60 * 60_000, now: () => Date.now() })
+
+app.post('/api/customer/signup', async (c) => {
+  const { email, password } = await c.req.json().catch(() => ({}))
+  // Anything else the body carries — a role, a merchant_id — is ignored: only email and
+  // password are read, createUser mints a plain auth user, and the profile row below pins
+  // app_role itself. So this endpoint cannot manufacture a merchant or a superadmin.
+  // @hono/node-server hangs the raw Node request off `c.env`, but types it as {} — the
+  // socket address is the fallback when no proxy header is present (i.e. local dev).
+  const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming
+  const ip = clientIp(
+    { 'x-forwarded-for': c.req.header('x-forwarded-for'), 'cf-connecting-ip': c.req.header('cf-connecting-ip') },
+    incoming?.socket?.remoteAddress,
+  )
+
+  const result = await signUpCustomer(
+    {
+      allow: (kind, value) => (kind === 'ip' ? signupIpWindow : signupEmailWindow).allow(value),
+      logError: (message) => console.error(message),
+      createUser: async ({ email, password }) => {
+        const { data, error } = await admin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true, // pre-confirmed — regressing this reintroduces the mid-checkout dead end
+        })
+        if (error || !data?.user) {
+          if (isDuplicateEmailError(error)) return { ok: false, reason: 'duplicate_email' }
+          console.error('Customer createUser failed:', error?.message ?? 'no user returned')
+          return { ok: false, reason: 'error' }
+        }
+        return { ok: true, userId: data.user.id }
+      },
+      writeProfile: async ({ userId, email }) => {
+        // Mirrors the client's ensureGlobalProfile: the global profile is the row with a null
+        // merchant_id, and the only unique index on user_id alone is partial, so upsert can't
+        // target it — select, then insert if absent. Idempotent by design; the client repeats
+        // this on SIGNED_IN as a safety net, and that repeat is also what fills referral_code
+        // (derived client-side from the uid).
+        //
+        // app_role is written explicitly rather than left to the column default: this insert
+        // runs as service_role, which guard_profile_privileges deliberately exempts
+        // (20260627120300_guard_profile_privileges.sql), so the trigger that would otherwise
+        // force 'customer' never fires here. Naming it keeps a future extra field from
+        // silently minting a superadmin.
+        const { data: existing } = await admin
+          .from('profiles').select('id').eq('user_id', userId).is('merchant_id', null).maybeSingle()
+        if (existing) return
+        const { error } = await admin.from('profiles').insert({
+          user_id: userId,
+          name: email.split('@')[0],
+          email,
+          email_confirmed: true,
+          app_role: 'customer',
+          created_at: new Date().toISOString(),
+        })
+        if (error) throw new Error(error.message)
+      },
+    },
+    { email, password, ip },
+  )
+
+  if (!result.ok) return c.json({ error: result.error }, result.status)
+  return c.json({ ok: true })
 })
 
 // ── Order notification — sends Telegram server-side ────────────────────────────
