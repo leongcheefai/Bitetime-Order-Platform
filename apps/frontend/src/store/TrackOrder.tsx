@@ -4,6 +4,7 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { fetchOrderTracking } from '../store'
 import { courierName, trackingUrl } from '../couriers'
+import { formatOrderDate } from '../orderDate'
 import { StatusBadge } from '../orderStatus'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -13,7 +14,7 @@ type Tracking = { status: string; mode: string; courier: string | null; awb: str
 
 export default function TrackOrder() {
   const { merchant } = useMerchant()
-  const { t } = useSession()
+  const { t, lang } = useSession()
   const [orderNo, setOrderNo] = useState('')
   const [result, setResult] = useState<Tracking | 'notfound' | null>(null)
   const [loading, setLoading] = useState(false)
@@ -78,7 +79,7 @@ export default function TrackOrder() {
           {result.created_at && (
             <div className="text-[13px] text-ink">
               <span className="text-rose-muted">{t('Ordered', '下单日期')}: </span>
-              {new Date(result.created_at).toLocaleDateString('en-MY', { dateStyle: 'medium' })}
+              {formatOrderDate(result.created_at, lang)}
             </div>
           )}
           {result.courier && (

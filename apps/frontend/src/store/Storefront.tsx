@@ -351,9 +351,16 @@ export default function Storefront() {
                 {t('Powered by BiteTime', 'BiteTime 提供技术支持')}
               </p>
               <div className="flex items-center gap-3 mt-1">
+                {/* The guest's entry point, and it stays one: a signed-in customer gets history
+                    instead, which carries the tracking inline. */}
                 <Link to={`/s/${merchant.slug}/track`} className="text-[12px] text-oxblood underline inline-block">
                   {t('Track an order', '追踪订单')}
                 </Link>
+                {account && (
+                  <Link to={`/s/${merchant.slug}/orders`} className="text-[12px] text-oxblood underline inline-block">
+                    {t('Your orders', '你的订单')}
+                  </Link>
+                )}
                 {!account && (
                   <button
                     type="button"
