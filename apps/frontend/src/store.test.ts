@@ -5,10 +5,14 @@ vi.mock('./supabase', () => {
   const single = vi.fn()
   const maybeSingle = vi.fn()
 
+  // limit() — terminal for capped list queries (fetchMyOrdersAtShop).
+  const limit = vi.fn()
+
   // order() — used for ordered list queries.
-  // Default returns { order } so chains like .eq().order().order() work;
-  // mock the LAST call with .mockResolvedValueOnce({data, error}) to terminate.
-  const order = vi.fn(() => ({ order }))
+  // Default returns { order, limit } so chains like .eq().order().order() and
+  // .eq().order().limit() work; mock the LAST call with
+  // .mockResolvedValueOnce({data, error}) to terminate.
+  const order = vi.fn(() => ({ order, limit }))
 
   // select() returned from insert() chain → { single }
   const insertSelect = vi.fn(() => ({ single }))
@@ -30,11 +34,12 @@ vi.mock('./supabase', () => {
   // (fetchProfileByUserId, ensureGlobalProfile). Terminal via maybeSingle.
   const is = vi.fn(() => ({ maybeSingle, single, is }))
 
-  // eq() → { single, maybeSingle, select: updateEqSelect, order, is }
+  // eq() → { eq, single, maybeSingle, select: updateEqSelect, order, is }
   // Used by: fetchMerchantBySlug (→single), fetchMyMerchant (→maybeSingle),
   //          updateMerchantSlug / setMerchantStatus (→updateEqSelect→single),
-  //          fetchProducts (→order→order), fetchProfileByUserId (→is→maybeSingle)
-  const eq = vi.fn(() => ({ single, maybeSingle, select: updateEqSelect, order, is }))
+  //          fetchProducts (→order→order), fetchProfileByUserId (→is→maybeSingle),
+  //          fetchMyOrdersAtShop (→eq→order→limit: filters on merchant AND user)
+  const eq: any = vi.fn(() => ({ eq, single, maybeSingle, select: updateEqSelect, order, is }))
 
   // insert() → { select: insertSelect }
   const insert = vi.fn(() => ({ select: insertSelect }))
@@ -67,7 +72,7 @@ vi.mock('./supabase', () => {
     supabase: { from, auth, rpc },
     __mocks: {
       from, select, eq, is, single, maybeSingle, insert, update,
-      insertSelect, updateEqSelect, upsertSelect, getUser, getSession, signUp: auth.signUp, order,
+      insertSelect, updateEqSelect, upsertSelect, getUser, getSession, signUp: auth.signUp, order, limit,
       upsert, del, deleteEq, rpc,
     },
   }
@@ -91,6 +96,8 @@ import {
   upsertMerchantSecret,
   placeOrder,
   fetchMerchantOrders,
+  fetchMyOrdersAtShop,
+  ORDER_HISTORY_LIMIT,
   setOrderStatus,
   fetchMerchantCustomers,
   voucherFromRow,
@@ -597,6 +604,60 @@ describe('fetchMerchantOrders', () => {
   it('returns empty array when data is null with no error', async () => {
     __mocks.order.mockResolvedValueOnce({ data: null, error: null })
     expect(await fetchMerchantOrders('m1')).toEqual([])
+  })
+})
+
+// ── fetchMyOrdersAtShop (#55: per-shop order history) ─────────────────────────
+
+describe('fetchMyOrdersAtShop', () => {
+  const user = { id: 'u1' }
+
+  it('filters by the signed-in user as well as the shop', async () => {
+    // The `user_id` filter is load-bearing, not belt-and-braces. RLS lets a shop OWNER read
+    // every order at their own shop, so a merchant opening their own storefront's history
+    // would otherwise be shown their customers' orders as though they were their own.
+    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
+    __mocks.limit.mockResolvedValueOnce({ data: [{ id: 'o1' }], error: null })
+
+    const result = await fetchMyOrdersAtShop('m1')
+
+    expect(__mocks.from).toHaveBeenCalledWith('orders')
+    expect(__mocks.eq).toHaveBeenCalledWith('merchant_id', 'm1')
+    expect(__mocks.eq).toHaveBeenCalledWith('user_id', 'u1')
+    expect(result).toEqual([{ id: 'o1' }])
+  })
+
+  it('lists newest first, capped at the stated limit', async () => {
+    // The cap is shown to the customer on screen ("your last 20 orders"), so the number the
+    // query uses and the number the copy quotes must be the same one.
+    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
+    __mocks.limit.mockResolvedValueOnce({ data: [], error: null })
+
+    await fetchMyOrdersAtShop('m1')
+
+    expect(__mocks.order).toHaveBeenCalledWith('created_at', { ascending: false })
+    expect(__mocks.limit).toHaveBeenCalledWith(ORDER_HISTORY_LIMIT)
+    expect(ORDER_HISTORY_LIMIT).toBe(20)
+  })
+
+  it('queries nothing when signed out — a guest has no history to read', async () => {
+    __mocks.getUser.mockResolvedValueOnce({ data: { user: null } })
+    expect(await fetchMyOrdersAtShop('m1')).toEqual([])
+    expect(__mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('queries nothing without a shop', async () => {
+    expect(await fetchMyOrdersAtShop('')).toEqual([])
+    expect(__mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('throws on DB error instead of passing an empty list off as "no orders"', async () => {
+    // The screen renders an empty list as "You haven't ordered from this shop yet." Swallowing the
+    // error here would tell a customer with a year of history that they have none — and they would
+    // believe it. An empty history and a broken query must not look alike.
+    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
+    __mocks.limit.mockResolvedValueOnce({ data: null, error: { message: 'rls' } })
+    await expect(fetchMyOrdersAtShop('m1')).rejects.toMatchObject({ message: 'rls' })
   })
 })
 

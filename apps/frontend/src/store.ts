@@ -4,7 +4,7 @@ import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
 import { resolveReferredByCode } from './referralCode'
 import { SignupError, signupErrorCode } from './signupError'
-import type { ReferredShop, Voucher } from './types';
+import type { Order, ReferredShop, Voucher } from './types';
 import type { AddressParts } from './types'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -501,6 +501,37 @@ export async function notifyOrderPlacedRemote(merchantId: string, orderNumber: s
     body: JSON.stringify({ merchantId, orderNumber }),
   })
   if (!res.ok) throw new Error('Order notification failed')
+}
+
+/**
+ * How far back a customer's per-shop history goes. Stated on screen, never applied silently:
+ * a truncated list with nothing said reads as "this is everything" when it isn't.
+ */
+export const ORDER_HISTORY_LIMIT = 20
+
+/**
+ * The orders *this* customer placed at *this* shop, newest first.
+ *
+ * The `user_id` filter is not belt-and-braces on top of RLS — it is the whole point. The select
+ * policy grants a row to the ordering user OR the shop that owns it, so a merchant opening their
+ * own storefront's history would be handed every customer's order at that shop. Filtering by the
+ * signed-in uid is what makes "your orders" mean yours.
+ */
+export async function fetchMyOrdersAtShop(merchantId: string): Promise<Order[]> {
+  if (!merchantId) return []
+  const user = await getCurrentUser()
+  if (!user) return [] // a guest has no history — by design, and permanently
+  const { data, error } = await supabase
+    .from('orders').select('*')
+    .eq('merchant_id', merchantId)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(ORDER_HISTORY_LIMIT)
+  // Throws rather than returning [] — this screen renders an empty list as "you haven't ordered
+  // from this shop yet", so swallowing an error here would tell a customer with a year of orders
+  // that they have none. An empty history and a broken query must not look alike.
+  if (error) throw error
+  return (data ?? []) as Order[]
 }
 
 export async function fetchMerchantOrders(merchantId: string) {

@@ -18,6 +18,7 @@ const LoginScreen = lazy(() => import('./merchant/LoginScreen'))
 const MerchantHome = lazy(() => import('./merchant/MerchantHome'))
 const Storefront = lazy(() => import('./store/Storefront'))
 const TrackOrder = lazy(() => import('./store/TrackOrder'))
+const OrderHistory = lazy(() => import('./store/OrderHistory'))
 
 function RouteFallback() {
   return (
@@ -71,6 +72,10 @@ function StorefrontShell() {
     <Routes>
       <Route index element={<Storefront />} />
       <Route path="track" element={<TrackOrder />} />
+      {/* A destination, not a dialog: deep-linkable and shareable. Signed out it renders the
+          auth panel in place — deliberately NOT behind RequireRole, which bounces to the
+          merchant login: wrong framing, wrong bundle, wrong destination for a customer. */}
+      <Route path="orders" element={<OrderHistory />} />
     </Routes>
   )
 }
