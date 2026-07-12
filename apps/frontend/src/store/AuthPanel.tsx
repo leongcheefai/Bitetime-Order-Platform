@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { MIN_PASSWORD_LENGTH, isPasswordLongEnough } from '@bitetime/shared'
 import { signIn, signUpCustomer } from '../store'
 import { useSession } from '../SessionContext'
 import { authErrorCode } from '../authError'
@@ -6,9 +7,6 @@ import { SignupError, type SignupErrorCode } from '../signupError'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
-
-/** Matches the backend's floor (customerSignup.ts). Supabase's own is 6. */
-const MIN_PASSWORD_LENGTH = 8
 
 interface AuthPanelProps {
   heading: string
@@ -88,7 +86,9 @@ export default function AuthPanel({ heading, subheading, onSignedIn, footer }: A
     setNotice(null)
     try {
       if (signingUp) {
-        if (password.length < MIN_PASSWORD_LENGTH) {
+        // Same rule the endpoint enforces (@bitetime/shared), applied here only to save the
+        // customer a round-trip. The backend is the boundary; this is a courtesy.
+        if (!isPasswordLongEnough(password)) {
           setError(signUpErrorText('weak_password'))
           return
         }

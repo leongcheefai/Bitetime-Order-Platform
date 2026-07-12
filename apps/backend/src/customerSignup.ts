@@ -13,7 +13,7 @@
 // The policy below is pure; the two things that touch the world (account creation, the
 // profile write) are injected adapters, as is the rate-limit check.
 
-export const MIN_PASSWORD_LENGTH = 8
+import { isPasswordLongEnough } from '@bitetime/shared'
 
 export type CreateUserResult =
   | { ok: true; userId: string }
@@ -48,9 +48,10 @@ export async function signUpCustomer(
   const password = String(input.password ?? '')
 
   if (!EMAIL.test(email)) return { ok: false, error: 'invalid_email', status: 400 }
-  // Supabase's own floor is 6; ours is 8. Enforced here so no account is ever created
-  // with a password the product does not accept.
-  if (password.length < MIN_PASSWORD_LENGTH) return { ok: false, error: 'weak_password', status: 400 }
+  // The rule is shared with the panel (@bitetime/shared) — one number, two workspaces.
+  // Enforced here too, so no account is ever created with a password the product refuses:
+  // Supabase's own floor is lower than ours, and the panel is not a security boundary.
+  if (!isPasswordLongEnough(password)) return { ok: false, error: 'weak_password', status: 400 }
 
   // IP and email are separate windows, so exhausting one email cannot block a different one
   // from the same address. The IP is checked first and short-circuits: a blocked caller

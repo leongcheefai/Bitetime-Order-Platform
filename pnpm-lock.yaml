@@ -17,6 +17,9 @@ importers:
 
   apps/backend:
     dependencies:
+      '@bitetime/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.14(hono@4.12.27)
@@ -63,6 +66,9 @@ importers:
       '@base-ui/react':
         specifier: ^1.6.0
         version: 1.6.0(@date-fns/tz@1.5.0)(@types/react@19.2.17)(date-fns@4.4.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@bitetime/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@emailjs/browser':
         specifier: ^4.4.1
         version: 4.4.1
@@ -175,6 +181,27 @@ importers:
       vite:
         specifier: ^8.0.12
         version: 8.1.0(@types/node@26.0.1)(esbuild@0.28.1)(jiti@2.7.0)
+      vitest:
+        specifier: ^3.2.6
+        version: 3.2.6(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)
+
+  packages/shared:
+    devDependencies:
+      '@eslint/js':
+        specifier: ^10.0.1
+        version: 10.0.1(eslint@10.6.0(jiti@2.7.0))
+      eslint:
+        specifier: ^10.3.0
+        version: 10.6.0(jiti@2.7.0)
+      globals:
+        specifier: ^17.6.0
+        version: 17.7.0
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      typescript-eslint:
+        specifier: ^8.62.0
+        version: 8.62.0(eslint@10.6.0(jiti@2.7.0))(typescript@6.0.3)
       vitest:
         specifier: ^3.2.6
         version: 3.2.6(@types/node@26.0.1)(jiti@2.7.0)(lightningcss@1.32.0)

@@ -1,10 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
-import {
-  signUpCustomer,
-  isDuplicateEmailError,
-  MIN_PASSWORD_LENGTH,
-  type SignupDeps,
-} from '../../src/customerSignup.js'
+import { MIN_PASSWORD_LENGTH } from '@bitetime/shared'
+import { signUpCustomer, isDuplicateEmailError, type SignupDeps } from '../../src/customerSignup.js'
 
 // Adapters are injected: the account-creation call and the profile write are the only
 // two things that touch the outside world, so the policy above them stays pure.
