@@ -1,21 +1,36 @@
-// tests/rls/helpers.js
+// tests/rls/helpers.ts
 // Builds Supabase clients for RLS integration tests.
-// Credentials are injected via env vars (see `supabase status`).
+// Credentials come from env vars, which vitest.rls.config.ts fills in from the
+// running local stack when they are not already set.
 import { createClient } from '@supabase/supabase-js'
 
-export const SUPABASE_URL = process.env.SUPABASE_URL
-export const ANON_KEY = process.env.SUPABASE_ANON_KEY
-export const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+/**
+ * Missing credentials are a hard failure, never a skip. This suite is the only
+ * proof that an order cannot be spoofed onto a stranger's account; a version of
+ * it that quietly asserts nothing and still reports green is worse than no suite
+ * at all, because it is trusted.
+ */
+function required(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(
+      `${name} is not set, so the RLS suite cannot reach a database. It must fail rather than skip. ` +
+        `Run it via \`pnpm test:rls\`, which reads the local stack's credentials for you.`,
+    )
+  }
+  return value
+}
 
-/** True when all required env vars are present — use with describe.skipIf */
-export const hasEnv = Boolean(SUPABASE_URL && ANON_KEY && SERVICE_KEY)
+export const SUPABASE_URL = required('SUPABASE_URL')
+export const ANON_KEY = required('SUPABASE_ANON_KEY')
+export const SERVICE_KEY = required('SUPABASE_SERVICE_ROLE_KEY')
 
 export function anonClient() {
-  return createClient(SUPABASE_URL!, ANON_KEY!, { auth: { persistSession: false } })
+  return createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } })
 }
 
 export function serviceClient() {
-  return createClient(SUPABASE_URL!, SERVICE_KEY!, { auth: { persistSession: false } })
+  return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 }
 
 export type MerchantStatus = 'pending' | 'active' | 'suspended'
@@ -26,7 +41,7 @@ export type MerchantStatus = 'pending' | 'active' | 'suspended'
  * but a local Supabase.
  */
 function assertLocal() {
-  const host = new URL(SUPABASE_URL!).hostname
+  const host = new URL(SUPABASE_URL).hostname
   if (host !== '127.0.0.1' && host !== 'localhost') {
     throw new Error(
       `RLS fixtures delete data with the service role and must only run against a local Supabase. Refusing to touch ${host}.`,

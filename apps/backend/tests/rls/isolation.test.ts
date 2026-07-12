@@ -4,9 +4,9 @@
 //   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 // Without those vars the suite is skipped so `npm test` stays green.
 import { describe, it, expect, beforeAll } from 'vitest'
-import { hasEnv, makeUser, seedMerchant, serviceClient } from './helpers.js'
+import { makeUser, seedMerchant, serviceClient } from './helpers.js'
 
-describe.skipIf(!hasEnv)('tenant isolation (RLS)', () => {
+describe('tenant isolation (RLS)', () => {
   let merchantA: any, merchantB: any, idA: any, idB: any
 
   beforeAll(async () => {

@@ -9,7 +9,7 @@
 //   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
 // Without those vars the suite is skipped so `test` stays green.
 import { describe, it, expect, beforeAll } from 'vitest'
-import { hasEnv, anonClient, makeUser, seedMerchant, serviceClient } from './helpers.js'
+import { anonClient, makeUser, seedMerchant, serviceClient } from './helpers.js'
 
 /** A minimal order, shaped like the one the storefront inserts. */
 function order(merchantId: string, extra: Record<string, unknown> = {}) {
@@ -25,7 +25,7 @@ function order(merchantId: string, extra: Record<string, unknown> = {}) {
   }
 }
 
-describe.skipIf(!hasEnv)('order attribution (RLS + trigger)', () => {
+describe('order attribution (RLS + trigger)', () => {
   let customerA: any, customerB: any
   let userA: string, userB: string
   let activeShop: string, pendingShop: string, suspendedShop: string
