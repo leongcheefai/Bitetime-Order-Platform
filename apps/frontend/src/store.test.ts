@@ -97,6 +97,7 @@ import {
   placeOrder,
   fetchMerchantOrders,
   fetchMyOrdersAtShop,
+  saveCustomerDetails,
   ORDER_HISTORY_LIMIT,
   setOrderStatus,
   fetchMerchantCustomers,
@@ -658,6 +659,51 @@ describe('fetchMyOrdersAtShop', () => {
     __mocks.getUser.mockResolvedValueOnce({ data: { user } })
     __mocks.limit.mockResolvedValueOnce({ data: null, error: { message: 'rls' } })
     await expect(fetchMyOrdersAtShop('m1')).rejects.toMatchObject({ message: 'rls' })
+  })
+})
+
+// ── saveCustomerDetails (#56: type it once, ever) ─────────────────────────────
+
+describe('saveCustomerDetails', () => {
+  const user = { id: 'u1', email: 'ah.meng@example.com' }
+
+  it('updates the customer’s GLOBAL profile row, not a per-shop one', async () => {
+    // An address is an address: it belongs to the customer, not to a shop. Saving it per-shop
+    // would make them retype it at the next storefront — the exact tax this removes.
+    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
+    __mocks.maybeSingle.mockResolvedValueOnce({ data: { id: 'p1' }, error: null })
+
+    await saveCustomerDetails({ whatsapp: '60123456789' })
+
+    expect(__mocks.eq).toHaveBeenCalledWith('user_id', 'u1')
+    expect(__mocks.is).toHaveBeenCalledWith('merchant_id', null)
+    expect(__mocks.update).toHaveBeenCalledWith({ whatsapp: '60123456789' })
+    expect(__mocks.eq).toHaveBeenCalledWith('id', 'p1')
+  })
+
+  it('creates the profile row when the customer has none yet', async () => {
+    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
+    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
+
+    await saveCustomerDetails({ whatsapp: '60123456789' })
+
+    expect(__mocks.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ whatsapp: '60123456789', user_id: 'u1', email: user.email }),
+    )
+  })
+
+  it('saves nothing for a guest — not even a stray write attempt', async () => {
+    // A guest order is orphaned permanently. Writing their number to a profile they don't have
+    // is not merely useless; it is the retroactive claim the guest warning promises never happens.
+    __mocks.getUser.mockResolvedValueOnce({ data: { user: null } })
+    await saveCustomerDetails({ whatsapp: '60123456789' })
+    expect(__mocks.from).not.toHaveBeenCalled()
+  })
+
+  it('does not touch the profile when there is nothing to save', async () => {
+    await saveCustomerDetails({})
+    expect(__mocks.getUser).not.toHaveBeenCalled()
+    expect(__mocks.from).not.toHaveBeenCalled()
   })
 })
 

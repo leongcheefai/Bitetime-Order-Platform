@@ -5,8 +5,9 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
-import { fetchProducts, placeOrder, fetchMerchantVoucher, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl } from '../store'
+import { fetchProducts, placeOrder, fetchMerchantVoucher, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
 import { priceOrder, voucherError } from '../pricing'
+import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
 import { lookupPostcode } from '../postcodes'
@@ -21,6 +22,8 @@ import { cn } from '@/lib/utils'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+
+const EMPTY_ADDRESS: AddressParts = { line1: '', postcode: '', city: '', state: '' }
 
 interface CartLine {
   id: string
@@ -41,15 +44,35 @@ interface SuccessState {
 export default function Storefront() {
   const { merchant: merchantNullable } = useMerchant()
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
-  const { lang, t, account } = useSession()
+  const { lang, t, account, profile, refreshProfile } = useSession()
   const viewVariants = usePageVariants()
 
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }
   const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup')  // 'pickup' | 'delivery'
-  const [address, setAddress] = useState<AddressParts>({ line1: '', postcode: '', city: '', state: '' })
-  const [name, setName] = useState('')
-  const [wa, setWa] = useState('')
+
+  // Prefill is DERIVED, never copied into state by an effect. `null` means "the customer hasn't
+  // touched this field", so a profile that arrives a beat after the page fills the form — while a
+  // profile that arrives after they started typing cannot overwrite them. Typing wins, always,
+  // which is also what keeps a prefilled field editable.
+  const prefill = useMemo(() => prefillFromProfile(profile), [profile])
+  const [nameInput, setNameInput] = useState<string | null>(null)
+  const [waInput, setWaInput] = useState<string | null>(null)
+  // Only the fields actually TOUCHED, not a whole replacement address. The profile resolves a beat
+  // after the session does, and the form is live in that beat: holding a full address here would
+  // mean one keystroke in `line1` froze all four fields at blank, because the object would already
+  // be non-null when the saved address finally landed. Per field, typing wins — not per object.
+  const [addressInput, setAddressInput] = useState<Partial<AddressParts> | null>(null)
+  const name = nameInput ?? prefill.name ?? ''
+  const wa = waInput ?? prefill.wa ?? ''
+  const address = useMemo<AddressParts>(
+    () => ({ ...EMPTY_ADDRESS, ...prefill.address, ...addressInput }),
+    [prefill.address, addressInput],
+  )
+  // A functional updater, so the async postcode lookup cannot clobber a keystroke that landed
+  // while it was in flight.
+  const patchAddress = (patch: Partial<AddressParts>) => setAddressInput(prev => ({ ...prev, ...patch }))
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<SuccessState | null>(null)
@@ -86,10 +109,10 @@ export default function Storefront() {
 
   const onPostcodeChange = async (raw: string) => {
     const pc = raw.replace(/\D/g, '').slice(0, 5)
-    setAddress(a => ({ ...a, postcode: pc }))
+    patchAddress({ postcode: pc })
     if (pc.length === 5) {
       const hit = await lookupPostcode(pc)
-      if (hit) setAddress(a => ({ ...a, postcode: pc, city: hit.city, state: hit.state }))
+      if (hit) patchAddress({ postcode: pc, city: hit.city, state: hit.state })
     }
   }
 
@@ -241,6 +264,15 @@ export default function Storefront() {
         // Best-effort: failure to record usage must not fail a placed order.
         await redeemVoucher(merchant.id, appliedVoucher.code, voucherEntry).catch(() => {})
       }
+      // Remember what they typed, silently, so they never type it again — at this shop or any
+      // other. Best-effort and unawaited: the order is already placed, and a profile write that
+      // fails must cost the customer a retype next time, never their order. A guest saves nothing
+      // (`saveCustomerDetails` checks the session itself), which is what keeps the gate honest.
+      if (account) {
+        saveCustomerDetails(savedDetailsFromOrder({ mode, wa, address }))
+          .then(refreshProfile) // so a second order in this same session prefills too
+          .catch(() => {})
+      }
       // Best-effort server-side Telegram notify; never blocks a placed order.
       await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
       setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total })
@@ -253,12 +285,14 @@ export default function Storefront() {
     }
   }
 
+  // "Place another order": clear the cart, and hand the fields back to the profile rather than to
+  // blank — a signed-in customer's second order of the day should not make them retype either.
   const handleReset = () => {
     setSuccess(null)
     setCart({})
-    setName('')
-    setWa('')
-    setAddress({ line1: '', postcode: '', city: '', state: '' })
+    setNameInput(null)
+    setWaInput(null)
+    setAddressInput(null)
     setError(null)
     removeVoucher()
   }
@@ -509,7 +543,7 @@ export default function Storefront() {
                   <Input
                     id="sf-line1"
                     value={address.line1}
-                    onChange={e => setAddress(a => ({ ...a, line1: e.target.value }))}
+                    onChange={e => patchAddress({ line1: e.target.value })}
                     placeholder={t('Street, building, unit…', '街道、建筑、单位…')}
                   />
                 </div>
@@ -530,7 +564,7 @@ export default function Storefront() {
                     <Input
                       id="sf-city"
                       value={address.city}
-                      onChange={e => setAddress(a => ({ ...a, city: e.target.value }))}
+                      onChange={e => patchAddress({ city: e.target.value })}
                       placeholder={t('City', '城市')}
                     />
                   </div>
@@ -540,7 +574,7 @@ export default function Storefront() {
                   <select
                     id="sf-state"
                     value={address.state}
-                    onChange={e => setAddress(a => ({ ...a, state: e.target.value }))}
+                    onChange={e => patchAddress({ state: e.target.value })}
                     className="w-full min-w-0 rounded-md border border-clay-border bg-surface-raised px-[13px] py-2.5 text-[16px] text-ink transition-colors outline-none focus-visible:border-oxblood focus-visible:ring-3 focus-visible:ring-oxblood/10"
                   >
                     <option value="">{t('Select state…', '选择州属…')}</option>
@@ -582,7 +616,7 @@ export default function Storefront() {
                 id="sf-name"
                 type="text"
                 value={name}
-                onChange={e => setName(e.target.value)}
+                onChange={e => setNameInput(e.target.value)}
                 placeholder={t('Full name', '全名')}
               />
             </div>
@@ -592,7 +626,7 @@ export default function Storefront() {
                 id="sf-wa"
                 type="tel"
                 value={wa}
-                onChange={e => setWa(e.target.value)}
+                onChange={e => setWaInput(e.target.value)}
                 placeholder={t('e.g. 601X-XXXXXXX', '例：601X-XXXXXXX')}
               />
             </div>
