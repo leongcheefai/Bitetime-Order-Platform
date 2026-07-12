@@ -1,12 +1,15 @@
 import { useState } from 'react'
+import { useParams } from 'react-router-dom'
 import { MIN_PASSWORD_LENGTH, isPasswordLongEnough } from '@bitetime/shared'
-import { signIn, signUpCustomer } from '../store'
+import { signIn, signUpCustomer, requestPasswordReset } from '../store'
 import { useSession } from '../SessionContext'
 import { authErrorCode } from '../authError'
 import { SignupError, type SignupErrorCode } from '../signupError'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+
+type AuthMode = 'signin' | 'signup' | 'forgot'
 
 interface AuthPanelProps {
   heading: string
@@ -33,7 +36,11 @@ interface AuthPanelProps {
  */
 export default function AuthPanel({ heading, subheading, initialMode = 'signin', onSignedIn, footer }: AuthPanelProps) {
   const { t } = useSession()
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode)
+  // The shop the customer is standing in, so the reset link brings them back to it. Read from the
+  // route rather than passed down: every host of this panel already lives under /s/:slug, and a
+  // host that doesn't (a merchant, later) correctly yields no shop.
+  const { slug } = useParams()
+  const [mode, setMode] = useState<AuthMode>(initialMode)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
@@ -41,9 +48,10 @@ export default function AuthPanel({ heading, subheading, initialMode = 'signin',
   const [notice, setNotice] = useState<string | null>(null)
 
   const signingUp = mode === 'signup'
+  const forgot = mode === 'forgot'
 
   // The email carries across the switch — a customer who typed it once never types it twice.
-  const switchMode = (next: 'signin' | 'signup') => {
+  const switchMode = (next: AuthMode) => {
     setMode(next)
     setPassword('')
     setError(null)
@@ -87,6 +95,20 @@ export default function AuthPanel({ heading, subheading, initialMode = 'signin',
     setError(null)
     setNotice(null)
     try {
+      if (forgot) {
+        // `requestPasswordReset` reports no outcome and cannot throw — deliberately, so that this
+        // message is neutral by construction rather than by the discipline of whoever edits this
+        // catch block next. See store.ts for why an error here would be an enumeration oracle.
+        //
+        // (Signup DOES disclose a duplicate email. That asymmetry was accepted knowingly there; do
+        // not "fix" reset to match it — the leak exists once already, and once is enough.)
+        await requestPasswordReset(email, slug ?? null)
+        setNotice(t(
+          "If that email has an account, we've sent a link.",
+          '如果该邮箱已注册，我们已发送重设链接。',
+        ))
+        return
+      }
       if (signingUp) {
         // Same rule the endpoint enforces (@bitetime/shared), applied here only to save the
         // customer a round-trip. The backend is the boundary; this is a courtesy.
@@ -129,9 +151,18 @@ export default function AuthPanel({ heading, subheading, initialMode = 'signin',
   return (
     <div className="text-left">
       <h2 className="font-heading text-[18px] font-medium text-oxblood mb-1">
-        {signingUp ? t('Create an account', '创建账户') : heading}
+        {signingUp ? t('Create an account', '创建账户')
+          : forgot ? t('Reset your password', '重设密码')
+          : heading}
       </h2>
-      {subheading && (
+      {forgot ? (
+        <p className="text-[13px] text-rose-muted leading-[1.5] mb-5">
+          {t(
+            "Enter your email and we'll send you a link to set a new password.",
+            '输入你的邮箱，我们会发送重设密码的链接。',
+          )}
+        </p>
+      ) : subheading && (
         <p className="text-[13px] text-rose-muted leading-[1.5] mb-5">{subheading}</p>
       )}
 
@@ -166,27 +197,43 @@ export default function AuthPanel({ heading, subheading, initialMode = 'signin',
               required
             />
           </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="auth-password">{t('Password', '密码')}</Label>
-            <Input
-              id="auth-password"
-              type="password"
-              autoComplete={signingUp ? 'new-password' : 'current-password'}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-            />
-            {signingUp && (
-              <p className="text-[12px] text-rose-muted">
-                {t(`At least ${MIN_PASSWORD_LENGTH} characters.`, `至少 ${MIN_PASSWORD_LENGTH} 个字符。`)}
-              </p>
-            )}
-          </div>
+          {/* No password field when resetting: the whole point is that they haven't got one. */}
+          {!forgot && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <Label htmlFor="auth-password">{t('Password', '密码')}</Label>
+                {!signingUp && (
+                  <button
+                    type="button"
+                    onClick={() => switchMode('forgot')}
+                    className="text-[12px] text-rose-muted underline underline-offset-2 cursor-pointer"
+                  >
+                    {t('Forgot password?', '忘记密码？')}
+                  </button>
+                )}
+              </div>
+              <Input
+                id="auth-password"
+                type="password"
+                autoComplete={signingUp ? 'new-password' : 'current-password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                required
+              />
+              {signingUp && (
+                <p className="text-[12px] text-rose-muted">
+                  {t(`At least ${MIN_PASSWORD_LENGTH} characters.`, `至少 ${MIN_PASSWORD_LENGTH} 个字符。`)}
+                </p>
+              )}
+            </div>
+          )}
         </div>
         {/* Base UI's Button defaults to type="button" — explicit submit or the form never fires */}
         <Button type="submit" disabled={busy} className="disabled:opacity-60">
           {signingUp
             ? busy ? t('Creating account…', '创建中…') : t('Create account', '创建账户')
+            : forgot
+            ? busy ? t('Sending…', '发送中…') : t('Send reset link', '发送重设链接')
             : busy ? t('Signing in…', '登录中…') : t('Sign in', '登录')}
         </Button>
       </form>
@@ -203,6 +250,14 @@ export default function AuthPanel({ heading, subheading, initialMode = 'signin',
               {t('Sign in', '登录')}
             </button>
           </>
+        ) : forgot ? (
+          <button
+            type="button"
+            onClick={() => switchMode('signin')}
+            className="text-oxblood underline underline-offset-2"
+          >
+            {t('Back to sign in', '返回登录')}
+          </button>
         ) : (
           <>
             {t('New here?', '第一次来？')}{' '}

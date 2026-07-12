@@ -44,6 +44,9 @@ export interface Profile {
   merchant_id?: string | null
   email_confirmed?: boolean
   referral_code?: string
+  /** Saved at checkout so a signed-in customer types it once, ever. Never set for a guest. */
+  whatsapp?: string
+  /** jsonb: holds whatever was last written, so read it through `prefillFromProfile`, not raw. */
   delivery_address?: any
   created_at?: string
   [key: string]: any

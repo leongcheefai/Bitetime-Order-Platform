@@ -50,6 +50,31 @@ they take it — a confirm step is only honest when the consequence is hidden, a
 warning is muted, not alarming: as a danger box it out-shouted the headline and made the guest
 path the loudest thing on a screen whose purpose is to offer an account.
 
+## Password reset
+
+The way back into a customer account — and therefore back to the order history, which is precisely
+what they would otherwise lose. It uses **Supabase's own recovery flow**, deliberately not mirroring
+the custom signup endpoint: going through Supabase buys rate limiting and **non-enumeration** for
+free, where a custom endpoint would force us to rebuild both.
+
+Non-enumeration is only as good as the caller. The request's outcome is **swallowed** and the
+neutral *"If that email has an account, we've sent a link"* is shown unconditionally, because
+Supabase's per-email cooldown only fires when a mail is actually sent — surface that error and two
+submissions a minute apart reveal which addresses are registered. Note the asymmetry with signup,
+which **does** disclose that an email already has an account: that was accepted knowingly there, and
+reset must not be "fixed" to match it.
+
+The landing route is **top-level** (`/reset-password?shop=<slug>`), outside the storefront shell.
+Nested, the shell's merchant-status gate would swallow the page — and a shop being suspended must
+never lock a customer out of their own account. It is role-blind: with a shop it returns the customer
+to that storefront, without one to the merchant dashboard. The `shop` param arrives from a link that
+has been through an inbox and is used to navigate, so it is checked against the slug shape before use
+(`resetPassword.ts`) — an open redirect would start exactly there.
+
+The 8-character floor is `@bitetime/shared`'s, enforced in **both** places it can be: the client, and
+GoTrue itself (`minimum_password_length` in `config.toml`), because reset writes the password
+straight from the browser and GoTrue's own default floor is 6.
+
 ## Billing lifecycle
 
 A merchant's platform-subscription journey. Basic signup is cardless and lands

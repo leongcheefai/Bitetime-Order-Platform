@@ -44,6 +44,7 @@ Multi-merchant ordering SaaS. React 19 + Vite + React Router (`react-router-dom`
 | Path | Screen | Guard |
 |------|--------|-------|
 | `/` | marketing landing (`marketing/Landing.tsx`) | — |
+| `/reset-password` | set a new password after a recovery link (`ResetPasswordPage.tsx`) | none — **deliberately top-level**: nested under `/s/:slug` the shell's status gate would swallow it, and a suspended shop must never lock a customer out of their own account. Role-blind; `?shop=<slug>` decides where they land afterwards |
 | `/s/:slug/*` | merchant storefront (`store/Storefront.tsx`) | `MerchantProvider` resolves shop by slug; gated on `status === 'active'` |
 | `/merchant/signup`, `/merchant/login` | shop signup / login | — |
 | `/merchant` | merchant dashboard (`merchant/MerchantHome.tsx`) | role `merchant` |

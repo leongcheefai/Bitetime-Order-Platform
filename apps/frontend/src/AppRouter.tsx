@@ -19,6 +19,7 @@ const MerchantHome = lazy(() => import('./merchant/MerchantHome'))
 const Storefront = lazy(() => import('./store/Storefront'))
 const TrackOrder = lazy(() => import('./store/TrackOrder'))
 const OrderHistory = lazy(() => import('./store/OrderHistory'))
+const ResetPasswordPage = lazy(() => import('./ResetPasswordPage'))
 
 function RouteFallback() {
   return (
@@ -97,6 +98,10 @@ function AnimatedRoutes() {
         <PageTransition key={location.pathname}>
           <Routes location={location}>
             <Route path="/" element={<Landing />} />
+            {/* Top-level on purpose, NOT nested under /s/:slug: the storefront shell's status gate
+                would swallow it, and a suspended shop must never lock a customer out of their own
+                account. Role-blind — `?shop=` decides where they land afterwards. */}
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/s/:slug/*" element={<MerchantProvider><StorefrontShell /></MerchantProvider>} />
             <Route path="/merchant/signup" element={<SignupScreen />} />
             <Route path="/merchant/login" element={<LoginScreen />} />

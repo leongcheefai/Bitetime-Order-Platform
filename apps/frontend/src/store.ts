@@ -5,6 +5,8 @@ import { orderPrefix } from './orderPrefix';
 import { resolveReferredByCode } from './referralCode'
 import { SignupError, signupErrorCode } from './signupError'
 import type { Order, ReferredShop, Voucher } from './types';
+import type { SavedDetails } from './savedDetails';
+import { resetRedirectUrl } from './resetPassword';
 import type { AddressParts } from './types'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -73,6 +75,18 @@ export async function signUpCustomer(email: string, password: string) {
 // select-then-insert/update on the user's global (merchant_id null) profile.
 // Returns any write error (null on success); RLS blocks the write until the
 // user has a session, which is expected during pending email confirmation.
+// The one place that knows how to find a user's global profile row. Both writers go through it,
+// so the identity rule ("global" means merchant_id IS NULL) is stated once, not once per caller.
+async function globalProfileId(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('user_id', userId)
+    .is('merchant_id', null)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 async function ensureGlobalProfile(fields: {
   user_id: string
   name: string
@@ -80,14 +94,9 @@ async function ensureGlobalProfile(fields: {
   email_confirmed: boolean
   referral_code?: string
 }) {
-  const { data: existing } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('user_id', fields.user_id)
-    .is('merchant_id', null)
-    .maybeSingle();
-  if (existing) {
-    const { error } = await supabase.from('profiles').update(fields).eq('id', existing.id);
+  const existingId = await globalProfileId(fields.user_id);
+  if (existingId) {
+    const { error } = await supabase.from('profiles').update(fields).eq('id', existingId);
     return error;
   }
   const { error } = await supabase
@@ -99,12 +108,36 @@ async function ensureGlobalProfile(fields: {
 export async function fetchProfileByUserId(userId: string) {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, name, email, app_role, merchant_id')
+    .select('id, name, email, app_role, merchant_id, whatsapp, delivery_address')
     .eq('user_id', userId)
     .is('merchant_id', null)
     .maybeSingle();
   if (error) return null;
   return data;
+}
+
+/**
+ * Save what a signed-in customer just typed at checkout, so they never type it again — at this
+ * shop or any other. Silent: the customer asked for none of this and is shown no checkbox.
+ *
+ * Best-effort by design. It runs after an order is already placed, so a failure here must cost
+ * the customer nothing but a retype next time; it must never surface as a failed order.
+ *
+ * Writes the GLOBAL profile (merchant_id null) — the same row `ensureGlobalProfile` maintains, and
+ * found the same way, via `globalProfileId`. An address belongs to the customer, not to a shop.
+ */
+export async function saveCustomerDetails(fields: SavedDetails): Promise<void> {
+  if (Object.keys(fields).length === 0) return
+  const user = await getCurrentUser()
+  if (!user) return // a guest saves nothing, ever — that is what makes the gate's warning true
+  const existingId = await globalProfileId(user.id)
+  if (existingId) {
+    await supabase.from('profiles').update(fields).eq('id', existingId)
+    return
+  }
+  await supabase
+    .from('profiles')
+    .insert({ ...fields, user_id: user.id, email: user.email, created_at: new Date().toISOString() })
 }
 
 const MERCHANT_STATUSES = ['pending', 'active', 'suspended']
@@ -307,6 +340,38 @@ export async function updateMerchantSlug(id: string, slug: string) {
     .from('merchants').update({ slug: s }).eq('id', id).select().single()
   if (error) throw error
   return data
+}
+
+/**
+ * Ask Supabase to email a recovery link. Deliberately NOT mirrored on the custom signup endpoint:
+ * going through Supabase buys two things for free that a custom endpoint would force us to rebuild
+ * — its own rate limiting, and NON-ENUMERATION (the call succeeds whether or not the address has an
+ * account, so the caller can only ever show the neutral message).
+ *
+ * Note the asymmetry with signup, which DOES disclose that an email already has an account. That
+ * was accepted knowingly there. Do not "fix" reset to match it: the leak exists once already, and
+ * there is no reason to open a second.
+ */
+export async function requestPasswordReset(email: string, shopSlug: string | null): Promise<void> {
+  // NEVER throws, and never reports the outcome. That is the whole guarantee, and it lives here so
+  // that no caller can leak it by accident: Supabase's per-email cooldown only fires when a mail is
+  // actually SENT — i.e. only for an address that has an account — so an error surfaced to the UI
+  // would tell an attacker which addresses are registered. Two requests a minute apart is the whole
+  // attack. Callers show the neutral message unconditionally because there is nothing else to show.
+  //
+  // The cost is real and accepted: a genuine failure (network down) looks like success to the
+  // customer, who waits for a mail that never comes. Enumeration is the worse of the two.
+  try {
+    await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: resetRedirectUrl(window.location.origin, shopSlug),
+    })
+  } catch { /* swallowed on purpose — see above */ }
+}
+
+/** Set the new password for the session the recovery link just established. */
+export async function updatePassword(password: string) {
+  const { error } = await supabase.auth.updateUser({ password })
+  if (error) throw error
 }
 
 export async function signOut() {
