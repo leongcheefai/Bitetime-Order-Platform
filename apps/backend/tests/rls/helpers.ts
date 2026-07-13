@@ -1,6 +1,6 @@
 // tests/rls/helpers.ts
-// Builds Supabase clients for RLS integration tests.
-// Credentials come from env vars, which vitest.rls.config.ts fills in from the
+// Builds Supabase clients for the DB-backed suites (tests/rls and tests/api).
+// Credentials come from env vars, which vitest.db.config.ts fills in from the
 // running local stack when they are not already set.
 import { createClient } from '@supabase/supabase-js'
 
@@ -15,7 +15,7 @@ function required(name: string): string {
   if (!value) {
     throw new Error(
       `${name} is not set, so the RLS suite cannot reach a database. It must fail rather than skip. ` +
-        `Run it via \`pnpm test:rls\`, which reads the local stack's credentials for you.`,
+        `Run it via \`pnpm test:db\`, which reads the local stack's credentials for you.`,
     )
   }
   return value

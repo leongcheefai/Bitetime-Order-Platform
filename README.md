@@ -127,13 +127,21 @@ No i18n library. Every string is `t(english, chinese)`; `t` and the `lang`
 
 ## Local Supabase + testing
 
-RLS tests need a running local Supabase and its keys:
+The DB-backed suites (RLS tenant isolation, and the API endpoints) need a running local
+Supabase. They read its URL, keys and `DATABASE_URL` from `supabase status` themselves, so
+there is nothing to pass:
 
 ```bash
 cd apps/backend
 supabase start
-SUPABASE_URL=... SUPABASE_ANON_KEY=... SUPABASE_SERVICE_ROLE_KEY=... pnpm --filter @bitetime/backend test
+pnpm --filter @bitetime/backend test:db
 ```
+
+Set `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` / `DATABASE_URL`
+yourself only to point the run at a different stack (CI). Missing credentials are a hard
+error, never a skip — a suite that asserts nothing but reports green is worse than none.
+
+The pure unit tests need no Supabase: `pnpm --filter @bitetime/backend test`.
 
 Config (`apps/backend/supabase/config.toml`) uses custom ports (API `55321`, db
 `55322`) so it can coexist with other local instances. Migrations live in

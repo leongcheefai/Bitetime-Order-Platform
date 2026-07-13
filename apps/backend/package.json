@@ -7,11 +7,11 @@
   "scripts": {
     "dev": "node --import jiti/register --watch --env-file=.env src/index.ts",
     "start": "node dist/server.js",
-    "build": "esbuild src/index.ts --bundle --external:@hono/node-server --external:hono --external:@supabase/supabase-js --external:stripe --platform=node --format=esm --target=node20 --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
+    "build": "esbuild src/index.ts --bundle --external:@hono/node-server --external:hono --external:@supabase/supabase-js --external:stripe --external:postgres --platform=node --format=esm --target=node20 --outfile=dist/server.js --banner:js=\"import{createRequire}from'module';const require=createRequire(import.meta.url);\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run tests/unit",
-    "test:rls": "vitest run --config vitest.rls.config.ts",
+    "test:db": "vitest run --config vitest.db.config.ts",
     "db:migrate": "supabase migration up",
     "db:push": "supabase db push"
   },
@@ -20,6 +20,7 @@
     "@hono/node-server": "^1.13.0",
     "@supabase/supabase-js": "^2.107.0",
     "hono": "^4.6.0",
+    "postgres": "^3.4.9",
     "stripe": "^17.0.0"
   },
   "devDependencies": {

@@ -24,7 +24,11 @@ A per-merchant promotion code. `percent` (subtotal×value/100) or fixed (`min(va
 
 ## Referral
 
-A discount earned by referring a new customer. Capped at the post-voucher total. The cap math is in `priceOrder`, which takes a resolved `referral` as input — but nothing supplies one, so this does not currently run. See Order pricing.
+Two things share the name.
+
+**Referral capture** — live. A merchant signs up under another member's code, which is stamped on `merchants.referred_by_code`; the referrer can list the shops they brought in (`GET /api/referrals/shops`). A member's code is the first 8 hex characters of their user id, uppercased. The code is always derived from the caller's verified identity, never accepted from the request — a referrer's shops are not their own tenant, so reading them is a cross-tenant read, and the un-choosable code is the only thing that makes it safe. Display-only: no reward is granted.
+
+**Referral discount** — a discount on a customer's order, capped at the post-voucher total. The cap math is in `priceOrder`, which takes a resolved `referral` as input — but nothing supplies one, so this does not currently run. See Order pricing.
 
 ## Customer signup
 

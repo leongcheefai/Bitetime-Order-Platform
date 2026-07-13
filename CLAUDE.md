@@ -24,14 +24,20 @@ pnpm test          # Vitest unit tests across workspaces
 pnpm --filter @bitetime/frontend preview   # serve built dist/ locally
 pnpm --filter @bitetime/backend dev         # billing server only
 pnpm --filter @bitetime/backend test        # backend unit tests (notify, etc.) — no Supabase needed
-pnpm --filter @bitetime/backend test:rls    # RLS tests (needs a running local Supabase; reads its keys itself)
+pnpm --filter @bitetime/backend test:db     # DB-backed tests: RLS + API (needs a running local Supabase; reads its keys itself)
 pnpm --filter @bitetime/backend db:migrate   # apply pending SQL migrations to the LOCAL Supabase DB
 pnpm --filter @bitetime/backend db:push      # push migrations to a linked REMOTE Supabase project
 ```
 
 Migrations live in `apps/backend/supabase/migrations/`. Adding a migration file does **not** apply it — run `db:migrate` (local) so the running app (and PostgREST's schema cache) sees the new columns; otherwise queries fail with `Could not find the 'X' column … in the schema cache`.
 
-Tests use Vitest (added during the multi-merchant build). Pure logic and `store.ts` functions have unit tests (`apps/frontend/src/*.test.ts`); the backend has pure unit tests in `apps/backend/tests/unit/` (run by `test`, no Supabase); tenant isolation and order attribution are covered by integration tests in `apps/backend/tests/rls/` (run by `test:rls`) that need a running local Supabase (`supabase start` from `apps/backend`). `test:rls` uses its own `vitest.rls.config.ts`, which reads the stack's URL and keys from `supabase status` — set `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` yourself only to point it elsewhere (CI). Missing credentials are a startup **error**, never a skip: these suites are the only proof orders can't be spoofed, so a green run that asserted nothing is worse than none. UI is verified by running the app (run-and-verify), not component tests.
+Tests use Vitest (added during the multi-merchant build). Pure logic and `store.ts` functions have unit tests (`apps/frontend/src/*.test.ts`); the backend has pure unit tests in `apps/backend/tests/unit/` (run by `test`, no Supabase).
+
+Everything that needs a database is run by `test:db` and needs a running local Supabase (`supabase start` from `apps/backend`): tenant isolation and order attribution in `apps/backend/tests/rls/`, and the API endpoints in `apps/backend/tests/api/`. The API suites drive the real routes **in-process** via Hono's `app.request()` — which is why `src/app.ts` exports the app and `src/index.ts` is a separate entry that only calls `serve()`. Keep `app.ts` free of import-time side effects or the seam closes.
+
+`test:db` uses its own `vitest.db.config.ts`, which reads the stack's URL, keys and `DATABASE_URL` from `supabase status` (and stubs the Stripe keys, which these suites never call) — set them yourself only to point it elsewhere (CI). Missing credentials are a startup **error**, never a skip. **Never mock the database in these suites**: they exist to prove properties of real Postgres — that an order cannot be spoofed onto a stranger's account, that a transaction really rolls back — and a mocked run reports green while asserting nothing, which is worse than no suite at all.
+
+UI is verified by running the app (run-and-verify), not component tests.
 
 ## Architecture
 
@@ -64,7 +70,7 @@ Sign up with a shop name → auto slug: pinyin transliteration for Chinese names
 
 ### Data layer (`src/store.ts`)
 
-All Supabase calls go through `store.ts`. Shared domain types (Merchant, Profile, Product, Order, Voucher, SessionValue, …) live in `src/types.ts`. Postgres tables (`apps/backend/supabase/migrations/`), all tenant-scoped by RLS:
+All Supabase calls go through `store.ts`. Shared domain types (Merchant, Profile, Product, Order, Voucher, SessionValue, …) live in `src/types.ts`. Postgres tables (`apps/backend/supabase/migrations/`), tenant-scoped by RLS **on the browser's path** — see the caveat under Backend below:
 
 | Table | Purpose |
 |-------|---------|
@@ -82,6 +88,19 @@ All Supabase calls go through `store.ts`. Shared domain types (Merchant, Profile
 `Storefront` collects items, delivery mode, voucher → `priceOrder()` for the total → `placeOrder()` (inserts via the `next_order_number` RPC) → `redeemVoucher()` records voucher use → `notifyOrderPlacedRemote()` triggers the backend Telegram send → confirms order number. The Telegram bot token never reaches the browser: the backend (`POST /api/notify/order`) reads it from `merchant_secrets` and sends server-side.
 
 Order numbers: `<PREFIX>-YYYYMMDD-XXXX`. Prefix = first two alphanumerics of the slug, uppercased (`src/orderPrefix.ts`). Daily counter is per-merchant via the DB `next_order_number` function.
+
+### Backend (`apps/backend/src/`)
+
+Hono. `app.ts` defines the routes and **exports the app without serving it**; `index.ts` is the entry that calls `serve()`. That split is what lets `tests/api` drive the real routes in-process via `app.request()` — keep `app.ts` free of I/O at import (it does read `env.ts`, which fails fast on a missing var; that is deliberate and is why the test config stubs the Stripe keys).
+
+Two ways to reach Postgres, and the difference matters:
+
+- **`supabase.ts`** — the REST clients. `admin` (service role, RLS-exempt) and an anon client used only to verify caller JWTs.
+- **`db.ts`** — a direct `postgres.js` connection, and the only thing here that can open a **transaction**. `supabase-js` cannot, which is the sole reason the order rules were ever PL/pgSQL: the daily counter needs an atomic upsert and the voucher needs a row lock. Every multi-statement rule goes through `withTransaction()`.
+
+**`db.ts` is RLS-exempt.** It connects as the database owner, so no policy runs on it: on the backend's path, which merchant a row belongs to is a **TypeScript invariant, not a Postgres one**, and any code using it must check tenancy itself. RLS remains in force for the browser's anon/authenticated path and is the backstop — `tests/rls` is the proof it is still shut. Do not read "RLS protects it" as true of anything the backend writes.
+
+Migrating the remaining SQL functions into this layer is #61.
 
 ### Shipping / pricing
 

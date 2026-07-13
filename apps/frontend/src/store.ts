@@ -501,13 +501,23 @@ export function referralCodeOf(userId: string) {
   return (userId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
-// Shops that signed up with the current user's referral code. Reads the
-// my_referred_shops SECURITY DEFINER RPC, which filters by the caller's own code and
-// returns only name/created_at/status.
+// Shops that signed up with the current user's referral code.
+//
+// The code is never sent — the backend derives it from the bearer token, exactly as the
+// my_referred_shops RPC this replaces derived it from auth.uid(). Sending it would turn the
+// endpoint into a cross-tenant read of any referrer's shops.
 export async function fetchReferredShops(): Promise<ReferredShop[]> {
-  const { data, error } = await supabase.rpc('my_referred_shops')
-  if (error) throw error
-  return (data ?? []) as ReferredShop[]
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/referrals/shops`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || 'Could not load referred shops')
+  }
+  return (await res.json()) as ReferredShop[]
 }
 
 // ── Multi-tenant order placement ─────────────────────────────────────────────
