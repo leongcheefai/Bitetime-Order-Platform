@@ -247,6 +247,10 @@ export default function Storefront() {
           }
         }
       }
+      // On a storefront every signed-in user is a customer, whatever role they hold elsewhere:
+      // a shop owner buying lunch here is a customer, and a merchant ordering from their *own*
+      // storefront gets the order attributed to themselves. That looks like a bug and isn't —
+      // they can already read it as the owner.
       const result = await placeOrder({
         merchantId: merchant.id,
         customerName: name.trim(),
@@ -601,15 +605,6 @@ export default function Storefront() {
           <div className="mb-7">
             <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Your Details', '您的资料')}</div>
             {step === 'guest' && <GuestStrip onSignIn={() => setSignInOpen(true)} />}
-            {/* On a storefront every signed-in user is a customer, whatever role they hold
-                elsewhere: a shop owner buying lunch here is a customer, and a merchant
-                ordering from their *own* storefront gets the order attributed to themselves.
-                That looks like a bug and isn't — they can already read it as the owner. */}
-            {step === 'account' && account && (
-              <div className="flex items-center gap-2 mb-3 px-[13px] py-2.5 bg-surface-raised border-[1.5px] border-divider rounded-md text-[13px] text-rose-muted leading-[1.5]">
-                <span>{t('Signed in as', '已登录：')} <strong className="text-ink font-medium">{account.email}</strong></span>
-              </div>
-            )}
             <div className="flex flex-col gap-1.5 mb-3">
               <Label htmlFor="sf-name">{t('Name', '姓名')} *</Label>
               <Input
@@ -645,22 +640,22 @@ export default function Storefront() {
                 </button>
               </div>
             ) : (
-              <div className="flex flex-col gap-2">
+              <div className="flex items-stretch gap-2">
                 <Input
                   type="text"
                   value={voucherInput}
                   onChange={e => setVoucherInput(e.target.value)}
                   placeholder={t('Enter voucher code', '输入优惠码')}
-                  className="w-full"
+                  className="flex-1 min-w-0"
                 />
-                <button
-                  type="button"
+                <Button
+                  size="sm"
                   disabled={voucherBusy}
-                  className="w-full border border-clay-border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-ink text-center bg-surface-raised transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2 whitespace-nowrap disabled:opacity-60"
+                  className="pointer-coarse:min-h-11"
                   onClick={applyVoucher}
                 >
                   {voucherBusy ? t('Checking…', '验证中…') : t('Apply', '应用')}
-                </button>
+                </Button>
               </div>
             )}
             {voucherMsg && (
