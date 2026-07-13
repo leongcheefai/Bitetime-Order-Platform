@@ -389,24 +389,29 @@ export default function Storefront() {
                 {t('Powered by BiteTime', 'BiteTime 提供技术支持')}
               </p>
               <div className="flex items-center gap-3 mt-1">
-                {/* The guest's entry point, and it stays one: a signed-in customer gets history
-                    instead, which carries the tracking inline. */}
-                <Link to={`/s/${merchant.slug}/track`} className="text-[12px] text-oxblood underline inline-block">
-                  {t('Track an order', '追踪订单')}
-                </Link>
-                {account && (
+                {account ? (
+                  // History carries the courier and AWB inline, so it is already everything /track
+                  // would say and more. Offering both here asked the customer to tell apart two
+                  // links that do the same job, and pointed one of them at a form demanding an
+                  // order number they can already see.
                   <Link to={`/s/${merchant.slug}/orders`} className="text-[12px] text-oxblood underline inline-block">
                     {t('Your orders', '你的订单')}
                   </Link>
-                )}
-                {!account && (
-                  <button
-                    type="button"
-                    onClick={() => setSignInOpen(true)}
-                    className="text-[12px] text-oxblood underline inline-block cursor-pointer"
-                  >
-                    {t('Sign in', '登录')}
-                  </button>
+                ) : (
+                  <>
+                    {/* The guest's entry point, and their only one: a guest order is stamped with a
+                        null user_id and can never appear in any history. */}
+                    <Link to={`/s/${merchant.slug}/track`} className="text-[12px] text-oxblood underline inline-block">
+                      {t('Track an order', '追踪订单')}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setSignInOpen(true)}
+                      className="text-[12px] text-oxblood underline inline-block cursor-pointer"
+                    >
+                      {t('Sign in', '登录')}
+                    </button>
+                  </>
                 )}
               </div>
             </div>
