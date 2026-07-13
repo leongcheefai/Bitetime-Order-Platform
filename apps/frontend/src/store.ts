@@ -644,11 +644,20 @@ export async function setOrderTracking(orderId: string, courier: string | null, 
   return data
 }
 
-export async function fetchOrderTracking(merchantId: string, orderNumber: string) {
+/**
+ * The guest's only way back to an order. Costs the order number AND the phone that placed it:
+ * order numbers are a per-shop daily counter, so the number alone is guessable and this endpoint
+ * is open to `anon`. The phone is what makes a guess cost ~10^8 tries instead of one.
+ *
+ * A wrong phone and a wrong number are the same `null`. Telling them apart would hand back the
+ * oracle the phone exists to remove.
+ */
+export async function fetchOrderTracking(merchantId: string, orderNumber: string, phone: string) {
   const trimmed = orderNumber.trim()
-  if (!merchantId || !trimmed) return null
+  const trimmedPhone = phone.trim()
+  if (!merchantId || !trimmed || !trimmedPhone) return null
   const { data, error } = await supabase
-    .rpc('track_order', { p_merchant: merchantId, p_order_number: trimmed })
+    .rpc('track_order', { p_merchant: merchantId, p_order_number: trimmed, p_phone: trimmedPhone })
   if (error || !data || !data.length) return null
   return data[0] as { status: string; mode: string; courier: string | null; awb: string | null; created_at: string }
 }

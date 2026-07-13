@@ -16,6 +16,7 @@ export default function TrackOrder() {
   const { merchant } = useMerchant()
   const { t, lang } = useSession()
   const [orderNo, setOrderNo] = useState('')
+  const [phone, setPhone] = useState('')
   const [result, setResult] = useState<Tracking | 'notfound' | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -24,10 +25,10 @@ export default function TrackOrder() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const normalized = orderNo.trim().toUpperCase()
-    if (!normalized) return
+    if (!normalized || !phone.trim()) return
     setLoading(true)
     setResult(null)
-    fetchOrderTracking(merchant!.id, normalized)
+    fetchOrderTracking(merchant!.id, normalized, phone)
       .then(r => setResult(r ?? 'notfound'))
       .catch(() => setResult('notfound'))
       .finally(() => setLoading(false))
@@ -59,14 +60,36 @@ export default function TrackOrder() {
           placeholder={t('e.g. FA-260704-0053', '例如 FA-260704-0053')}
           className="font-mono"
         />
-        <Button type="submit" size="none" className="self-start rounded-pill py-[8px] px-[18px] text-[14px]" disabled={loading || !orderNo.trim()}>
+
+        {/* The order number alone is a daily counter, and this page is open to anyone. The phone is
+            what keeps a stranger from walking the counter and reading back the shop's day. */}
+        <label className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mt-2" htmlFor="track-phone">
+          {t('WhatsApp number', 'WhatsApp 号码')}
+        </label>
+        <Input
+          id="track-phone"
+          type="tel"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          placeholder={t('e.g. 601X-XXXXXXX', '例如 601X-XXXXXXX')}
+        />
+        <p className="text-[12px] text-rose-muted leading-[1.5] -mt-1">
+          {t('The number you gave when you ordered.', '你下单时填写的号码。')}
+        </p>
+
+        <Button type="submit" size="none" className="self-start rounded-pill py-[8px] px-[18px] text-[14px]" disabled={loading || !orderNo.trim() || !phone.trim()}>
           {loading ? t('Checking…', '查询中…') : t('Track', '追踪')}
         </Button>
       </form>
 
+      {/* One message for a wrong number and a wrong phone alike. Saying which was wrong would give
+          back the guessing oracle the phone is here to take away. */}
       {result === 'notfound' && (
         <p className="text-[14px] text-rose-muted italic py-4 text-center">
-          {t('No order found with that number.', '找不到该订单号。')}
+          {t(
+            "No order matches that number and phone. Check both — the phone must be the one you ordered with.",
+            '找不到匹配该订单号和号码的订单。请检查两者 — 号码必须是你下单时填写的。',
+          )}
         </p>
       )}
 
