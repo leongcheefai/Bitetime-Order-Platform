@@ -1,0 +1,12 @@
+-- `track_order` now lives in TypeScript, behind `POST /api/orders/track` (see #64, #61).
+--
+-- Dropping the function drops its grant with it, which is the point: while it stands, `anon`
+-- keeps a second, independent path to every shop's order status and AWB — one that no longer
+-- has a caller and would not be noticed if it drifted from the endpoint that replaced it. The
+-- two security properties it carried are now asserted in tests/api/orderTracking.test.ts: a
+-- wrong phone and a wrong order number are byte-identical responses, and phones are matched
+-- on their last eight digits so one human's three ways of writing one number all land.
+--
+-- The backend reaches `orders` through db.ts, which connects as the database owner and is
+-- RLS-exempt, so it needs no grant of its own. Nothing else called this.
+drop function if exists public.track_order(uuid, text, text);

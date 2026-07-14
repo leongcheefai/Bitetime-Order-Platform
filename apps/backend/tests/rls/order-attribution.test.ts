@@ -1,17 +1,27 @@
 // tests/rls/order-attribution.test.ts
-// Security-critical: proves the DATABASE decides who an order belongs to.
+// Security-critical: proves the browser CANNOT insert an order, and reads stay scoped.
 //
-// The client never supplies user_id — a BEFORE INSERT trigger stamps it from
-// auth.uid(). Signed in => their id. Guest (no JWT) => NULL. A client that
-// tries to attach an order to someone else's account has that id discarded.
+// This suite used to prove that the database decided who an order belonged to, by inserting
+// as an anon/authenticated client and watching a BEFORE INSERT trigger stamp auth.uid() over
+// whatever the client sent. Order intake now runs in the backend (#65), and the premise has
+// inverted:
 //
-// Requires a running local Supabase with env vars set:
-//   SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY
-// Without those vars the suite is skipped so `test` stays green.
+//   * anon and authenticated no longer hold INSERT on orders. There is no client insert left
+//     to stamp, and the tests that drove one are gone with it.
+//   * The orders_set_user_id trigger now COALESCEs instead of overwriting — it has to, since
+//     there is no auth.uid() on the backend's direct connection. That reopens the spoofing
+//     hole the unconditional assignment closed, and THE REVOKE IS THE ONLY THING SHUTTING IT.
+//     So the revoke is what this file now guards, and it guards it hard: if a future migration
+//     grants INSERT back to a client role, the first test here fails and says why.
+//
+// Attribution itself (JWT decides, body is ignored) is proven where it now lives, against the
+// real endpoint: tests/api/orders.test.ts.
+//
+// Requires a running local Supabase — see vitest.db.config.ts.
 import { describe, it, expect, beforeAll } from 'vitest'
 import { anonClient, makeUser, seedMerchant, serviceClient } from './helpers.js'
 
-/** A minimal order, shaped like the one the storefront inserts. */
+/** A minimal order, shaped like the one intake writes. */
 function order(merchantId: string, extra: Record<string, unknown> = {}) {
   return {
     merchant_id: merchantId,
@@ -25,149 +35,97 @@ function order(merchantId: string, extra: Record<string, unknown> = {}) {
   }
 }
 
-describe('order attribution (RLS + trigger)', () => {
+describe('order intake is closed to the browser (RLS + grants)', () => {
   let customerA: any, customerB: any
-  let userA: string, userB: string
-  let activeShop: string, pendingShop: string, suspendedShop: string
+  let userA: string
+  let activeShop: string
   let merchantOwner: any
 
   beforeAll(async () => {
     customerA = await makeUser('attr-customer-a@test.dev', 'password123')
     customerB = await makeUser('attr-customer-b@test.dev', 'password123')
     merchantOwner = await makeUser('attr-merchant@test.dev', 'password123')
-    const closedShopsOwner = await makeUser('attr-merchant-closed@test.dev', 'password123')
 
     userA = (await customerA.auth.getUser()).data.user!.id
-    userB = (await customerB.auth.getUser()).data.user!.id
     const owner = (await merchantOwner.auth.getUser()).data.user!.id
-    const otherOwner = (await closedShopsOwner.auth.getUser()).data.user!.id
 
-    // The closed shops get a DIFFERENT owner on purpose: current_merchant_id()
-    // is `select id from merchants where owner_id = auth.uid() limit 1`, so an
-    // owner holding several shops resolves to an arbitrary one of them and the
-    // merchant read-back below would silently look at the wrong shop.
     activeShop = await seedMerchant({ slug: 'attr-active', order_prefix: 'AT', owner_id: owner })
-    pendingShop = await seedMerchant({ slug: 'attr-pending', order_prefix: 'AT', owner_id: otherOwner, status: 'pending' })
-    suspendedShop = await seedMerchant({ slug: 'attr-suspended', order_prefix: 'AT', owner_id: otherOwner, status: 'suspended' })
+
+    // The read fixtures are seeded with the SERVICE ROLE, because that is now the only thing
+    // that can write an order — which is the whole point of the suite. One attributed order,
+    // one guest order.
+    const svc = serviceClient()
+    const { error } = await svc.from('orders').insert([
+      order(activeShop, { order_number: 'AT-1', user_id: userA }),
+      order(activeShop, { order_number: 'AT-2', user_id: null }),
+    ])
+    if (error) throw new Error(`seeding orders: ${error.message}`)
   }, 30_000)
 
-  // ── The trigger stamps the ordering user ───────────────────────────────────
+  // ── The door is shut ────────────────────────────────────────────────────────
+  // Assert the grant/RLS code (42501), never a bare "an error happened": a fixture typo or an
+  // FK violation would satisfy `not.toBeNull()` just as happily, and the test would keep
+  // passing with the door wide open.
 
-  it('stamps a signed-in customer’s own id on their order', async () => {
-    const { data, error } = await customerA
-      .from('orders')
-      .insert(order(activeShop, { order_number: 'AT-1' }))
-      .select('user_id')
-      .single()
+  it('refuses an order insert from an anonymous client', async () => {
+    const { error } = await anonClient().from('orders').insert(order(activeShop, { order_number: 'AT-X1' }))
 
-    expect(error).toBeNull()
-    expect(data!.user_id).toBe(userA)
-  })
-
-  it('leaves a guest order unattributed', async () => {
-    const anon = anonClient()
-    const { error } = await anon.from('orders').insert(order(activeShop, { order_number: 'AT-2' }))
-    expect(error).toBeNull()
-
-    // Only the service role can look: the guest cannot read its own order back.
-    const { data } = await serviceClient()
-      .from('orders').select('user_id').eq('order_number', 'AT-2').single()
-    expect(data!.user_id).toBeNull()
-  })
-
-  it('discards a user_id supplied by an anonymous client', async () => {
-    const anon = anonClient()
-    const { error } = await anon
-      .from('orders')
-      .insert(order(activeShop, { order_number: 'AT-3', user_id: userA }))
-    expect(error).toBeNull()
-
-    const { data } = await serviceClient()
-      .from('orders').select('user_id').eq('order_number', 'AT-3').single()
-    expect(data!.user_id).toBeNull()
-  })
-
-  // THE test. If this ever fails, the feature is a vulnerability: anyone could
-  // push orders into a stranger's history.
-  it('discards a user_id belonging to somebody else', async () => {
-    const { data, error } = await customerA
-      .from('orders')
-      .insert(order(activeShop, { order_number: 'AT-4', user_id: userB }))
-      .select('user_id')
-      .single()
-
-    expect(error).toBeNull()
-    expect(data!.user_id).toBe(userA)
-    expect(data!.user_id).not.toBe(userB)
-  })
-
-  // ── The insert policy ──────────────────────────────────────────────────────
-  // Assert the RLS code (42501), not merely "an error": a fixture typo or a FK
-  // violation would satisfy a bare not.toBeNull() just as happily, and the test
-  // would keep passing with the policy dropped.
-
-  it('rejects an order into a pending shop', async () => {
-    const { error } = await customerA
-      .from('orders')
-      .insert(order(pendingShop, { order_number: 'AT-5' }))
     expect(error?.code).toBe('42501')
   })
 
-  it('rejects an order into a suspended shop', async () => {
+  it('refuses an order insert from a signed-in customer', async () => {
+    const { error } = await customerA.from('orders').insert(order(activeShop, { order_number: 'AT-X2' }))
+
+    expect(error?.code).toBe('42501')
+  })
+
+  // THE test. The trigger no longer discards a client-supplied user_id — it keeps it. The only
+  // reason that is not a vulnerability is this refusal. If it ever passes, anyone holding the
+  // anon key (it ships in every browser) can push orders into a stranger's history.
+  it('refuses an insert carrying somebody else’s user_id — the revoke, not the trigger, is what stops it', async () => {
     const { error } = await anonClient()
       .from('orders')
-      .insert(order(suspendedShop, { order_number: 'AT-6' }))
+      .insert(order(activeShop, { order_number: 'AT-X3', user_id: userA }))
+
     expect(error?.code).toBe('42501')
+
+    const { data } = await serviceClient().from('orders').select('id').eq('order_number', 'AT-X3')
+    expect(data).toEqual([])
   })
 
-  it('rejects an order that is born already completed', async () => {
-    const { error } = await customerA
-      .from('orders')
-      .insert(order(activeShop, { order_number: 'AT-7', status: 'completed' }))
-    expect(error?.code).toBe('42501')
+  // The two RPCs the backend took over. Leaving next_order_number executable would let anyone
+  // burn a shop's daily counter; leaving redeem_voucher executable would let anyone mark a
+  // stranger's voucher used.
+  //
+  // PGRST202 is "no such function", and asserting it is the whole point: calling a function
+  // with no arguments errors whether or not it still exists, so a bare `not.toBeNull()` would
+  // pass with both functions alive and grants intact — exactly the trap this file warns about
+  // eight lines above.
+  it.each(['next_order_number', 'redeem_voucher'])('no longer exposes the %s function', async (fn) => {
+    const { error } = await anonClient().rpc(fn, {})
+
+    expect(error?.code).toBe('PGRST202')
   })
 
-  // ── The storefront's actual path ───────────────────────────────────────────
-
-  // placeOrder takes a number from the next_order_number RPC, then inserts with
-  // it. Both halves have to stay open to an anonymous client, or guest checkout
-  // dies — and neither the mocked store.test.ts nor the hand-written order
-  // numbers above would notice.
-  it('lets a guest take an order number and place the order with it', async () => {
-    const anon = anonClient()
-
-    const { data: orderNumber, error: rpcError } = await anon
-      .rpc('next_order_number', { p_merchant: activeShop })
-    expect(rpcError).toBeNull()
-    expect(orderNumber).toMatch(/^AT-\d{6}-\d{4}$/)
-
-    const { error } = await anon.from('orders').insert(order(activeShop, { order_number: orderNumber }))
-    expect(error).toBeNull()
-
-    const { data } = await serviceClient()
-      .from('orders').select('user_id').eq('order_number', orderNumber).single()
-    expect(data!.user_id).toBeNull()
-  })
-
-  // ── Reads ──────────────────────────────────────────────────────────────────
+  // ── Reads are unchanged ────────────────────────────────────────────────────
 
   it('lets a customer read their own orders', async () => {
     const { data, error } = await customerA.from('orders').select('order_number')
+
     expect(error).toBeNull()
     expect(data!.map((o: any) => o.order_number)).toContain('AT-1')
   })
 
   it('does not let a customer read somebody else’s orders', async () => {
     const { data, error } = await customerB.from('orders').select('order_number')
+
     expect(error).toBeNull()
     expect(data).toEqual([])
   })
 
-  it('lets a guest read nothing, even the order it just placed', async () => {
-    const anon = anonClient()
-    await anon.from('orders').insert(order(activeShop, { order_number: 'AT-8' }))
+  it('lets a guest read nothing', async () => {
+    const { data, error } = await anonClient().from('orders').select('order_number')
 
-    const { data, error } = await anon.from('orders').select('order_number')
     expect(error).toBeNull()
     expect(data).toEqual([])
   })

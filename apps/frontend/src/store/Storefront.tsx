@@ -5,7 +5,7 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
-import { fetchProducts, placeOrder, fetchMerchantVoucher, redeemVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
+import { fetchProducts, placeOrder, fetchMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
 import { priceOrder, voucherError } from '../pricing'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
@@ -40,6 +40,25 @@ interface SuccessState {
   discount: number
   total: number
 }
+
+/**
+ * The three ways the server can refuse a voucher at checkout, each with something the
+ * customer can actually do about it. Keyed by the backend's own error codes — these are a
+ * wire contract, not prose (see OrderErrorCode in store.ts).
+ *
+ * Every one of them means the order was rolled back and NOTHING was written, so each message
+ * has to end by asking for the order again, without the voucher.
+ */
+const VOUCHER_REFUSALS = {
+  voucher_not_found: (t: (en: string, zh: string) => string) =>
+    t('That voucher is no longer valid. Please place the order without it.', '该优惠券已失效，请不使用优惠券重新下单。'),
+  voucher_already_used: (t: (en: string, zh: string) => string) =>
+    t('You have already used this voucher. Please place the order without it.', '你已使用过此优惠券，请不使用优惠券重新下单。'),
+  voucher_fully_used: (t: (en: string, zh: string) => string) =>
+    t('This voucher has been fully claimed. Please place the order without it.', '此优惠券已被领完，请不使用优惠券重新下单。'),
+  voucher_entry_required: (t: (en: string, zh: string) => string) =>
+    t('Enter the email or phone you are ordering with to use a voucher.', '使用优惠券需填写下单的邮箱或手机号。'),
+} as const
 
 export default function Storefront() {
   const { merchant: merchantNullable } = useMerchant()
@@ -251,6 +270,9 @@ export default function Storefront() {
       // a shop owner buying lunch here is a customer, and a merchant ordering from their *own*
       // storefront gets the order attributed to themselves. That looks like a bug and isn't —
       // they can already read it as the owner.
+      // One call. The order number, the order row and the voucher claim commit together in a
+      // transaction server-side, so there is no second call whose failure could hand out a
+      // discount on a voucher that was never marked used.
       const result = await placeOrder({
         merchantId: merchant.id,
         customerName: name.trim(),
@@ -263,11 +285,8 @@ export default function Storefront() {
         currency,
         discount,
         voucherCode: appliedVoucher?.code ?? null,
+        voucherEntry: appliedVoucher ? voucherEntry : null,
       })
-      if (appliedVoucher) {
-        // Best-effort: failure to record usage must not fail a placed order.
-        await redeemVoucher(merchant.id, appliedVoucher.code, voucherEntry).catch(() => {})
-      }
       // Remember what they typed, silently, so they never type it again — at this shop or any
       // other. Best-effort and unawaited: the order is already placed, and a profile write that
       // fails must cost the customer a retype next time, never their order. A guest saves nothing
@@ -282,8 +301,31 @@ export default function Storefront() {
       setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total })
       toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
-      setError(err.message || t('Failed to place order. Please try again.', '下单失败，请重试。'))
-      toast.error(t('Failed to place order. Please try again.', '下单失败，请重试。'))
+      // A refused order wrote NOTHING — the transaction rolled back. So for the three voucher
+      // refusals the honest thing is to drop the voucher and tell them to place the order
+      // again without it: the discount they were promised is gone, but the order is theirs to
+      // retry. Saying "failed, try again" while silently keeping a voucher the server has
+      // already refused would just fail them again, forever.
+      const code: string | undefined = err?.code
+      const voucherRefusal = VOUCHER_REFUSALS[code as keyof typeof VOUCHER_REFUSALS]
+      if (voucherRefusal) {
+        setAppliedVoucher(null)
+        setVoucherMsg(voucherRefusal(t))
+        setError(voucherRefusal(t))
+        toast.error(voucherRefusal(t))
+      } else if (code === 'merchant_inactive' || code === 'merchant_not_found') {
+        const msg = t('This shop is not taking orders right now.', '本店目前暂不接单。')
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'network') {
+        // The request never landed, so no order exists and retrying is safe to suggest.
+        const msg = t('Could not reach the shop. Check your connection and try again.', '无法连接店铺，请检查网络后重试。')
+        setError(msg)
+        toast.error(msg)
+      } else {
+        setError(err.message || t('Failed to place order. Please try again.', '下单失败，请重试。'))
+        toast.error(t('Failed to place order. Please try again.', '下单失败，请重试。'))
+      }
     } finally {
       setBusy(false)
     }

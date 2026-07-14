@@ -16,6 +16,12 @@ export const env = {
   supabaseAnonKey: required('SUPABASE_ANON_KEY'),
   supabaseServiceRoleKey: required('SUPABASE_SERVICE_ROLE_KEY'),
 
+  // Direct Postgres connection, separate from the Supabase REST clients above.
+  // supabase-js cannot open a transaction, which is the only reason the order rules were
+  // ever PL/pgSQL: the counter needs an atomic upsert and the voucher a row lock. This is
+  // what lets those rules be TypeScript instead. See src/db.ts.
+  databaseUrl: required('DATABASE_URL'),
+
   // Email (Resend). Optional: when the key is unset, sends are skipped with a
   // warning so local dev works without an email account.
   resendApiKey: process.env.RESEND_API_KEY || '',

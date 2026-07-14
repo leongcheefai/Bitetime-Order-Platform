@@ -460,17 +460,10 @@ export async function fetchMerchantVoucher(merchantId: string, code: string): Pr
   return voucherFromRow(data);
 }
 
-// Record a redemption. Customers cannot write the vouchers table under RLS, so
-// this goes through a security-definer RPC that enforces max_uses / one-per-
-// customer server-side.
-export async function redeemVoucher(merchantId: string, code: string, entry: string) {
-  const { error } = await supabase.rpc('redeem_voucher', {
-    p_merchant: merchantId,
-    p_code: code,
-    p_entry: (entry || '').toLowerCase(),
-  });
-  if (error) throw error;
-}
+// `redeemVoucher` is gone, and its absence is the fix. Redemption was a SECOND call made
+// after the order was already committed, so a failure left the customer holding a discount on
+// a voucher that was never marked used — reusable forever. The claim now happens inside
+// placeOrder's transaction, server-side. There is no longer a second call to swallow.
 
 // Merchant-facing voucher management (writes the merchant's own rows — allowed
 // by vouchers_write_own).
@@ -501,20 +494,74 @@ export function referralCodeOf(userId: string) {
   return (userId || '').replace(/-/g, '').slice(0, 8).toUpperCase();
 }
 
-// Shops that signed up with the current user's referral code. Reads the
-// my_referred_shops SECURITY DEFINER RPC, which filters by the caller's own code and
-// returns only name/created_at/status.
+// Shops that signed up with the current user's referral code.
+//
+// The code is never sent — the backend derives it from the bearer token, exactly as the
+// my_referred_shops RPC this replaces derived it from auth.uid(). Sending it would turn the
+// endpoint into a cross-tenant read of any referrer's shops.
 export async function fetchReferredShops(): Promise<ReferredShop[]> {
-  const { data, error } = await supabase.rpc('my_referred_shops')
-  if (error) throw error
-  return (data ?? []) as ReferredShop[]
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/referrals/shops`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || 'Could not load referred shops')
+  }
+  return (await res.json()) as ReferredShop[]
 }
 
 // ── Multi-tenant order placement ─────────────────────────────────────────────
 
 const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
 
-export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total, currency, discount, voucherCode }: {
+/**
+ * Why an order was refused, in the backend's own words.
+ *
+ * A DELIBERATE TWIN of `OrderErrorCode` in `apps/backend/src/orders.ts` — the backend is a
+ * separate workspace, and these codes are the wire contract between them. Add a code there
+ * and you must add it here and give it a message in `Storefront.tsx`'s VOUCHER_REFUSALS, or
+ * the customer gets "something went wrong" for a refusal we know the reason for.
+ */
+export type OrderErrorCode =
+  | 'merchant_not_found'
+  | 'merchant_inactive'
+  | 'voucher_not_found'
+  | 'voucher_already_used'
+  | 'voucher_fully_used'
+  | 'voucher_entry_required'
+
+/**
+ * A refusal the customer can do something about — retry without the voucher, come back later.
+ *
+ * `network` and `order_failed` are the browser's own additions, and have no backend twin: the
+ * first is a fetch that never landed, the second a server fault with no code to explain it.
+ */
+export class OrderError extends Error {
+  constructor(readonly code: OrderErrorCode | 'order_failed' | 'network') {
+    super(code)
+    this.name = 'OrderError'
+  }
+}
+
+/**
+ * Place an order: ONE call, which commits the order number, the order row and the voucher
+ * claim in a single transaction server-side.
+ *
+ * This used to be three trips from the browser with no transaction around them — take a
+ * number, insert the order, then record the redemption — and the storefront threw the third
+ * one's error away. A failed redemption therefore left the order committed with the discount
+ * applied and the voucher never marked used, so the customer kept the discount and could
+ * reuse the voucher forever. The three trips are now one, and a failed claim rolls the order
+ * back rather than gifting it.
+ *
+ * The browser no longer has INSERT on `orders` at all (the grant is revoked), so there is no
+ * path back to the old shape even by accident. `user_id` is not sent: the backend takes it
+ * from this request's JWT, and sending it would be ignored.
+ */
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total, currency, discount, voucherCode, voucherEntry }: {
   merchantId: string
   customerName: string
   customerWa: string
@@ -526,34 +573,35 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   currency?: string
   discount?: number
   voucherCode?: string | null
+  voucherEntry?: string | null
 }) {
-  const { data: orderNumber, error: rpcErr } = await supabase
-    .rpc('next_order_number', { p_merchant: merchantId })
-  if (rpcErr) throw rpcErr
-  // No .select(). A guest's order is invisible to them — orders_select_scoped
-  // matches on user_id = auth.uid(), which is NULL for a guest — and Postgres
-  // rejects an INSERT ... RETURNING whose row the caller may not read back. So
-  // asking for the row killed guest checkout outright. That was already true
-  // before user_id was ever stamped (the select policy is unchanged); it only
-  // went unnoticed because production's policies have drifted from these
-  // migrations. Nothing consumed the row anyway — callers use the order number.
-  //
-  // user_id is stamped by a BEFORE INSERT trigger from the JWT, never sent here.
-  const { error } = await supabase.from('orders').insert({
-    merchant_id: merchantId,
-    customer_name: customerName,
-    customer_wa: customerWa,
-    mode, address,
-    shipping_fee: shippingFee ?? 0,
-    items, total,
-    currency: currency ?? 'MYR',
-    discount: discount && discount > 0 ? discount : null,
-    voucher_code: discount && discount > 0 ? (voucherCode ?? null) : null,
-    order_number: orderNumber,
-    status: 'new',
-  })
-  if (error) throw error
-  return { orderNumber }
+  // Optional: a guest has no session, and guest checkout is a first-class path.
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+
+  // `fetch` REJECTS on a network or CORS failure rather than returning a non-ok response, so
+  // an offline customer would otherwise get a raw "Failed to fetch" on the checkout screen.
+  const res = await fetch(`${API_URL}/api/orders`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      merchantId, customerName, customerWa, mode, address,
+      shippingFee: shippingFee ?? 0,
+      items, total,
+      currency: currency ?? 'MYR',
+      discount, voucherCode, voucherEntry,
+    }),
+  }).catch(() => null)
+  if (!res) throw new OrderError('network')
+
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}))
+    throw new OrderError(payload?.error ?? 'order_failed')
+  }
+  return (await res.json()) as { orderNumber: string }
 }
 
 // Trigger the server-side order notification (Telegram). The bot token stays on
@@ -646,20 +694,33 @@ export async function setOrderTracking(orderId: string, courier: string | null, 
 
 /**
  * The guest's only way back to an order. Costs the order number AND the phone that placed it:
- * order numbers are a per-shop daily counter, so the number alone is guessable and this endpoint
- * is open to `anon`. The phone is what makes a guess cost ~10^8 tries instead of one.
+ * order numbers are a per-shop daily counter, so the number alone is guessable and the endpoint
+ * behind this is unauthenticated. The phone is what makes a guess cost ~10^8 tries instead of one.
  *
- * A wrong phone and a wrong number are the same `null`. Telling them apart would hand back the
- * oracle the phone exists to remove.
+ * A wrong phone, a wrong number and a failed request are all the same `null` — and the caller
+ * must keep showing one message for all of them. Telling them apart would hand back the oracle
+ * the phone exists to remove. That is also why nothing here reads a status code or an error body:
+ * there is nothing in either to read.
  */
 export async function fetchOrderTracking(merchantId: string, orderNumber: string, phone: string) {
   const trimmed = orderNumber.trim()
   const trimmedPhone = phone.trim()
   if (!merchantId || !trimmed || !trimmedPhone) return null
-  const { data, error } = await supabase
-    .rpc('track_order', { p_merchant: merchantId, p_order_number: trimmed, p_phone: trimmedPhone })
-  if (error || !data || !data.length) return null
-  return data[0] as { status: string; mode: string; courier: string | null; awb: string | null; created_at: string }
+  // `fetch` REJECTS on a network or CORS failure rather than returning a non-ok response, so
+  // without this catch the promised null becomes a throw the moment the backend is unreachable.
+  const res = await fetch(`${API_URL}/api/orders/track`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ merchantId, orderNumber: trimmed, phone: trimmedPhone }),
+  }).catch(() => null)
+  if (!res || !res.ok) return null
+  return (await res.json()) as {
+    status: string
+    mode: string
+    courier: string | null
+    awb: string | null
+    created_at: string
+  } | null
 }
 
 export async function fetchMerchantCustomers(merchantId: string) {

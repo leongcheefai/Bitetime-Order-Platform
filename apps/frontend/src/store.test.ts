@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('./supabase', () => {
   // Terminal methods
@@ -106,7 +106,6 @@ import {
   fetchMerchantCustomers,
   voucherFromRow,
   fetchMerchantVouchers,
-  redeemVoucher,
   createMerchantVoucher,
   deleteMerchantVoucher,
 } from './store'
@@ -524,10 +523,29 @@ describe('upsertMerchantSecret', () => {
 
 // ── placeOrder (Task 5.2) ─────────────────────────────────────────────────────
 
+// Intake is ONE backend call now: the order number, the order row and the voucher claim
+// commit together in a transaction server-side. The browser holds no INSERT on `orders` at
+// all, so what this file can still usefully assert is the request it sends — above all that
+// it never sends a user_id (the JWT decides attribution) and that it surfaces the server's
+// refusal code rather than a generic failure.
 describe('placeOrder', () => {
-  it('calls rpc(next_order_number, {p_merchant}) then inserts with correct fields', async () => {
-    __mocks.rpc.mockResolvedValueOnce({ data: 'BT-0001', error: null })
-    __mocks.insert.mockResolvedValueOnce({ error: null })
+  function fetchOk(body: unknown) {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => body })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  function fetchRefused(code: string) {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, json: async () => ({ error: code }) })
+    vi.stubGlobal('fetch', fetchMock)
+    return fetchMock
+  }
+
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('POSTs the order to the backend and returns the number it assigns', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
+    const fetchMock = fetchOk({ orderNumber: 'BT-260714-0050' })
 
     const result = await placeOrder({
       merchantId: 'm1',
@@ -540,41 +558,73 @@ describe('placeOrder', () => {
       total: 24,
     })
 
-    expect(__mocks.rpc).toHaveBeenCalledWith('next_order_number', { p_merchant: 'm1' })
-    expect(__mocks.from).toHaveBeenCalledWith('orders')
-    expect(__mocks.insert).toHaveBeenCalledWith(expect.objectContaining({
-      merchant_id: 'm1',
-      order_number: 'BT-0001',
-      status: 'new',
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/orders$/)
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(init.body)).toMatchObject({
+      merchantId: 'm1',
+      customerName: 'Alice',
       items: [{ id: 'p1', qty: 2 }],
       total: 24,
-    }))
-    expect(result).toEqual({ orderNumber: 'BT-0001' })
+    })
+    expect(result).toEqual({ orderNumber: 'BT-260714-0050' })
   })
 
-  // A guest's own order is invisible to them under RLS (orders_select_scoped
-  // matches on user_id = auth.uid(), which is NULL for a guest). So asking for
-  // the row back with .select() makes Postgres reject the whole insert — guest
-  // checkout dies. Nothing consumes the row; only the order number is used.
-  it('never reads the inserted row back, so a guest checkout is not blocked by RLS', async () => {
-    __mocks.rpc.mockResolvedValueOnce({ data: 'BT-0002', error: null })
-    __mocks.insert.mockResolvedValueOnce({ error: null })
+  it('sends a signed-in customer’s bearer token, so the backend can attribute the order', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const fetchMock = fetchOk({ orderNumber: 'BT-1' })
 
     await placeOrder({ merchantId: 'm1', items: [], total: 0 } as any)
 
-    expect(__mocks.insertSelect).not.toHaveBeenCalled()
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok')
   })
 
-  it('throws when rpc returns an error without calling insert', async () => {
-    __mocks.rpc.mockResolvedValueOnce({ data: null, error: new Error('rpc failed') })
-    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any)).rejects.toThrow('rpc failed')
-    expect(__mocks.insert).not.toHaveBeenCalled()
+  it('sends no Authorization header for a guest — guest checkout is a first-class path', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
+    const fetchMock = fetchOk({ orderNumber: 'BT-1' })
+
+    await placeOrder({ merchantId: 'm1', items: [], total: 0 } as any)
+
+    expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined()
   })
 
-  it('throws when insert returns an error', async () => {
-    __mocks.rpc.mockResolvedValueOnce({ data: 'BT-0001', error: null })
-    __mocks.insert.mockResolvedValueOnce({ error: new Error('insert failed') })
-    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any)).rejects.toThrow('insert failed')
+  // The spoofing hole. The orders_set_user_id trigger no longer discards a supplied user_id —
+  // it keeps it — so the browser must never send one, and this is the test that says so.
+  it('never sends a user_id: the JWT decides who the order belongs to', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const fetchMock = fetchOk({ orderNumber: 'BT-1' })
+
+    await placeOrder({ merchantId: 'm1', items: [], total: 0, user_id: 'someone-else' } as any)
+
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).not.toHaveProperty('user_id')
+  })
+
+  // The storefront needs to know WHICH refusal it was, so it can drop the voucher and tell the
+  // customer to retry without it. A generic "failed" would strand them.
+  it('throws the backend’s refusal code, not a generic failure', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
+    fetchRefused('voucher_already_used')
+
+    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any))
+      .rejects.toMatchObject({ code: 'voucher_already_used' })
+  })
+
+  // fetch REJECTS on a network failure rather than returning !ok, so without a catch the
+  // customer sees a raw "Failed to fetch" on the checkout screen.
+  it('reports a network failure as a refusal the storefront can phrase', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+
+    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any))
+      .rejects.toMatchObject({ code: 'network' })
+  })
+
+  it('falls back to order_failed when the backend gives no code', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => { throw new Error('no body') } }))
+
+    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any))
+      .rejects.toMatchObject({ code: 'order_failed' })
   })
 })
 
@@ -849,17 +899,11 @@ describe('fetchMerchantVouchers', () => {
   })
 })
 
-describe('redeemVoucher', () => {
-  it('calls the redeem_voucher RPC with a lowercased entry', async () => {
-    __mocks.rpc.mockResolvedValueOnce({ error: null })
-    await redeemVoucher('m1', 'SAVE10', 'ME@X.com')
-    expect(__mocks.rpc).toHaveBeenCalledWith('redeem_voucher', { p_merchant: 'm1', p_code: 'SAVE10', p_entry: 'me@x.com' })
-  })
-  it('throws when the RPC errors', async () => {
-    __mocks.rpc.mockResolvedValueOnce({ error: { message: 'fully used' } })
-    await expect(redeemVoucher('m1', 'X', 'a@x.com')).rejects.toBeTruthy()
-  })
-})
+// `redeemVoucher` is gone on purpose and has no tests to replace it. It was a second call
+// made AFTER the order was already committed, which is what let a failed redemption leave the
+// customer with a discount on a voucher that was never marked used. The claim now happens
+// inside placeOrder's transaction, and is proven against a real Postgres — including under
+// concurrent redemption — in apps/backend/tests/api/orders.test.ts.
 
 describe('createMerchantVoucher', () => {
   it('inserts an uppercased code scoped to the merchant and maps the row back', async () => {
