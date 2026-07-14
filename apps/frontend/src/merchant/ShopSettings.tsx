@@ -128,15 +128,29 @@ function ShippingTab({ onDirtyChange }: TabProps) {
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
     try {
+      // shopRates is what READS this column on both sides of the wire, so it is what WRITES it
+      // too — the same function, so the form cannot save a row it then reads back differently.
+      //
+      // It used to be `Number(fields.em) || 0`, and that quietly defeated the one guarantee
+      // shopRates makes: a merchant who BLANKED the East-Malaysia field wrote an explicit 0 and
+      // shipped to East Malaysia for FREE. shopRates promises a missing EM falls back to WM
+      // precisely so that cannot happen, and the promise is worth nothing if the form in front
+      // of it writes the zero by hand. A blank field is now "I did not name a rate" (→ WM); a
+      // typed `0` is still an honest, deliberate zero.
+      const shipping = shopRates({ WM: fields.wm, EM: fields.em })
       await updateMerchantConfig(merchant!.id, {
         // Guard against a stale locked value slipping through: only persist the
         // currency when it is still editable.
         ...(currencyLocked ? {} : { currency: fields.currency }),
-        shipping: { WM: Number(fields.wm) || 0, EM: Number(fields.em) || 0 },
+        shipping,
         pickup_address: fields.pickupAddress.trim() || null,
       })
       await refreshMerchant()
-      setSaved(fields)
+      // Show back the rates that were actually SAVED, not the blank that was typed — a merchant
+      // must never be left looking at an empty box while their shop charges the WM rate.
+      const applied = { ...fields, wm: String(shipping.WM), em: String(shipping.EM) }
+      setFields(applied)
+      setSaved(applied)
       toast.success(t('Shipping saved', '运费已保存'))
     } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
     finally { setBusy(false) }
@@ -189,6 +203,12 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             <Label htmlFor="shop-em">{t(`East Malaysia (${symbol})`, `东马运费 (${symbol})`)}</Label>
             <Input id="shop-em" type="number" step="0.01" value={fields.em}
               onChange={e => setFields(f => ({ ...f, em: e.target.value }))} variant="compact" />
+            {/* Says what a blank field does, because a blank field DOES something: it charges the
+                West Malaysia rate. Free shipping to East Malaysia has to be typed as a 0. */}
+            <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
+              {t('Leave blank to charge your West Malaysia rate. Enter 0 for free delivery.',
+                 '留空则按西马运费收取。填 0 表示免运费。')}
+            </p>
           </div>
         </div>
       </div>

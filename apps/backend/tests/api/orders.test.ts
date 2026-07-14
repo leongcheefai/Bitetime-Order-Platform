@@ -22,6 +22,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
 import { app } from '../../src/app.js'
 import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
 import { orderDay } from '../../src/orderNumber.js'
+import { MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
 
 const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended']
 const DAY = orderDay(new Date())
@@ -236,18 +237,35 @@ describe('POST /api/orders', () => {
       expect(await ordersOf(shop)).toEqual([])
     })
 
+    // The caps come from @bitetime/shared, and the tests read them from there rather than
+    // hardcoding 1001: the storefront stops the customer at the SAME number, and a cap that
+    // could be raised in one workspace without this suite noticing is the drift the shared
+    // module exists to prevent.
     it('rejects a quantity past the per-line cap', async () => {
-      const res = await post(body(shop, productId, { cart: { [productId]: 1001 }, quotedTotal: 13013 }))
+      const qty = MAX_CART_QTY + 1
+      const res = await post(body(shop, productId, { cart: { [productId]: qty }, quotedTotal: 13 * qty }))
 
       expect(res.status).toBe(400)
       expect(await errorOf(res)).toBe('invalid_body')
       expect(await ordersOf(shop)).toEqual([])
     })
 
+    it('accepts a quantity exactly at the cap', async () => {
+      const res = await post(body(shop, productId, {
+        cart: { [productId]: MAX_CART_QTY },
+        quotedTotal: 13 * MAX_CART_QTY,
+      }))
+
+      expect(res.status).toBe(200)
+      expect(await ordersOf(shop)).toHaveLength(1)
+    })
+
     it('rejects a cart with more distinct lines than the cap', async () => {
       // The ids need not exist: the shape is refused at the door, before anything is looked up.
       const cart = Object.fromEntries(
-        Array.from({ length: 101 }, (_, i) => [`00000000-0000-0000-0000-${String(i).padStart(12, '0')}`, 1]),
+        Array.from({ length: MAX_CART_LINES + 1 }, (_, i) => [
+          `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`, 1,
+        ]),
       )
       const res = await post(body(shop, productId, { cart }))
 

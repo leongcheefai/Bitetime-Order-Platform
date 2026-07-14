@@ -5,8 +5,8 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
-import { fetchProducts, placeOrder, fetchMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError, shopRates } from '@bitetime/shared'
+import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
+import { priceOrder, voucherError, shopRates, MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
@@ -173,18 +173,29 @@ export default function Storefront() {
 
     // A vanishing line is told, never silent — that would be the same bug wearing a nicer face.
     // A DEACTIVATED product is still in the rows (only `active` flipped), so it can be named; a
-    // DELETED one is not, which is why the fallback exists rather than a name we would invent.
+    // DELETED one is not, which is why the anonymous half of the message exists rather than a
+    // name we would invent.
+    //
+    // A MIXED prune says both halves. Naming what we can and then throwing those names away
+    // because one line came back unnameable would tell a customer who lost a cake and a coffee
+    // strictly less than we know — and less than either of them alone would have been told.
     const names = gone
       .map(id => fresh.find(p => p.id === id))
       .filter((p): p is Product => !!p)
       .map(productName)
-    toast(
-      names.length === gone.length
-        ? t(`Removed from your cart — no longer available: ${names.join(', ')}`,
-            `已从购物车移除（已下架）：${names.join('、')}`)
-        : t('An item in your cart is no longer available and has been removed.',
-            '购物车中有商品已下架，已为你移除。'),
-    )
+    const unnamed = gone.length - names.length
+    const named = names.length > 0
+      ? t(`Removed from your cart — no longer available: ${names.join(', ')}`,
+          `已从购物车移除（已下架）：${names.join('、')}`)
+      : ''
+    const rest = unnamed > 0
+      ? (unnamed === 1
+          ? t('An item in your cart is no longer available and has been removed.',
+              '购物车中有商品已下架，已为你移除。')
+          : t(`${unnamed} items in your cart are no longer available and have been removed.`,
+              `购物车中有 ${unnamed} 件商品已下架，已为你移除。`))
+      : ''
+    toast([named, rest].filter(Boolean).join(' '))
   }
 
   // The menu, loaded once per shop. It stands below adoptProducts because it calls it, and the
@@ -287,9 +298,37 @@ export default function Storefront() {
     }
   }
 
+  /**
+   * The cart's ceilings, MIRRORED from the backend — the same `MAX_CART_QTY`/`MAX_CART_LINES`
+   * the intake route refuses on, imported from @bitetime/shared rather than retyped.
+   *
+   * They are enforced HERE, at the only place a cart can grow, so the UI cannot build a basket
+   * the door will reject: an over-cap cart is refused with `invalid_body`, and a 400 at Place
+   * Order is a dead end the customer cannot reason their way out of. Stopping them at the
+   * ceiling, and SAYING so, turns a refusal into an instruction.
+   *
+   * Checked against `cart` in render scope rather than inside the updater: the toast is a side
+   * effect, and setState updaters must stay pure (React may run one twice).
+   */
   const updateQty = (productId: string, delta: number) => {
+    const current = cart[productId] || 0
+    const next = Math.max(0, current + delta)
+    if (next === current) return
+
+    if (next > MAX_CART_QTY) {
+      toast(t(`You can order at most ${MAX_CART_QTY} of one item.`,
+              `每种商品每单最多 ${MAX_CART_QTY} 件。`))
+      return
+    }
+    // A new LINE, not a bigger one: only an id that is not in the cart yet can breach the
+    // line cap, so raising an existing line is never blocked by it.
+    if (current === 0 && Object.keys(cart).length >= MAX_CART_LINES) {
+      toast(t(`You can order at most ${MAX_CART_LINES} different items in one order.`,
+              `每单最多 ${MAX_CART_LINES} 种不同商品。`))
+      return
+    }
+
     setCart(prev => {
-      const next = Math.max(0, (prev[productId] || 0) + delta)
       if (next === 0) {
         const { [productId]: _removed, ...rest } = prev
         return rest
@@ -306,18 +345,31 @@ export default function Storefront() {
    * stale input re-quotes to the same refused number on the next tap. A voucher that has since
    * been deleted comes back null and is dropped, said out loud rather than silently: the
    * customer can re-apply a code, but not one that no longer exists.
+   *
+   * IT ASKS WITH `lookupProducts`/`lookupMerchantVoucher`, AND THAT IS THE LOAD-BEARING PART.
+   * This runs on the RECOVERY path — the one moment a connection is most likely to be flaky —
+   * and everything it does is DESTRUCTIVE: `adoptProducts` deletes cart lines the menu no
+   * longer has, and a null voucher is confiscated. The plain fetchers cannot report a failure
+   * (supabase-js resolves `{ data: null, error }`, so `fetchProducts` returns `[]` and
+   * `fetchMerchantVoucher` returns `null` — an ERROR wearing the face of an ANSWER), and
+   * adopting that `[]` would empty the entire cart, blank the menu and blame the shop, for a
+   * dropped packet. So: an answer we could not get changes NOTHING. The refusal costs a retry;
+   * a wrong prune costs the order.
    */
   const refreshQuoteSources = async () => {
-    const [freshProducts, freshVoucher] = await Promise.all([
-      fetchProducts(merchant.id).catch(() => null),
-      appliedVoucher ? fetchMerchantVoucher(merchant.id, appliedVoucher.code).catch(() => null) : null,
+    const code = appliedVoucher?.code ?? null
+    const [freshProducts, voucher] = await Promise.all([
+      lookupProducts(merchant.id).catch(() => null),
+      code ? lookupMerchantVoucher(merchant.id, code).catch(() => ({ ok: false as const })) : null,
     ])
+    // `[]` is an ANSWER — the shop really sells nothing, and pruning the whole cart is right.
+    // `null` is the absence of one, and prunes nothing.
     // adoptProducts, not setProducts: a refusal that refreshed the menu but left the dead id in
     // the cart would be refused again on the very next tap.
     if (freshProducts) adoptProducts(freshProducts)
-    if (appliedVoucher) {
-      setAppliedVoucher(freshVoucher)
-      if (!freshVoucher) {
+    if (voucher?.ok) {
+      setAppliedVoucher(voucher.voucher)
+      if (!voucher.voucher) {
         setVoucherMsg(t('❌ That voucher is no longer available.', '❌ 此优惠券已失效。'))
       }
     }
@@ -349,10 +401,15 @@ export default function Storefront() {
           }
           // ADOPT it, don't just read it. The fresh row is what the backend prices from — it
           // locks and reads that same row inside the transaction — so a merchant who edits the
-          // voucher's amount mid-checkout leaves us quoting a discount that no longer exists.
-          // Checking the fresh row and then quoting the stale one refuses this order
-          // (`price_changed`) and refuses every retry the same way, forever, because the retry
-          // re-quotes from the same stale value. This is the line that ends that loop.
+          // voucher's amount mid-checkout leaves us quoting a discount that no longer exists,
+          // and THIS attempt is refused (`price_changed`) whatever we do here: `quotedTotal` was
+          // computed from the render that ran before this handler, and no setState can reach
+          // back into a closure that has already captured it.
+          //
+          // What ends the loop is `refreshQuoteSources()` in the `price_changed` catch, whose
+          // re-render makes the NEXT tap quote from fresh sources. This line is only a pre-warm
+          // of that render — worth keeping, worthless alone. Do not read it as the fix and
+          // delete the voucher half of refreshQuoteSources as redundant: that half IS the fix.
           setAppliedVoucher(fresh)
         }
       }
@@ -443,6 +500,19 @@ export default function Storefront() {
         const msg = t(
           'Please choose the state you are delivering to.',
           '请选择送货的州属。',
+        )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'invalid_body') {
+        // The door refused the SHAPE of the order, not the order — almost always a cart past
+        // the caps, which `updateQty` now stops at, so an honest checkout should never get
+        // here. It is a permanent refusal: retrying the same cart is refused identically. Say
+        // what would change it, in words. Without this branch the customer read the literal
+        // string `invalid_body` on the checkout screen — `OrderError`'s `super(code)` puts the
+        // wire code in `err.message`, and the final `else` renders it.
+        const msg = t(
+          `Your order is too large. Please order fewer than ${MAX_CART_QTY} of any one item, and at most ${MAX_CART_LINES} different items.`,
+          `订单过大。每种商品最多 ${MAX_CART_QTY} 件，每单最多 ${MAX_CART_LINES} 种不同商品。`,
         )
         setError(msg)
         toast.error(msg)

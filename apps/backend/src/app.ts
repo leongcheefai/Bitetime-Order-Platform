@@ -27,6 +27,7 @@ import { fetchRegionPricing, createPricingCache, type PricingPayload } from './p
 import { listReferredShops } from './referrals.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
+import { isCart } from '@bitetime/shared'
 
 export const app = new Hono()
 
@@ -477,25 +478,11 @@ app.post('/api/orders', async (c) => {
 
   const b = bodyJson as Record<string, unknown>
 
-  // A cart is ids → positive whole quantities. Reject a malformed one rather than coercing it:
-  // `Number('abc')` is NaN, which sails past TypeScript, reaches Postgres and comes back a 500
-  // — a bad request dressed up as a server fault.
-  //
-  // The two caps are not tidiness. `Number.isInteger(1e21)` is TRUE, so an unbounded quantity
-  // priced and committed an order for a trillion cookies — and the price check does not catch
-  // it, because the client quotes the same absurd number it asked for. No real basket is 1000
-  // of one item or 100 distinct lines, so the ceiling costs no honest customer an order while
-  // keeping a hostile body from writing a total nobody can settle.
-  const MAX_QTY = 1000
-  const MAX_LINES = 100
-  const isCart = (v: unknown): v is Record<string, number> =>
-    !!v && typeof v === 'object' && !Array.isArray(v) &&
-    Object.values(v as Record<string, unknown>).every(
-      q => typeof q === 'number' && Number.isInteger(q) && q > 0 && q <= MAX_QTY,
-    ) &&
-    Object.keys(v as Record<string, unknown>).length > 0 &&
-    Object.keys(v as Record<string, unknown>).length <= MAX_LINES
-
+  // A cart is ids → positive whole quantities, within the caps — `isCart` from @bitetime/shared
+  // is the rule, and it is shared for the same reason the pricing is: the storefront stops the
+  // customer AT those caps, so the UI cannot build a cart this door then refuses. A local copy
+  // of the numbers here is a copy that can drift, and a drifted cap is a dead checkout — the
+  // customer sees `invalid_body` with nothing to do about it.
   const quotedTotal = typeof b.quotedTotal === 'number' && Number.isFinite(b.quotedTotal)
     ? b.quotedTotal
     : null
