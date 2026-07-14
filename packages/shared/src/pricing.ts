@@ -1,9 +1,44 @@
 // Order pricing — the one pure module that turns a cart + context into a money
-// breakdown. Single source of truth for every total the app shows. No I/O: the
-// clock, the loaded voucher, the sameday quote, and the resolved referral are
-// all passed in. See CONTEXT.md → "Order pricing".
+// breakdown. THE single source of truth for every total the app shows AND every
+// total the backend charges: the browser prices to quote, the backend prices to
+// commit, and two copies would drift into charging a customer a number they never
+// saw. No I/O: the clock, the loaded voucher and the resolved referral are passed in.
+// See CONTEXT.md → "Order pricing".
 
-import type { Product, Voucher } from './types'
+/**
+ * Only the fields the pricing rule actually reads. Declared here rather than imported
+ * because this package is the boundary between the two workspaces: a frontend `Product`
+ * row and a backend `products` row must both satisfy it, and neither owns it.
+ *
+ * The index signature is what lets `promoActive` reach `promoPrice`/`promoLimit`/`promoEnd`.
+ * Those columns DO NOT EXIST yet — the promo feature is #69 — so that branch is inert. It is
+ * carried over unchanged rather than deleted, because #69 is the ticket that makes it real.
+ */
+export interface PricedProduct {
+  id: string
+  name: string
+  price: number
+  [key: string]: unknown
+}
+
+/**
+ * A voucher as the discount math needs it — `type` and `value` are the mapped names, NOT the
+ * `kind`/`amount` columns. `voucherFromRow` (Task 2) is what maps one to the other, and both
+ * sides of the wire must go through it or the discount diverges on shape alone.
+ *
+ * `minOrder`, `expiresAt` and `email` have no columns behind them, so `voucherError`'s
+ * `min_order`, `expired` and `not_assigned` branches can never fire. That is #71, deliberately
+ * deferred: this task moves the module as-is. The backend never calls `voucherError`, so
+ * nothing new starts depending on the dead branches here.
+ */
+export interface PricedVoucher {
+  code?: string
+  type?: string
+  value?: number
+  maxUses?: number | string | null
+  usedBy?: string[]
+  [key: string]: unknown
+}
 
 export interface PriceLine {
   id: string
@@ -24,14 +59,14 @@ export interface PriceBreakdown {
 }
 
 export interface PriceInput {
-  products: Product[]
+  products: PricedProduct[]
   cart: Record<string, number>
   mode: 'pickup' | 'delivery' | 'sameday'
   state?: string | null
   rates: { WM: number; EM: number }
   samedayFee?: number
   resolvedShipping?: number // caller-resolved flat fee; wins over region logic
-  voucher?: Voucher | null
+  voucher?: PricedVoucher | null
   referral?: { amount: number; enabled: boolean } | null
   extraLines?: PriceLine[]
   promoSold?: Record<string, number>
@@ -99,7 +134,7 @@ export interface VoucherCtx {
 
 // Pure voucher rules. Loading the codes stays I/O in the caller; the rules are
 // testable without a network. Returns the first applicable error code, or null.
-export function voucherError(voucher: Voucher | null | undefined, ctx: VoucherCtx): VoucherErrorCode | null {
+export function voucherError(voucher: PricedVoucher | null | undefined, ctx: VoucherCtx): VoucherErrorCode | null {
   if (!voucher) return 'invalid'
   const email = (ctx.userEmail ?? '').toLowerCase()
   const v = voucher as any
@@ -111,14 +146,14 @@ export function voucherError(voucher: Voucher | null | undefined, ctx: VoucherCt
   return null
 }
 
-function voucherDiscount(voucher: Voucher | null | undefined, base: number): number {
+function voucherDiscount(voucher: PricedVoucher | null | undefined, base: number): number {
   if (!voucher) return 0
   if ((voucher as any).type === 'percent') return round2((base * (voucher as any).value) / 100)
   return Math.min((voucher as any).value, base)
 }
 
 export function effectivePrice(
-  product: Product,
+  product: PricedProduct,
   now: Date,
   sold = 0,
 ): { price: number; promo: boolean } {

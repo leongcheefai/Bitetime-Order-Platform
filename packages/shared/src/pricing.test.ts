@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { priceOrder, voucherError } from './pricing'
-import type { Product } from './types'
+import { priceOrder, voucherError } from './pricing.js'
+import type { PricedProduct } from './pricing.js'
 
 const RATES = { WM: 8, EM: 12 }
 const NOW = new Date('2026-06-29T12:00:00')
 
-function product(id: string, price: number, extra: Partial<Product> = {}): Product {
+function product(id: string, price: number, extra: Partial<PricedProduct> = {}): PricedProduct {
   return { id, name: id, price, ...extra }
 }
 
