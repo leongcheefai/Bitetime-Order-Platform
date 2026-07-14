@@ -20,23 +20,21 @@
 // this path. Everything asserting them below is load-bearing, not decoration.
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
 import { app } from '../../src/app.js'
-import { makeUser, resetMerchant, seedMerchant, serviceClient } from '../rls/helpers.js'
+import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
 import { orderDay } from '../../src/orderNumber.js'
 
 const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended']
 const DAY = orderDay(new Date())
 
-/** A cart that prices to 26, shaped like the one the storefront sends. */
-function body(merchantId: string, extra: Record<string, unknown> = {}) {
+/** A cart of 2 × RM13 = 26, shaped like the one the storefront now sends. */
+function body(merchantId: string, productId: string, extra: Record<string, unknown> = {}) {
   return {
     merchantId,
     customerName: 'Ah Meng',
     customerWa: '60123456789',
     mode: 'pickup',
-    items: [{ id: 'p1', name: 'Matcha Cookie', qty: 2, price: 13 }],
-    total: 26,
-    shippingFee: 0,
-    currency: 'MYR',
+    cart: { [productId]: 2 },
+    quotedTotal: 26,
     ...extra,
   }
 }
@@ -50,6 +48,11 @@ function post(payload: unknown, token?: string) {
     },
     body: JSON.stringify(payload),
   })
+}
+
+/** The refusal code off a response. `Response.json()` is `unknown`, and `.error` on it will not compile. */
+async function errorOf(res: Response) {
+  return ((await res.json()) as { error?: string }).error
 }
 
 const svc = () => serviceClient()
@@ -81,6 +84,7 @@ describe('POST /api/orders', () => {
   let shop: string
   let pendingShop: string
   let suspendedShop: string
+  let productId: string
   let customerToken: string
   let customerId: string
   let strangerId: string
@@ -106,11 +110,14 @@ describe('POST /api/orders', () => {
 
   // Each test starts from an empty shop: the counter is per-merchant and per-day, so a
   // leftover row from the previous test would make the expected order number depend on
-  // execution order.
+  // execution order. The product is reseeded per test, not per suite, because one of the
+  // price-authority cases moves its price out from under a quote.
   beforeEach(async () => {
     await svc().from('orders').delete().eq('merchant_id', shop)
     await svc().from('order_counters').delete().eq('merchant_id', shop)
     await svc().from('vouchers').delete().eq('merchant_id', shop)
+    await svc().from('products').delete().eq('merchant_id', shop)
+    productId = await seedProduct({ merchant_id: shop, price: 13 })
   })
 
   afterAll(async () => {
@@ -120,14 +127,14 @@ describe('POST /api/orders', () => {
   // ── The happy path, and the format that must not move ───────────────────────
 
   it('places an order and returns its number', async () => {
-    const res = await post(body(shop))
+    const res = await post(body(shop, productId))
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ orderNumber: `OR-${DAY}-0050` })
   })
 
   it('writes the order row, with the cart and the total', async () => {
-    await post(body(shop))
+    await post(body(shop, productId))
     const [order] = await ordersOf(shop)
 
     expect(order).toMatchObject({
@@ -143,8 +150,8 @@ describe('POST /api/orders', () => {
 
   // The counter starts at 50, not 1 — inherited from next_order_number and customer-visible.
   it('starts a shop’s day at 0050 and increments from there', async () => {
-    const first = await post(body(shop))
-    const second = await post(body(shop))
+    const first = await post(body(shop, productId))
+    const second = await post(body(shop, productId))
 
     expect(await first.json()).toEqual({ orderNumber: `OR-${DAY}-0050` })
     expect(await second.json()).toEqual({ orderNumber: `OR-${DAY}-0051` })
@@ -153,7 +160,7 @@ describe('POST /api/orders', () => {
   // ── The intake gate, now a TypeScript invariant (db.ts bypasses RLS) ───────
 
   it('refuses an order against a pending shop, and writes nothing', async () => {
-    const res = await post(body(pendingShop))
+    const res = await post(body(pendingShop, productId))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'merchant_inactive' })
@@ -162,7 +169,7 @@ describe('POST /api/orders', () => {
   })
 
   it('refuses an order against a suspended shop, and writes nothing', async () => {
-    const res = await post(body(suspendedShop))
+    const res = await post(body(suspendedShop, productId))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'merchant_inactive' })
@@ -170,7 +177,7 @@ describe('POST /api/orders', () => {
   })
 
   it('refuses an order against a merchant that does not exist', async () => {
-    const res = await post(body('00000000-0000-0000-0000-000000000000'))
+    const res = await post(body('00000000-0000-0000-0000-000000000000', productId))
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'merchant_not_found' })
@@ -179,7 +186,7 @@ describe('POST /api/orders', () => {
   // The insert policy used to enforce this. It no longer runs on the backend's connection,
   // so the endpoint has to — a client must not be able to file an already-completed order.
   it('never persists a status the client asked for', async () => {
-    await post(body(shop, { status: 'done' }))
+    await post(body(shop, productId, { status: 'done' }))
     const [order] = await ordersOf(shop)
 
     expect(order.status).toBe('new')
@@ -189,7 +196,7 @@ describe('POST /api/orders', () => {
   // NaN) would push it all the way to Postgres and return a 500 — a bad request reported as a
   // server fault, and a lie in the logs when someone comes to debug it.
   it('rejects a malformed body rather than coercing it into a 500', async () => {
-    const res = await post(body(shop, { total: 'abc' }))
+    const res = await post(body(shop, productId, { quotedTotal: 'abc' }))
 
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: 'invalid_body' })
@@ -199,14 +206,14 @@ describe('POST /api/orders', () => {
   // ── Attribution: the JWT decides, the body never does ───────────────────────
 
   it('attributes a signed-in customer’s order to them', async () => {
-    await post(body(shop), customerToken)
+    await post(body(shop, productId), customerToken)
     const [order] = await ordersOf(shop)
 
     expect(order.user_id).toBe(customerId)
   })
 
   it('leaves a guest’s order unattributed', async () => {
-    await post(body(shop))
+    await post(body(shop, productId))
     const [order] = await ordersOf(shop)
 
     expect(order.user_id).toBeNull()
@@ -217,14 +224,14 @@ describe('POST /api/orders', () => {
   // anything reaching it with a settable user_id is this backend. The endpoint must therefore
   // never take user_id from the body, and these two tests are what hold that line.
   it('ignores a user_id in a guest’s body — a guest cannot attribute an order to anyone', async () => {
-    await post(body(shop, { user_id: strangerId, userId: strangerId }))
+    await post(body(shop, productId, { user_id: strangerId, userId: strangerId }))
     const [order] = await ordersOf(shop)
 
     expect(order.user_id).toBeNull()
   })
 
   it('ignores a stranger’s user_id in a signed-in customer’s body', async () => {
-    await post(body(shop, { user_id: strangerId, userId: strangerId }), customerToken)
+    await post(body(shop, productId, { user_id: strangerId, userId: strangerId }), customerToken)
     const [order] = await ordersOf(shop)
 
     expect(order.user_id).toBe(customerId)
@@ -235,7 +242,7 @@ describe('POST /api/orders', () => {
   it('claims the voucher and records the order’s discount', async () => {
     await seedVoucher(shop, 'SAVE5', null)
 
-    const res = await post(body(shop, { discount: 5, total: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
 
     expect(res.status).toBe(200)
     const [order] = await ordersOf(shop)
@@ -244,7 +251,7 @@ describe('POST /api/orders', () => {
   })
 
   it('rejects a voucher code that does not exist', async () => {
-    const res = await post(body(shop, { discount: 5, total: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_not_found' })
@@ -252,9 +259,9 @@ describe('POST /api/orders', () => {
 
   it('rejects a voucher this customer already used', async () => {
     await seedVoucher(shop, 'SAVE5', null)
-    await post(body(shop, { discount: 5, total: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
+    await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
 
-    const res = await post(body(shop, { discount: 5, total: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_already_used' })
@@ -262,9 +269,9 @@ describe('POST /api/orders', () => {
 
   it('rejects a voucher that has hit its cap', async () => {
     await seedVoucher(shop, 'CAP1', 1)
-    await post(body(shop, { discount: 5, total: 21, voucherCode: 'CAP1', voucherEntry: 'first@x.my' }))
+    await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP1', voucherEntry: 'first@x.my' }))
 
-    const res = await post(body(shop, { discount: 5, total: 21, voucherCode: 'CAP1', voucherEntry: 'second@x.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP1', voucherEntry: 'second@x.my' }))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_fully_used' })
@@ -273,7 +280,7 @@ describe('POST /api/orders', () => {
   // THE BUG THIS TICKET EXISTS TO KILL. Before, the order was already committed by the time
   // the redemption failed — so the customer kept a discount on a voucher never marked used.
   it('rolls the whole order back when the voucher claim fails — no row, no burnt counter', async () => {
-    const res = await post(body(shop, { discount: 5, total: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
 
     expect(res.status).toBe(409)
     expect(await ordersOf(shop)).toEqual([])
@@ -295,7 +302,7 @@ describe('POST /api/orders', () => {
       .insert({ merchant_id: shop, order_number: `OR-${DAY}-0050`, status: 'new', total: 1 })
     expect(error).toBeNull()
 
-    const res = await post(body(shop, { discount: 5, total: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
 
     // Not a domain refusal — the customer did nothing wrong, so this is a 500, not a 409.
     expect(res.status).toBe(500)
@@ -308,10 +315,10 @@ describe('POST /api/orders', () => {
   })
 
   it('lets the customer retry without the voucher, and that order succeeds', async () => {
-    const failed = await post(body(shop, { discount: 5, total: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
+    const failed = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
     expect(failed.status).toBe(409)
 
-    const retry = await post(body(shop))
+    const retry = await post(body(shop, productId))
 
     expect(retry.status).toBe(200)
     // The failed attempt burned nothing: this is still the day's FIRST order.
@@ -321,7 +328,7 @@ describe('POST /api/orders', () => {
   // ── Concurrency. Real row locks, real Postgres — the point of the driver ────
 
   it('gives two concurrent orders distinct order numbers', async () => {
-    const results = await Promise.all(Array.from({ length: 8 }, () => post(body(shop))))
+    const results = await Promise.all(Array.from({ length: 8 }, () => post(body(shop, productId))))
     const numbers = await Promise.all(results.map(r => r.json() as Promise<{ orderNumber: string }>))
 
     const distinct = new Set(numbers.map(n => n.orderNumber))
@@ -331,7 +338,7 @@ describe('POST /api/orders', () => {
 
   it('lets exactly one of two concurrent orders redeem a single-use voucher', async () => {
     await seedVoucher(shop, 'ONCE', 1)
-    const one = () => post(body(shop, { discount: 5, total: 21, voucherCode: 'ONCE', voucherEntry: 'ah@meng.my' }))
+    const one = () => post(body(shop, productId, { quotedTotal: 21, voucherCode: 'ONCE', voucherEntry: 'ah@meng.my' }))
 
     const [a, b] = await Promise.all([one(), one()])
     const statuses = [a.status, b.status].sort()
@@ -349,7 +356,7 @@ describe('POST /api/orders', () => {
   it('holds a voucher’s cap under concurrent load', async () => {
     await seedVoucher(shop, 'CAP2', 2)
     const attempts = Array.from({ length: 6 }, (_, i) =>
-      post(body(shop, { discount: 5, total: 21, voucherCode: 'CAP2', voucherEntry: `c${i}@x.my` })),
+      post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP2', voucherEntry: `c${i}@x.my` })),
     )
 
     const results = await Promise.all(attempts)
@@ -361,5 +368,100 @@ describe('POST /api/orders', () => {
     expect((await voucherOf(shop, 'CAP2'))!.used_by).toHaveLength(2)
     // Only the two that redeemed it left an order behind — the other four rolled back whole.
     expect(await ordersOf(shop)).toHaveLength(2)
+  })
+
+  describe('the backend is the price authority', () => {
+    it('refuses a body that names its own total, and writes nothing', async () => {
+      // THE HOLE THIS TASK CLOSES. Before it, this committed an order at zero.
+      const res = await post(body(shop, productId, { quotedTotal: 0 }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('price_changed')
+      expect(await ordersOf(shop)).toHaveLength(0)
+    })
+
+    it('commits the server-derived total and items, not anything the body said', async () => {
+      const res = await post(body(shop, productId))
+      expect(res.status).toBe(200)
+
+      const [order] = await ordersOf(shop)
+      expect(Number(order.total)).toBe(26)
+      expect(Number(order.shipping_fee)).toBe(0)
+      // Built from the products rows, so the name and the unit price are the shop's own — not
+      // whatever the browser felt like calling them.
+      expect(order.items).toEqual([
+        { id: productId, name: 'Matcha Cookie', qty: 2, price: 13 },
+      ])
+    })
+
+    it('refuses with price_changed when the price moves between quote and submit', async () => {
+      await svc().from('products').update({ price: 15 }).eq('id', productId)
+
+      const res = await post(body(shop, productId))  // still quoting the old 26
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('price_changed')
+      expect(await ordersOf(shop)).toHaveLength(0)
+      // Rolled back WHOLE: not even a burnt counter slot.
+      expect(await counterOf(shop)).toBeNull()
+    })
+
+    it("refuses a product belonging to another shop", async () => {
+      // The order goes to `shop`, which is active and orderable; the product is `suspendedShop`'s.
+      // Nothing but the merchant_id predicate in cartProducts stands between them — db.ts is
+      // RLS-exempt, so this is the test that the TypeScript invariant actually holds.
+      const strangersProduct = await seedProduct({ merchant_id: suspendedShop, price: 13 })
+
+      const res = await post(body(shop, strangersProduct))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('product_unavailable')
+      expect(await ordersOf(shop)).toHaveLength(0)
+    })
+
+    it('refuses a product that is not active', async () => {
+      const hidden = await seedProduct({ merchant_id: shop, price: 13, active: false })
+
+      const res = await post(body(shop, hidden))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('product_unavailable')
+      expect(await ordersOf(shop)).toHaveLength(0)
+    })
+
+    it('refuses a cart id that is not a product id, as a refusal and not a 500', async () => {
+      const res = await post(body(shop, productId, { cart: { 'not-a-uuid': 1 } }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('product_unavailable')
+    })
+
+    it('derives the shipping fee from the shop rates and the delivery region', async () => {
+      await svc().from('merchants').update({ shipping: { WM: 8, EM: 18 } }).eq('id', shop)
+
+      const res = await post(body(shop, productId, {
+        mode: 'delivery',
+        address: { line1: '1 Jalan Besar', postcode: '88000', city: 'Kota Kinabalu', state: 'Sabah' },
+        quotedTotal: 44,   // 26 + EM 18
+      }))
+      expect(res.status).toBe(200)
+
+      const [order] = await ordersOf(shop)
+      expect(Number(order.shipping_fee)).toBe(18)
+      expect(Number(order.total)).toBe(44)
+    })
+
+    it('derives the voucher discount, and records it against the order', async () => {
+      await svc().from('vouchers').insert({
+        merchant_id: shop, code: 'SAVE10', kind: 'percent', amount: 10, used_by: [],
+      })
+
+      const res = await post(body(shop, productId, {
+        voucherCode: 'SAVE10',
+        voucherEntry: 'ah@meng.com',
+        quotedTotal: 23.4,   // 26 − 10%
+      }))
+      expect(res.status).toBe(200)
+
+      const [order] = await ordersOf(shop)
+      expect(Number(order.discount)).toBe(2.6)
+      expect(Number(order.total)).toBe(23.4)
+      expect(order.voucher_code).toBe('SAVE10')
+    })
   })
 })
