@@ -124,7 +124,7 @@ Deployed via Vercel; set the project **Root Directory** to `apps/frontend`. `pnp
 
 ### Issue tracker
 
-Issues and PRDs live as GitHub issues (`esther0716/Bitetime-Order-Platform`), via the `gh` CLI. External PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+Issues and PRDs live as GitHub issues (`leongcheefai/Bitetime-Order-Platform`), via the `gh` CLI. External PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
