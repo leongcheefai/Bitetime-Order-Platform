@@ -26,6 +26,7 @@ import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
 import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
 import { listReferredShops } from './referrals.js'
 import { trackOrder } from './orderTracking.js'
+import { placeOrder, OrderError } from './orders.js'
 
 export const app = new Hono()
 
@@ -453,6 +454,76 @@ app.post('/api/customer/signup', async (c) => {
 
   if (!result.ok) return c.json({ error: result.error }, result.status)
   return c.json({ ok: true })
+})
+
+// ── Order intake — counter, order and voucher in ONE transaction ──────────────
+// The JWT is OPTIONAL: guest checkout is a first-class path and must keep working.
+//
+// Attribution comes from the token and from nowhere else. `user_id` is never read from the
+// body — see placeOrder's contract for why that is now a security property rather than a
+// tidiness one: the orders_set_user_id trigger coalesces instead of overwriting, so a
+// user_id that reaches it is trusted, and the only reason nothing untrusted can reach it is
+// that anon/authenticated no longer hold INSERT on orders.
+app.post('/api/orders', async (c) => {
+  const bodyJson = await c.req.json().catch(() => null)
+  if (!bodyJson || typeof bodyJson !== 'object') return c.json({ error: 'invalid_body' }, 400)
+
+  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+  // No token is a guest, not a rejection. A token that is present but bad is also a guest:
+  // the alternative is a checkout that dies on an expired session the customer cannot see.
+  const user = token ? await getUserFromToken(token) : null
+
+  const b = bodyJson as Record<string, unknown>
+
+  // Reject a malformed body rather than coercing it. `Number('abc')` is NaN, which sails past
+  // TypeScript, reaches Postgres and comes back a 500 — a bad request dressed up as a server
+  // fault. A number field that is not a number is the client's bug, and it is told so.
+  const num = (v: unknown, fallback: number): number | null => {
+    if (v === undefined || v === null) return fallback
+    return typeof v === 'number' && Number.isFinite(v) ? v : null
+  }
+  const shippingFee = num(b.shippingFee, 0)
+  const total = num(b.total, 0)
+  const discount = num(b.discount, 0)
+
+  if (
+    typeof b.merchantId !== 'string' || !b.merchantId ||
+    typeof b.customerName !== 'string' ||
+    typeof b.customerWa !== 'string' ||
+    typeof b.mode !== 'string' ||
+    !Array.isArray(b.items) ||
+    shippingFee === null || total === null || discount === null
+  ) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+
+  try {
+    const result = await placeOrder({
+      merchantId: b.merchantId,
+      userId: user?.id ?? null,
+      customerName: b.customerName,
+      customerWa: b.customerWa,
+      mode: b.mode,
+      address: b.address ?? null,
+      shippingFee,
+      items: b.items,
+      total,
+      currency: typeof b.currency === 'string' ? b.currency : undefined,
+      discount,
+      voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
+      voucherEntry: typeof b.voucherEntry === 'string' ? b.voucherEntry : null,
+    })
+    return c.json(result)
+  } catch (err) {
+    // A refusal the customer can act on — a closed shop, a spent voucher — carries its code
+    // so the storefront can say which, and can offer the retry without the voucher. Anything
+    // else is a bug, and must not be dressed up as a domain error the customer can "fix".
+    if (err instanceof OrderError) {
+      return c.json({ error: err.code }, err.code === 'merchant_not_found' ? 404 : 409)
+    }
+    console.error('Order intake failed:', err instanceof Error ? err.message : String(err))
+    return c.json({ error: 'order_failed' }, 500)
+  }
 })
 
 // ── Order notification — sends Telegram server-side ────────────────────────────

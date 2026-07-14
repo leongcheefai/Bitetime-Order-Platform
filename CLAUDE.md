@@ -85,9 +85,13 @@ All Supabase calls go through `store.ts`. Shared domain types (Merchant, Profile
 
 ### Order flow
 
-`Storefront` collects items, delivery mode, voucher → `priceOrder()` for the total → `placeOrder()` (inserts via the `next_order_number` RPC) → `redeemVoucher()` records voucher use → `notifyOrderPlacedRemote()` triggers the backend Telegram send → confirms order number. The Telegram bot token never reaches the browser: the backend (`POST /api/notify/order`) reads it from `merchant_secrets` and sends server-side.
+`Storefront` collects items, delivery mode, voucher → `priceOrder()` for the total → `placeOrder()` → `notifyOrderPlacedRemote()` triggers the backend Telegram send → confirms order number.
 
-Order numbers: `<PREFIX>-YYYYMMDD-XXXX`. Prefix = first two alphanumerics of the slug, uppercased (`src/orderPrefix.ts`). Daily counter is per-merchant via the DB `next_order_number` function.
+`placeOrder()` is **one call to `POST /api/orders`**, which bumps the daily counter, inserts the order and claims the voucher **in a single transaction** (`apps/backend/src/orders.ts`). It commits whole or not at all: a failed voucher claim rolls the order back, and the storefront drops the voucher and asks the customer to retry without it. It used to be three separate browser-to-Postgres calls with the redemption's error swallowed — which handed the customer a discount on a voucher that was never marked used. **The browser holds no `INSERT` on `orders`**; attribution comes from the request's JWT, never from the body (see the `orders_set_user_id` carve-out in `20260714100000_orders_backend_intake.sql`).
+
+The Telegram notify stays a **separate call after the order lands** — folding it into the transaction would let a Telegram outage roll back paid orders.
+
+Order numbers: `<PREFIX>-YYMMDD-XXXX` — six-digit day, and the daily counter starts at **50**, not 1. Prefix = first two alphanumerics of the slug, uppercased (`src/orderPrefix.ts`). Both are customer-visible and pinned by `apps/backend/src/orderNumber.ts`.
 
 ### Backend (`apps/backend/src/`)
 
@@ -100,7 +104,9 @@ Two ways to reach Postgres, and the difference matters:
 
 **`db.ts` is RLS-exempt.** It connects as the database owner, so no policy runs on it: on the backend's path, which merchant a row belongs to is a **TypeScript invariant, not a Postgres one**, and any code using it must check tenancy itself. RLS remains in force for the browser's anon/authenticated path and is the backstop — `tests/rls` is the proof it is still shut. Do not read "RLS protects it" as true of anything the backend writes.
 
-Migrating the remaining SQL functions into this layer is #61.
+Migrating the remaining SQL functions into this layer is #61. Order intake (`orders.ts`), guest tracking (`orderTracking.ts`) and referrals (`referrals.ts`) have moved; `next_order_number`, `redeem_voucher`, `track_order` and `my_referred_shops` are dropped.
+
+The **intake gate** (shop exists and is active; the order is born `status = 'new'`) is enforced in **`orders.ts`, inside the transaction** — not by RLS, which does not run on this connection. The `orders_insert_guest_or_customer` policy is kept as the backstop for a client path that no longer has the grant. Not to be confused with the **Checkout gate** (`CONTEXT.md`), which is the sign-in / guest step in the browser.
 
 ### Shipping / pricing
 
