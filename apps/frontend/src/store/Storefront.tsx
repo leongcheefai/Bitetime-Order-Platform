@@ -511,7 +511,7 @@ export default function Storefront() {
         // string `invalid_body` on the checkout screen — `OrderError`'s `super(code)` puts the
         // wire code in `err.message`, and the final `else` renders it.
         const msg = t(
-          `Your order is too large. Please order fewer than ${MAX_CART_QTY} of any one item, and at most ${MAX_CART_LINES} different items.`,
+          `Your order is too large. Please order at most ${MAX_CART_QTY} of any one item, and at most ${MAX_CART_LINES} different items.`,
           `订单过大。每种商品最多 ${MAX_CART_QTY} 件，每单最多 ${MAX_CART_LINES} 种不同商品。`,
         )
         setError(msg)
