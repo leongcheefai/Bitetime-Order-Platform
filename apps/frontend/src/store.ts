@@ -272,6 +272,26 @@ export async function fetchPlatformPricing(country?: string): Promise<PlatformPr
   return res.json()
 }
 
+/**
+ * The backend's clock, and the two browser timestamps that bracket it.
+ *
+ * `null` on any failure — the caller falls back to the browser's own clock, which is exactly
+ * today's behaviour, degraded but no worse.
+ */
+export async function fetchServerNow(): Promise<{ now: number; sentAt: number; receivedAt: number } | null> {
+  const sentAt = Date.now()
+  try {
+    const res = await fetch(`${API_URL}/api/time`)
+    const receivedAt = Date.now()
+    if (!res.ok) return null
+    const body = await res.json()
+    const now = Date.parse(body?.now)
+    return Number.isFinite(now) ? { now, sentAt, receivedAt } : null
+  } catch {
+    return null
+  }
+}
+
 export interface MerchantBilling {
   merchant_id: string
   stripe_customer_id?: string | null
