@@ -31,6 +31,11 @@ interface CartLine {
   name: string
   qty: number
   price: number
+  // Which of a split pair this row is — the base and promo halves of the SAME product share an
+  // `id`, so without this the two rows render identically and the arithmetic looks broken (a
+  // "3 ×" row costing more than a "2 ×" row of the same thing, with nothing on screen to explain
+  // why). See the `Promo` badge reused from the product card, below.
+  promo: boolean
 }
 
 interface SuccessState {
@@ -278,7 +283,7 @@ export default function Storefront() {
     resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     voucher: appliedVoucher,
   })
-  const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice }))
+  const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice, promo: l.promo }))
   const subtotal = bd.subtotal
   const discount = bd.discount
   const total = bd.total
@@ -400,15 +405,18 @@ export default function Storefront() {
    */
   const refreshQuoteSources = async () => {
     const code = appliedVoucher?.code ?? null
-    const [freshProducts, voucher] = await Promise.all([
-      lookupProducts(merchant.id).catch(() => null),
-      code ? lookupMerchantVoucher(merchant.id, code).catch(() => ({ ok: false as const })) : null,
-    ])
     // The clock is a quote input too, and the only one a menu refetch cannot repair: if the initial
     // sync failed we are pricing the promo window against the device's clock, and re-sending the
     // same quote would be refused identically, forever. A backend that can refuse an order can
-    // answer /api/time.
-    void resyncClock()
+    // answer /api/time. AWAITED, alongside the other two quote inputs: this function's callers
+    // await it and then let the customer retry — an un-awaited resync landed the corrected offset
+    // a tick after the error toast, so an instant second tap could eat a second `price_changed`
+    // refusal before the clock was actually fixed.
+    const [freshProducts, voucher] = await Promise.all([
+      lookupProducts(merchant.id).catch(() => null),
+      code ? lookupMerchantVoucher(merchant.id, code).catch(() => ({ ok: false as const })) : null,
+      resyncClock(),
+    ])
     // `[]` is an ANSWER — the shop really sells nothing, and pruning the whole cart is right.
     // `null` is the absence of one, and prunes nothing.
     // adoptProducts, not setProducts: a refusal that refreshed the menu but left the dead id in
@@ -619,7 +627,14 @@ export default function Storefront() {
             <div className="max-w-[360px] mx-auto mb-5 text-left px-4 py-3 bg-surface-raised border-[1.5px] border-divider rounded-md">
               {success.items.map((item, i) => (
                 <div key={i} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                  <span className="shrink-0">{item.name} × {item.qty}</span>
+                  <span className="shrink-0 flex items-center gap-1.5 flex-wrap">
+                    {item.name} × {item.qty}
+                    {item.promo && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
+                        {t('Promo', '优惠')}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
                 </div>
               ))}
@@ -756,6 +771,17 @@ export default function Storefront() {
                             </div>
                           )
                         }
+                        // `promo.remaining` is the page-load snapshot — it never moves as the
+                        // customer adds units, so with 3 left and 3 already in the cart it kept
+                        // saying "3 left" right up to the tap that priced at base. `bd.lines` is
+                        // the one place that already knows how many promo units THIS cart has
+                        // claimed (the cap binds inside `priceOrder`, per unit), so subtracting it
+                        // here is what makes the count describe the NEXT unit rather than the
+                        // page-load count — and keeps it honest with what the summary shows below.
+                        const claimed = bd.lines.find(l => l.id === p.id && l.promo)?.qty ?? 0
+                        const remainingForNextUnit = Number.isFinite(promo.remaining)
+                          ? promo.remaining - claimed
+                          : Infinity
                         return (
                           <div className="flex items-center gap-2 mt-[5px] flex-wrap">
                             <span className="text-[13px] font-medium text-oxblood">
@@ -767,9 +793,9 @@ export default function Storefront() {
                             <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
                               {t('Promo', '优惠')}
                             </span>
-                            {Number.isFinite(promo.remaining) && (
+                            {Number.isFinite(remainingForNextUnit) && remainingForNextUnit > 0 && (
                               <span className="text-[11px] text-rose-muted">
-                                {t(`${promo.remaining} left at this price`, `此价格剩 ${promo.remaining} 件`)}
+                                {t(`${remainingForNextUnit} left at this price`, `此价格剩 ${remainingForNextUnit} 件`)}
                               </span>
                             )}
                           </div>
@@ -1016,7 +1042,14 @@ export default function Storefront() {
                   const displayName = (lang === 'zh' && prod?.name_zh) ? prod.name_zh : item.name
                   return (
                     <div key={i} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                      <span className="shrink-0">{displayName} × {item.qty}</span>
+                      <span className="shrink-0 flex items-center gap-1.5 flex-wrap">
+                        {displayName} × {item.qty}
+                        {item.promo && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
+                            {t('Promo', '优惠')}
+                          </span>
+                        )}
+                      </span>
                       <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
                     </div>
                   )
