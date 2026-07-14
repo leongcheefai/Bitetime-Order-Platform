@@ -527,6 +527,8 @@ export type OrderErrorCode =
   | 'voucher_already_used'
   | 'voucher_fully_used'
   | 'voucher_entry_required'
+  | 'price_changed'
+  | 'product_unavailable'
 
 /**
  * A refusal the customer can do something about — retry without the voucher, come back later.
@@ -542,8 +544,8 @@ export class OrderError extends Error {
 }
 
 /**
- * Place an order: ONE call, which commits the order number, the order row and the voucher
- * claim in a single transaction server-side.
+ * Place an order: ONE call, which commits the order number, the order row, the voucher claim
+ * and THE PRICE in a single transaction server-side.
  *
  * This used to be three trips from the browser with no transaction around them — take a
  * number, insert the order, then record the redemption — and the storefront threw the third
@@ -555,18 +557,20 @@ export class OrderError extends Error {
  * The browser no longer has INSERT on `orders` at all (the grant is revoked), so there is no
  * path back to the old shape even by accident. `user_id` is not sent: the backend takes it
  * from this request's JWT, and sending it would be ignored.
+ *
+ * We send what the customer WANTS (the cart) and what they SAW (`quotedTotal`) — never what it
+ * costs. The backend derives every number from its own rows; sending a total would mean any
+ * client could name its own. If the backend's price disagrees with our quote it refuses with
+ * `price_changed` rather than charging a number the customer never confirmed.
  */
-export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total, currency, discount, voucherCode, voucherEntry }: {
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, cart, quotedTotal, voucherCode, voucherEntry }: {
   merchantId: string
   customerName: string
   customerWa: string
   mode: string
   address?: AddressParts | string
-  shippingFee?: number
-  items: any
-  total: number
-  currency?: string
-  discount?: number
+  cart: Record<string, number>
+  quotedTotal: number
   voucherCode?: string | null
   voucherEntry?: string | null
 }) {
@@ -584,10 +588,7 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     },
     body: JSON.stringify({
       merchantId, customerName, customerWa, mode, address,
-      shippingFee: shippingFee ?? 0,
-      items, total,
-      currency: currency ?? 'MYR',
-      discount, voucherCode, voucherEntry,
+      cart, quotedTotal, voucherCode, voucherEntry,
     }),
   }).catch(() => null)
   if (!res) throw new OrderError('network')

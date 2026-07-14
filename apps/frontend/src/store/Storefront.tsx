@@ -281,11 +281,10 @@ export default function Storefront() {
         customerWa: wa.trim(),
         mode,
         address: mode === 'delivery' ? address : '',
-        shippingFee: fee,
-        items: cartItems,
-        total,
-        currency,
-        discount,
+        // What they want, and what they saw. Never what it costs: the shop's own rows are the
+        // only thing that may say that, and `bd` is only ever a quote.
+        cart: Object.fromEntries(Object.entries(cart).filter(([, qty]) => qty > 0)),
+        quotedTotal: total,
         voucherCode: appliedVoucher?.code ?? null,
         voucherEntry: appliedVoucher ? voucherEntry : null,
       })
@@ -317,6 +316,30 @@ export default function Storefront() {
         toast.error(voucherRefusal(t))
       } else if (code === 'merchant_inactive' || code === 'merchant_not_found') {
         const msg = t('This shop is not taking orders right now.', '本店目前暂不接单。')
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'price_changed') {
+        // The shop's prices moved while they were checking out. NOTHING was written. Show them
+        // the new numbers and let them decide — charging the new total silently would bill a
+        // number they never agreed to, and honouring the stale one would let an old quote buy a
+        // discount the shop withdrew.
+        const fresh = await fetchProducts(merchant.id).catch(() => null)
+        if (fresh) setProducts(fresh)
+        const msg = t(
+          'Prices at this shop just changed. Please review your order and place it again.',
+          '本店价格刚刚有所调整，请确认订单后重新下单。',
+        )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'product_unavailable') {
+        // Something in the cart stopped being on sale mid-checkout. Refetch so the menu tells
+        // the truth, and let them rebuild the cart rather than guessing which item it was.
+        const fresh = await fetchProducts(merchant.id).catch(() => null)
+        if (fresh) setProducts(fresh)
+        const msg = t(
+          'Something in your cart is no longer available. Please check your order and try again.',
+          '购物车中有商品已下架，请检查订单后重试。',
+        )
         setError(msg)
         toast.error(msg)
       } else if (code === 'network') {
