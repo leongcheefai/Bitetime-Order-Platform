@@ -10,8 +10,9 @@ import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
  *
  * DELIBERATE TWIN of `OrderErrorCode` in `apps/frontend/src/store.ts` (the frontend is a
  * separate workspace and cannot import this). Add a code here and it must be added there too,
- * with a customer-facing message in Storefront.tsx's VOUCHER_REFUSALS — otherwise the
- * customer is told "something went wrong" for a refusal whose reason we know.
+ * with a customer-facing `t(en, zh)` message in Storefront.tsx's `handleSubmit` catch block
+ * (VOUCHER_REFUSALS is the table for the voucher ones) — otherwise the customer is told
+ * "something went wrong" for a refusal whose reason we know.
  */
 export type OrderErrorCode =
   | 'merchant_not_found'
@@ -22,6 +23,7 @@ export type OrderErrorCode =
   | 'voucher_entry_required'
   | 'price_changed'
   | 'product_unavailable'
+  | 'delivery_state_required'
 
 /** A refusal the customer can act on, as opposed to a bug. Thrown inside the transaction. */
 export class OrderError extends Error {
@@ -90,6 +92,16 @@ export interface PlaceOrderInput {
  */
 export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ orderNumber: string }> {
   return withTransaction(async (tx) => {
+    // A delivery with no state prices at ZERO — `shippingFee` reads the region off the state,
+    // and with none it falls through to `return 0`. That is the same species of hole the `mode`
+    // allowlist closed one field over: a fee zeroed by a value the client chose (here, by a
+    // value the client simply left out), on an order that is still perfectly deliverable. It is
+    // refused here rather than in the route because the region rules are this module's, not
+    // HTTP's — and the Storefront's `deliveryReady` gate means no honest checkout ever sees it.
+    if (input.mode === 'delivery' && deliveryState(input.mode, input.address) === null) {
+      throw new OrderError('delivery_state_required')
+    }
+
     const merchant = await assertOrderableMerchant(tx, input.merchantId)
     const day = orderDay(now)
 
@@ -112,8 +124,14 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
       products,
       cart: input.cart,
       mode: input.mode,
-      // Read off the address that is actually being shipped to, so the region that sets the
-      // rate and the region on the parcel cannot disagree.
+      // Read off the address that is actually being shipped to. That is where the fee's REGION
+      // comes from, and the region is the one price input the client still supplies: the state
+      // is a self-declared <select> value, not derived from the postcode, so a customer can let
+      // 88000 autofill "Sabah" and then flip it to "Selangor" and pay the cheaper rate. What is
+      // guaranteed is only that the rate charged is the rate for the state ON THE PARCEL — the
+      // shop ships to whatever this says. Under-declaring the region is therefore a dispute the
+      // merchant can see and settle, not a silent zero; a MISSING state was the silent zero,
+      // and is refused above.
       state: deliveryState(input.mode, input.address),
       rates: merchant.rates,
       voucher,
@@ -140,9 +158,9 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
         ${tx.json(items as never)},
         ${bd.total},
         ${merchant.currency},
+        ${discount},
         -- The code is recorded only when it actually bought a discount, mirroring the insert
         -- the browser used to make.
-        ${discount},
         ${discount ? (input.voucherCode ?? null) : null},
         ${orderNumber},
         -- Hardcoded, never taken from the caller. A client could otherwise file an order that
@@ -229,7 +247,12 @@ async function cartProducts(
   return rows.map(r => ({ id: r.id, name: r.name, price: Number(r.price) }))
 }
 
-/** The state that sets the shipping region — only a delivery has one. */
+/**
+ * The state that sets the shipping region — only a delivery has one.
+ *
+ * `null` on a delivery is not a default, it is a REFUSAL (`delivery_state_required`, raised by
+ * the caller): it would price the delivery at 0.
+ */
 function deliveryState(mode: PlaceOrderInput['mode'], address: unknown): string | null {
   if (mode !== 'delivery') return null
   if (!address || typeof address !== 'object') return null

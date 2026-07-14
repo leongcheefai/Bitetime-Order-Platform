@@ -225,6 +225,37 @@ describe('POST /api/orders', () => {
       })
     }
 
+    // `Number.isInteger(1e21)` is TRUE, and the quote check cannot save us: the client quotes
+    // the same astronomical total it asked for, so the two agree and the order commits. The cap
+    // is the only thing standing in front of it.
+    it('rejects an absurd quantity', async () => {
+      const res = await post(body(shop, productId, { cart: { [productId]: 1e21 }, quotedTotal: 13e21 }))
+
+      expect(res.status).toBe(400)
+      expect(await errorOf(res)).toBe('invalid_body')
+      expect(await ordersOf(shop)).toEqual([])
+    })
+
+    it('rejects a quantity past the per-line cap', async () => {
+      const res = await post(body(shop, productId, { cart: { [productId]: 1001 }, quotedTotal: 13013 }))
+
+      expect(res.status).toBe(400)
+      expect(await errorOf(res)).toBe('invalid_body')
+      expect(await ordersOf(shop)).toEqual([])
+    })
+
+    it('rejects a cart with more distinct lines than the cap', async () => {
+      // The ids need not exist: the shape is refused at the door, before anything is looked up.
+      const cart = Object.fromEntries(
+        Array.from({ length: 101 }, (_, i) => [`00000000-0000-0000-0000-${String(i).padStart(12, '0')}`, 1]),
+      )
+      const res = await post(body(shop, productId, { cart }))
+
+      expect(res.status).toBe(400)
+      expect(await errorOf(res)).toBe('invalid_body')
+      expect(await ordersOf(shop)).toEqual([])
+    })
+
     it('rejects an empty cart', async () => {
       const res = await post(body(shop, productId, { cart: {} }))
 
@@ -518,6 +549,44 @@ describe('POST /api/orders', () => {
       const [order] = await ordersOf(shop)
       expect(Number(order.shipping_fee)).toBe(18)
       expect(Number(order.total)).toBe(44)
+    })
+
+    // The `mode` allowlist's hole, one field over. `shippingFee` reads the REGION off
+    // `address.state`; with no state it falls through to `return 0` — so a perfectly deliverable
+    // address with the state left out committed a delivery to Sabah at shipping_fee = 0, and the
+    // quote check waved it through because the client quoted the same zero. Nothing else refuses
+    // it: `mode` is valid, the address is present, the products are real.
+    describe('a delivery must say where it is going', () => {
+      const deliverable = { line1: '1 Jalan Besar', postcode: '88000', city: 'Kota Kinabalu' }
+
+      const cases: [string, unknown][] = [
+        ['no state key at all', deliverable],
+        ['an empty state', { ...deliverable, state: '' }],
+        ['a non-string state', { ...deliverable, state: 42 }],
+        ['no address at all', undefined],
+      ]
+
+      for (const [name, address] of cases) {
+        it(`refuses a delivery with ${name}, and writes nothing`, async () => {
+          const res = await post(body(shop, productId, { mode: 'delivery', address, quotedTotal: 26 }))
+
+          expect(res.status).toBe(409)
+          expect(await errorOf(res)).toBe('delivery_state_required')
+          expect(await ordersOf(shop)).toEqual([])
+          // Rolled back whole — not even a counter slot burnt.
+          expect(await counterOf(shop)).toBeNull()
+        })
+      }
+
+      // The refusal is about the DELIVERY, not about the address: a pickup has nowhere to ship
+      // to and must keep working with no address at all.
+      it('still takes a pickup with no address', async () => {
+        const res = await post(body(shop, productId))
+
+        expect(res.status).toBe(200)
+        const [order] = await ordersOf(shop)
+        expect(Number(order.shipping_fee)).toBe(0)
+      })
     })
 
     it('derives the voucher discount, and records it against the order', async () => {

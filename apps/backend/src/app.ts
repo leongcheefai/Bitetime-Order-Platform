@@ -480,12 +480,21 @@ app.post('/api/orders', async (c) => {
   // A cart is ids → positive whole quantities. Reject a malformed one rather than coercing it:
   // `Number('abc')` is NaN, which sails past TypeScript, reaches Postgres and comes back a 500
   // — a bad request dressed up as a server fault.
+  //
+  // The two caps are not tidiness. `Number.isInteger(1e21)` is TRUE, so an unbounded quantity
+  // priced and committed an order for a trillion cookies — and the price check does not catch
+  // it, because the client quotes the same absurd number it asked for. No real basket is 1000
+  // of one item or 100 distinct lines, so the ceiling costs no honest customer an order while
+  // keeping a hostile body from writing a total nobody can settle.
+  const MAX_QTY = 1000
+  const MAX_LINES = 100
   const isCart = (v: unknown): v is Record<string, number> =>
     !!v && typeof v === 'object' && !Array.isArray(v) &&
     Object.values(v as Record<string, unknown>).every(
-      q => typeof q === 'number' && Number.isInteger(q) && q > 0,
+      q => typeof q === 'number' && Number.isInteger(q) && q > 0 && q <= MAX_QTY,
     ) &&
-    Object.keys(v as Record<string, unknown>).length > 0
+    Object.keys(v as Record<string, unknown>).length > 0 &&
+    Object.keys(v as Record<string, unknown>).length <= MAX_LINES
 
   const quotedTotal = typeof b.quotedTotal === 'number' && Number.isFinite(b.quotedTotal)
     ? b.quotedTotal
