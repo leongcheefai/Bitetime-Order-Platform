@@ -43,8 +43,32 @@ still a spoof, and it would have left the leak open for the path most likely to 
 
 The cost of the decision is real and is accepted: **a first-time customer holding a promo code
 now meets a sign-in prompt.** Guest checkout stays first-class and one tap; it just cannot
-carry a discount. That is precisely what makes the fix airtight rather than merely expensive to
-abuse.
+carry a discount.
+
+### What this fix does NOT buy — read this before trusting it
+
+**It is not airtight, and it must not be described as such.** A customer account is *free to
+mint*: `POST /api/customer/signup` creates the user **pre-confirmed** (`app.ts`,
+`email_confirm: true`), and that is deliberate — `CONTEXT.md` states it outright, *"a customer's
+email is never verified"*, because a client-side `signUp` returns no session and would strand a
+customer mid-checkout holding a cart.
+
+So the attack is not eliminated. It is **priced**:
+
+| | before | after |
+|---|---|---|
+| cost per extra redemption | change one string in the request body | one signup call, one unused email address |
+| rate limited | no | yes (in-memory; useless past one backend instance) |
+| visible to the merchant | no | yes — every redemption is a real order they see and fulfil |
+
+That is a genuine improvement and worth shipping today: it kills a free, invisible, unlimited
+bypass. But **the cap is per-mailbox-string, not per-human** — `a+1@gmail.com` is a distinct
+verified Supabase account — and anyone reading "a voucher requires an account" as "a voucher
+requires a *person*" will be wrong.
+
+Making it actually airtight means real email verification for customers, which reverses a
+deliberate, documented product decision and is its own piece of work. Filed separately rather
+than smuggled in here.
 
 ## Design
 
