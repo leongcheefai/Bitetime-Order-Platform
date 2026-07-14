@@ -179,7 +179,12 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
       }
     }
 
-    const items = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice }))
+    // `promo` rides along so the split is explainable after the fact — without it two entries
+    // sharing a name at different prices (the base/promo split, I-2) reads as a pricing bug to
+    // anyone looking at the stored order later, not just at checkout. `orders.items` is a jsonb
+    // blob with no schema, so every consumer must treat a MISSING key (rows written before this
+    // field existed) as `false`, never as a crash.
+    const items = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice, promo: l.promo }))
     const discount = bd.discount > 0 ? bd.discount : null
 
     await tx`

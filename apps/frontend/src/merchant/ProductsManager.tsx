@@ -458,23 +458,40 @@ export default function ProductsManager() {
                   {t('The promo runs to the end of this day. Leave empty for no end date.', '优惠持续到当天结束。留空表示无结束日期。')}
                 </span>
               </div>
-              {editingProduct && editingProduct.promo_price !== null && editingProduct.promo_price !== undefined && (
-                <p className="text-[12px] text-rose-muted">
-                  {editingProduct.promo_limit
-                    ? t(`${editingProduct.promo_sold ?? 0} of ${editingProduct.promo_limit} sold at the promo price.`,
-                        `已以优惠价售出 ${editingProduct.promo_sold ?? 0} / ${editingProduct.promo_limit} 件。`)
-                    : t(`${editingProduct.promo_sold ?? 0} sold at the promo price.`,
-                        `已以优惠价售出 ${editingProduct.promo_sold ?? 0} 件。`)}
-                  {' '}
-                  {t('Changing the promo price starts the count again.', '更改优惠价将重新计数。')}
-                  {promoEnded && (
-                    <>
-                      {' '}
-                      {t('This promo has ended.', '此优惠已结束。')}
-                    </>
-                  )}
-                </p>
-              )}
+              {editingProduct && editingProduct.promo_price !== null && editingProduct.promo_price !== undefined && (() => {
+                // M-1: `promo_sold` can outlive a LOWERED `promo_limit` — sell 8 against a cap of
+                // 10, then drop the cap to 3, and the row is `promo_sold: 8, promo_limit: 3`.
+                // Money is unaffected (`remaining = max(0, 3-8) = 0`, so the promo just ends), but
+                // the raw numbers read as "8 of 3 sold", which looks broken. Clamp the DISPLAY to
+                // the cap and say the promo is finished — the DB row itself is untouched.
+                const sold = editingProduct.promo_sold ?? 0
+                const limit = editingProduct.promo_limit
+                const capReached = limit != null && sold >= limit
+                const shownSold = limit != null ? Math.min(sold, limit) : sold
+                return (
+                  <p className="text-[12px] text-rose-muted">
+                    {limit
+                      ? t(`${shownSold} of ${limit} sold at the promo price.`,
+                          `已以优惠价售出 ${shownSold} / ${limit} 件。`)
+                      : t(`${sold} sold at the promo price.`,
+                          `已以优惠价售出 ${sold} 件。`)}
+                    {' '}
+                    {t('Changing the promo price starts the count again.', '更改优惠价将重新计数。')}
+                    {capReached && (
+                      <>
+                        {' '}
+                        {t('This promo is finished — the cap has been reached.', '此优惠已结束——已达上限。')}
+                      </>
+                    )}
+                    {promoEnded && (
+                      <>
+                        {' '}
+                        {t('This promo has ended.', '此优惠已结束。')}
+                      </>
+                    )}
+                  </p>
+                )
+              })()}
               <div className="flex flex-col gap-[6px]">
                 <Label>{t('Photos (optional)', '图片（可选）')}</Label>
                 <ImagePicker

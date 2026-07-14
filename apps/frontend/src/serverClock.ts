@@ -21,9 +21,21 @@ export function clockOffset(serverNowMs: number, sentAt: number, receivedAt: num
  * the same skewed clock, and be refused again — a permanent refusal loop for a legitimate customer,
  * on the busiest day of the promo. Refreshing the menu cannot fix a clock; only this can.
  *
- * A failed sync leaves the offset at 0 — the device's own clock, i.e. the old behaviour. The
- * storefront re-syncs on a `price_changed` recovery, and a backend that can refuse an order can
- * answer `/api/time`.
+ * A failed sync leaves the offset at 0 — the device's own clock, i.e. the old behaviour. THIS ALONE
+ * DOES NOT RECOVER (I-3, #69): if `GET /api/time` is persistently unreachable while `POST
+ * /api/orders` still succeeds, `resync()` keeps failing, the offset stays 0, and a `price_changed`
+ * retry that calls `resync()` again re-quotes against the same skewed clock and is refused again —
+ * the exact permanent loop this module exists to prevent. Refetching the menu cannot repair a
+ * clock; nothing in this file could either, on its own, because a device that cannot reach
+ * `/api/time` has no way to hear the correct time from THIS endpoint.
+ *
+ * What actually closes the loop is `adopt()`: a backend that refuses an order with `price_changed`
+ * hands back its own clock IN THE REFUSAL BODY (`app.ts`'s OrderError handler), over the same
+ * connection that just proved it works. `refreshQuoteSources` (Storefront.tsx) feeds that
+ * timestamp to `adopt()` instead of calling `resync()` again, so recovery needs no second
+ * endpoint and — because it rides the response that already arrived — cannot fail the way a
+ * fresh `/api/time` fetch can. `resync()` still exists for the ordinary case (`/api/time` reachable,
+ * used at mount) and stays the fallback if a refusal ever lacks a `now`.
  */
 export function useServerClock() {
   const [offset, setOffset] = useState(0)
@@ -31,6 +43,19 @@ export function useServerClock() {
   const resync = useCallback(async () => {
     const s = await fetchServerNow()
     if (s) setOffset(clockOffset(s.now, s.sentAt, s.receivedAt))
+  }, [])
+
+  /**
+   * Adopt a server timestamp handed back BY A REFUSAL rather than by `/api/time` — no round
+   * trip of its own, so it cannot add a second way for recovery to fail. There is no
+   * `sentAt`/`receivedAt` pair to bracket this with (the timestamp arrived inside an error
+   * body, not a dedicated clock request), so the offset is the plain difference against "now" —
+   * within the round trip's own latency, which is what `price_changed` recovery needs, not
+   * sub-second precision.
+   */
+  const adopt = useCallback((serverNowIso: string) => {
+    const ms = Date.parse(serverNowIso)
+    if (Number.isFinite(ms)) setOffset(ms - Date.now())
   }, [])
 
   // Mirrors usePlatformPricing's shape: the mount sync is inlined here rather than calling
@@ -49,5 +74,5 @@ export function useServerClock() {
   // leave the promo quoted against the device's clock forever.
   const now = useCallback(() => new Date(Date.now() + offset), [offset])
 
-  return { now, resync }
+  return { now, resync, adopt }
 }

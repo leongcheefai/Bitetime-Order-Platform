@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
@@ -170,9 +170,23 @@ export default function OrderHistory() {
                   {expanded && (
                     <div className="px-4 pb-4 pt-1 border-t border-clay-border/60 bg-oxblood-tint/30">
                       {(o.items ?? []).map((item, n) => (
+                        // Index (`n`) in the key, not just id: a split promo writes two lines
+                        // sharing the same product id (base half + promo half), and an id-only
+                        // key would collapse them into one row while the total still charges
+                        // for both.
                         <Line
                           key={`${item.id ?? item.name}-${n}`}
-                          label={`${itemName(item)} × ${item.qty}`}
+                          label={
+                            <span className="inline-flex items-center gap-1.5 min-w-0">
+                              <span className="truncate">{itemName(item)} × {item.qty}</span>
+                              {/* Missing `promo` (rows written before I-2) reads as false. */}
+                              {item.promo && (
+                                <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
+                                  {t('Promo', '优惠')}
+                                </span>
+                              )}
+                            </span>
+                          }
                           value={formatMoney((item.price ?? 0) * (item.qty ?? 0), currency)}
                         />
                       ))}
@@ -216,7 +230,7 @@ export default function OrderHistory() {
   )
 }
 
-function Line({ label, value }: { label: string; value: string }) {
+function Line({ label, value }: { label: ReactNode; value: string }) {
   return (
     <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
       <span className="shrink-0">{label}</span>

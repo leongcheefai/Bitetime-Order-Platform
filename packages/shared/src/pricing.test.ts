@@ -186,6 +186,37 @@ describe('promo', () => {
     expect(promoClaims(bd, [product('a', 100, { promoPrice: 80, promoLimit: 5, promoSold: 2 })])).toEqual({ a: 3 })
   })
 
+  // I-1 boundary (#69 final review): the storefront card computes
+  // `promo.remaining - claimed` to decide whether the NEXT unit still prices at promo. This is
+  // the pricing-level proof that "claimed === remaining" really does mean the next unit is
+  // base — RM 13 base, RM 8 promo, cap 3, tapped '+' three times. The card must fall back to
+  // the plain base display at that point (Storefront.tsx), not keep advertising RM 8.
+  it('a cart that claims the whole cap prices its next unit at base (I-1 boundary)', () => {
+    const products = [product('a', 13, { promoPrice: 8, promoLimit: 3, promoSold: 0 })]
+    const promo = promoState(products[0], NOW)
+    expect(promo).toEqual({ price: 8, remaining: 3 })
+
+    // Exactly the cap: every unit in the cart is still the promo — `claimed` would read 3 and
+    // `remainingForNextUnit` (promo.remaining - claimed) is 0, which is the signal the card
+    // acts on.
+    const atCap = priceOrder({ products, cart: { a: 3 }, mode: 'pickup', rates: RATES, now: NOW })
+    expect(atCap.lines).toEqual([
+      { id: 'a', name: 'a', qty: 3, unitPrice: 8, lineTotal: 24, promo: true },
+    ])
+    const claimed = atCap.lines.find(l => l.id === 'a' && l.promo)?.qty ?? 0
+    expect(claimed).toBe(3)
+    expect(promo!.remaining - claimed).toBe(0)
+
+    // One more unit is what the customer would actually get if the card's fallback failed to
+    // fire and they tapped '+' a fourth time: it must price at BASE, not promo — proving the
+    // headline the card shows for "the next unit" has to be base once claimed === remaining.
+    const onePastCap = priceOrder({ products, cart: { a: 4 }, mode: 'pickup', rates: RATES, now: NOW })
+    expect(onePastCap.lines).toEqual([
+      { id: 'a', name: 'a', qty: 3, unitPrice: 8, lineTotal: 24, promo: true },
+      { id: 'a', name: 'a', qty: 1, unitPrice: 13, lineTotal: 13, promo: false },
+    ])
+  })
+
   it('a sold-out cap prices the whole line at base, and claims nothing', () => {
     const products = [product('a', 100, { promoPrice: 80, promoLimit: 5, promoSold: 5 })]
     const bd = priceOrder({

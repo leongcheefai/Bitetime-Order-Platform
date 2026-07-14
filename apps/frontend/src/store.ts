@@ -589,7 +589,17 @@ export type OrderErrorCode =
  * reading the literal string "invalid_body" on the checkout screen.
  */
 export class OrderError extends Error {
-  constructor(readonly code: OrderErrorCode | 'invalid_body' | 'order_failed' | 'network') {
+  constructor(
+    readonly code: OrderErrorCode | 'invalid_body' | 'order_failed' | 'network',
+    /**
+     * The server's own clock, present only on `price_changed` (`app.ts`'s OrderError handler).
+     * This is what lets `price_changed` recovery fix a persistently-unreachable `/api/time`
+     * (I-3, #69): the refusal that proves the connection works also states the time, so
+     * `serverClock.ts`'s `adopt()` can correct the offset without a second request that could
+     * fail the same way. See serverClock.ts for the failure this closes.
+     */
+    readonly now?: string,
+  ) {
     super(code)
     this.name = 'OrderError'
   }
@@ -648,7 +658,7 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
 
   if (!res.ok) {
     const payload = await res.json().catch(() => ({}))
-    throw new OrderError(payload?.error ?? 'order_failed')
+    throw new OrderError(payload?.error ?? 'order_failed', typeof payload?.now === 'string' ? payload.now : undefined)
   }
   return (await res.json()) as { orderNumber: string }
 }

@@ -46,9 +46,10 @@ begin
   -- SECURITY DEFINER (the style of the other guards in this directory) would make it 'postgres'
   -- on every call and silently disable the pin entirely. Do not "harden" it to match them.
   --
-  -- A DENYLIST, not an allowlist: it names the roles that MAY move the counter, and pins everyone
-  -- else. A new browser-reachable role, or a security-definer RPC owned by postgres that writes
-  -- products on a merchant's behalf, must not get the write by default.
+  -- An ALLOWLIST, not a denylist: it names the roles that MAY move the counter, and pins
+  -- everyone else — fails CLOSED by default rather than open. A new browser-reachable role, or a
+  -- security-definer RPC owned by postgres that writes products on a merchant's behalf, must not
+  -- get the write by default.
   if current_user not in ('postgres', 'service_role', 'supabase_admin') then
     new.promo_sold := coalesce(old.promo_sold, 0);
   end if;

@@ -648,9 +648,9 @@ describe('POST /api/orders', () => {
       expect(order.discount).toBeNull()
       expect(order.currency).toBe('MYR')
       // Built from the products rows, so the name and the unit price are the shop's own — not
-      // whatever the browser felt like calling them.
+      // whatever the browser felt like calling them. `promo: false` — this product has none.
       expect(order.items).toEqual([
-        { id: productId, name: 'Matcha Cookie', qty: 2, price: 13 },
+        { id: productId, name: 'Matcha Cookie', qty: 2, price: 13, promo: false },
       ])
     })
 
@@ -799,7 +799,9 @@ describe('POST /api/orders', () => {
       expect(res.status).toBe(200)
       const [order] = await ordersOf(shop)
       expect(Number(order.total)).toBe(16)
-      expect(order.items).toEqual([{ id: promoProductId, name: 'Matcha Cookie', qty: 2, price: 8 }])
+      // `promo: true` rides along (I-2, #69 final review) so the STORED record explains the
+      // split after the fact, not just the in-memory breakdown the success screen reads.
+      expect(order.items).toEqual([{ id: promoProductId, name: 'Matcha Cookie', qty: 2, price: 8, promo: true }])
       expect((await productOf(promoProductId))!.promo_sold).toBe(2)
     })
 
@@ -815,11 +817,35 @@ describe('POST /api/orders', () => {
 
       expect(res.status).toBe(200)
       const [order] = await ordersOf(shop)
+      // Both halves of the split carry their own `promo` flag (I-2) — the two entries share a
+      // product id and would otherwise be indistinguishable to anything reading the stored row.
       expect(order.items).toEqual([
-        { id: promoProductId, name: 'Matcha Cookie', qty: 3, price: 8 },
-        { id: promoProductId, name: 'Matcha Cookie', qty: 2, price: 10 },
+        { id: promoProductId, name: 'Matcha Cookie', qty: 3, price: 8, promo: true },
+        { id: promoProductId, name: 'Matcha Cookie', qty: 2, price: 10, promo: false },
       ])
       expect((await productOf(promoProductId))!.promo_sold).toBe(3)
+    })
+
+    // I-2 (#69 final review): before this fix, `orders.ts` dropped `PriceLine.promo` when
+    // mapping to the stored `items` — the split was priced correctly but UNEXPLAINABLE
+    // afterwards, because nothing on the row said which half was which. Assert it directly
+    // against the real stored jsonb, not just against the in-memory breakdown the success
+    // screen reads.
+    it('stores the promo flag on each line, so the split is explainable after the fact', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 3, promoSold: 0 })
+      const normalProductId = await seedProduct({ merchant_id: shop, price: 5 })
+
+      const res = await post(body(shop, promoProductId, {
+        cart: { [promoProductId]: 3, [normalProductId]: 1 },
+        quotedTotal: 3 * 8 + 5,
+      }))
+
+      expect(res.status).toBe(200)
+      const [order] = await ordersOf(shop)
+      expect(order.items).toEqual([
+        { id: promoProductId, name: 'Matcha Cookie', qty: 3, price: 8, promo: true },
+        { id: normalProductId, name: expect.any(String), qty: 1, price: 5, promo: false },
+      ])
     })
 
     // THE ACCEPTANCE CRITERION. Modeled on 'holds a voucher's cap under concurrent load' above,
