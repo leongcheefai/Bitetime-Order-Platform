@@ -146,6 +146,14 @@ export default function ProductsManager() {
   const [images, setImages] = useState<string[]>([])
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
+  // Whether the row being edited has a promo whose end date has already passed. Computed once, in
+  // openEdit below, rather than read from `Date.now()` during render (React Compiler forbids calling
+  // an impure function while rendering — the result would also go stale without a re-render to
+  // recompute it anyway). Display-only, so the device clock is an acceptable stand-in for the
+  // server's here — unlike the storefront's price quote (#68), this never becomes an order, so a
+  // merchant's laptop clock being a few minutes off only makes the hint a few minutes early or late,
+  // never a wrong price. `promo_end` is an absolute instant already (see promoEnd.ts).
+  const [promoEnded, setPromoEnded] = useState(false)
 
   async function load() { setRows(await fetchProducts(merchant!.id)) }
   useEffect(() => { fetchProducts(merchant!.id).then(setRows) }, [merchant!.id])
@@ -153,7 +161,7 @@ export default function ProductsManager() {
   function openAdd() {
     setEditingProduct(null)
     setForm(BLANK)
-    setImages([]); setDraftId(crypto.randomUUID()); setMsg('')
+    setImages([]); setDraftId(crypto.randomUUID()); setMsg(''); setPromoEnded(false)
     setFormOpen(true)
   }
   function openEdit(p: any) {
@@ -167,6 +175,7 @@ export default function ProductsManager() {
       promo_end: promoEndToDate(p.promo_end),
     })
     setImages(p.image_urls ?? [])
+    setPromoEnded(!!p.promo_end && new Date(p.promo_end).getTime() < Date.now())
     setFormOpen(true)
   }
 
@@ -187,8 +196,18 @@ export default function ProductsManager() {
     }
   }
 
-  /** Returns a message to show, or null. The DB has the same check — this is the one with words. */
+  /**
+   * Returns a message to show, or null. The DB has the same checks — this is the one with words.
+   *
+   * The `promo_limit` check runs first and unconditionally (not gated on `promo_price !== ''`): the
+   * `min="1" step="1"` on the input is a convenience, not the enforcement, so a limit of 0 must be
+   * refused here even for a product with no promo price set at all — otherwise it reaches Postgres's
+   * `products_promo_limit_positive` constraint as a raw error.
+   */
   function promoProblem(f: any): string | null {
+    if (f.promo_limit !== '' && (!Number.isInteger(Number(f.promo_limit)) || Number(f.promo_limit) < 1)) {
+      return t('The promo limit must be a whole number of at least 1.', '优惠数量上限必须是不小于 1 的整数。')
+    }
     if (f.promo_price === '') return null
     const promo = Number(f.promo_price)
     const price = Number(f.price) || 0
@@ -197,9 +216,6 @@ export default function ProductsManager() {
     }
     if (promo >= price) {
       return t('The promo price must be below the normal price.', '优惠价必须低于原价。')
-    }
-    if (f.promo_limit !== '' && (!Number.isInteger(Number(f.promo_limit)) || Number(f.promo_limit) < 1)) {
-      return t('The promo limit must be a whole number of at least 1.', '优惠数量上限必须是不小于 1 的整数。')
     }
     return null
   }
@@ -232,10 +248,13 @@ export default function ProductsManager() {
       await load()
       toast.success(t('Product saved', '产品已保存'))
     } catch (err: any) {
-      // The DB's own check (`products_promo_below_price`) is the backstop for a promo left running
-      // when the merchant later drops the base price below it — the form's own check above cannot
-      // see that case, since it only runs against the price typed in this same save. Postgres's raw
-      // constraint string is not something to show a merchant.
+      // `promoProblem` above already catches a promo left above a base price the merchant just
+      // lowered in THIS save — it reads `f.price`, which is the price being saved, so `8 >= 7` is
+      // refused with words before this ever runs. This catch is a backstop for a DIFFERENT writer:
+      // the dashboard form is not the only thing that can touch a `products` row (a script, an
+      // admin tool, a direct SQL edit), and `products_promo_below_price` is what stops one of those
+      // leaving a promo priced above the item. Postgres's raw constraint string is not something to
+      // show a merchant if that ever collides with a live promo here.
       if (typeof err?.message === 'string' && err.message.includes('products_promo_below_price')) {
         setMsg(t('The promo price is no longer below the normal price. Lower or clear the promo price first.',
           '优惠价已不低于原价。请先降低或清除优惠价。'))
@@ -448,6 +467,12 @@ export default function ProductsManager() {
                         `已以优惠价售出 ${editingProduct.promo_sold ?? 0} 件。`)}
                   {' '}
                   {t('Changing the promo price starts the count again.', '更改优惠价将重新计数。')}
+                  {promoEnded && (
+                    <>
+                      {' '}
+                      {t('This promo has ended.', '此优惠已结束。')}
+                    </>
+                  )}
                 </p>
               )}
               <div className="flex flex-col gap-[6px]">
