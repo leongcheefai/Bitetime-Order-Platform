@@ -414,6 +414,11 @@ describe('POST /api/orders', () => {
     const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
 
     expect(res.status).toBe(409)
+    // WHICH refusal, and not merely that there was one. Signed in, with a code that does not
+    // exist: the CLAIM is what must fail. Without this, a regression that turned every voucher
+    // into `voucher_requires_account` would leave this green under a name saying otherwise —
+    // same consequence (409, nothing written), entirely different reason.
+    expect(await errorOf(res)).toBe('voucher_not_found')
     expect(await ordersOf(shop)).toEqual([])
     // The counter slot must not survive the rollback either, or order numbers develop gaps
     // that nobody can explain.
@@ -448,6 +453,9 @@ describe('POST /api/orders', () => {
   it('lets the customer retry without the voucher, and that order succeeds', async () => {
     const failed = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
     expect(failed.status).toBe(409)
+    // The retry is only interesting after a failed CLAIM. Assert the code, or this test also
+    // passes when the voucher was refused for having no account at all — a different story.
+    expect(await errorOf(failed)).toBe('voucher_not_found')
 
     const retry = await post(body(shop, productId), customerToken)
 
@@ -533,12 +541,28 @@ describe('POST /api/orders', () => {
   })
 
   // A fifty-use voucher redeemed five hundred times is the merchant's solvency. The cap has
-  // to hold when the redemptions arrive at once, which is exactly when a read-then-write
-  // without a row lock does not.
+  // to hold when the redemptions arrive at once — six racers against a cap of two: two commit,
+  // four are refused, and the voucher ends with exactly two names on it.
   //
-  // Six DIFFERENT accounts, one token each: the cap is what must stop the last four, and six
-  // racers behind one token would be stopped by one-per-customer instead — a green test
-  // proving something else.
+  // WHAT THIS TEST DOES NOT PROVE — and its comment used to claim it did — is that the
+  // voucher's `select … for update` is what holds that cap. Every intake takes the COUNTER row
+  // FIRST: `nextCounterValue`'s `insert … on conflict (merchant_id) do update` is an exclusive
+  // lock on the shop's single counter row, held until commit. All six transactions therefore
+  // serialize on the counter BEFORE any of them reaches the voucher, and under READ COMMITTED
+  // each one's voucher SELECT re-reads the previous committer's `used_by` anyway. Delete the
+  // `for update` and this very likely still passes. The counter row is the real serializer for
+  // same-merchant intake; the voucher lock is defence-in-depth behind it, and it is what would
+  // hold a claim that ever stops going through the counter. Keep it.
+  //
+  // Nor can it be isolated from here: the voucher row and the counter row are both keyed by
+  // merchant, so there is no concurrent claim on one voucher that is not also a concurrent bump
+  // of one counter. Watching the lock alone would mean driving `claimVoucher` directly — it is
+  // private to orders.ts, and prising that open buys a test of a lock nothing can currently
+  // reach unserialized.
+  //
+  // Six DIFFERENT accounts, one token each, because the CAP is what must stop the last four.
+  // Six racers behind ONE token would be stopped by one-per-customer (`voucher_already_used`)
+  // long before the cap — and this test would then go RED, not quietly green: `ok` would be 1.
   it('holds a voucher’s cap under concurrent load', async () => {
     await seedVoucher(shop, 'CAP2', 2)
     const attempts = racerTokens.map(token =>
@@ -551,6 +575,11 @@ describe('POST /api/orders', () => {
 
     expect(ok).toHaveLength(2)
     expect(rejected).toHaveLength(4)
+    // WHICH refusal, not merely how many. The fixture now turns on account identity: two racer
+    // tokens accidentally minted for the same email would give 3 × fully_used + 1 ×
+    // already_used — still four rejects, still green, and testing one-per-customer instead of
+    // the cap. The cap is the only thing allowed to stop these four.
+    expect(await Promise.all(rejected.map(errorOf))).toEqual(Array(4).fill('voucher_fully_used'))
     expect((await voucherOf(shop, 'CAP2'))!.used_by).toHaveLength(2)
     // Only the two that redeemed it left an order behind — the other four rolled back whole.
     expect(await ordersOf(shop)).toHaveLength(2)
