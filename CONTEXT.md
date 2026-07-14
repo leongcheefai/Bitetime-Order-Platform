@@ -28,7 +28,13 @@ The flow that collects a cart and customer details and commits an order: `collec
 
 ## Voucher
 
-A per-merchant promotion code. `percent` (subtotal×value/100) or fixed (`min(value, total)`). Validation rules live in `voucherError`; the discount math lives in `priceOrder`.
+A per-merchant promotion code. `percent` (subtotal×value/100) or fixed (`min(value, total)`). Validation rules live in `voucherError` (the browser's pre-flight); the discount math lives in `priceOrder`; the claim lives in `claimVoucher`, under a row lock, inside the order transaction.
+
+**A voucher requires an account.** The one-per-customer key is the **verified JWT's email** and nothing else. A guest has no verified identity, so their claim cannot be keyed to anything they cannot also change — and an unkeyable claim is *refused* (`voucher_requires_account`), never keyed on `''`. The key used to be `voucherEntry`, a string the **request body** supplied: the same person re-redeemed a one-per-customer voucher forever by varying it (`a@b.com`, `a+1@b.com`, `x`), and a voucher with a null `max_uses` was an unlimited discount for one person (#72). A key the client can name is not a key — the same rule that already governs `user_id`. The storefront's voucher section offers sign-in when signed out; the Checkout gate is untouched and guest checkout is still one tap. It just cannot carry a discount.
+
+**This is friction, not a wall — do not read it as airtight.** A customer account is free to mint: signup is **pre-confirmed** (`email_confirm: true`) and a customer's email is never verified, deliberately (see *Customer signup*). So the abuse is not eliminated, it is *priced*: an extra redemption now costs a signup with an unused address, is subject to the signup rate limit, and arrives as a real order the merchant sees and fulfils, rather than an invisible string swap. The cap is **per-mailbox, not per-human** — `a+1@gmail.com` is a distinct Supabase account. Making it genuinely airtight means real email verification, which reverses a deliberate product decision and is its own work.
+
+`used_by` still holds WhatsApp numbers from historical guest redemptions. They are a key that can no longer be produced and will never match again; someone who redeemed as a guest gets one more redemption from an account, and their stale entry still eats a `max_uses` slot. Not cleaned up — rewriting them would mean guessing which number belonged to which account.
 
 ## Referral
 
