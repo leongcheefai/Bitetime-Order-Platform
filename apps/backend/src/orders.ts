@@ -1,5 +1,5 @@
 import type postgres from 'postgres'
-import { priceOrder, voucherFromRow, shopRates } from '@bitetime/shared'
+import { priceOrder, voucherFromRow, shopRates, productFromRow, promoClaims } from '@bitetime/shared'
 import type { PricedProduct, PricedVoucher } from '@bitetime/shared'
 import { withTransaction } from './db.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
@@ -113,13 +113,12 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     const merchant = await assertOrderableMerchant(tx, input.merchantId)
     const day = orderDay(now)
 
-    // Scoped to this merchant, and that predicate is the ONLY thing keeping a stranger's
-    // product out of this cart: no RLS runs on this connection.
-    const products = await cartProducts(tx, input.merchantId, input.cart)
-
-    // Order matters for deadlock-freedom, not for correctness: every transaction takes the
-    // counter row before the voucher row, so two concurrent orders can never hold one and
-    // wait on the other.
+    // Lock order is counter → voucher → products, and every intake takes it in that order.
+    // `order_counters` is ONE row per merchant, so it serialises the shop's intake before any
+    // voucher or product row is ever touched — the same reason the ordering used to be
+    // "counter, then voucher" alone. Products moved to LAST because cartProducts now takes
+    // `for update` locks of its own (the promo cap): nothing about correctness depends on this
+    // order, only deadlock-freedom, and putting the counter first is what makes that trivial.
     const orderNumber = formatOrderNumber(merchant.order_prefix, day, await nextCounterValue(tx, input.merchantId, day))
 
     // The claim and the discount read the same locked row, so the voucher that is spent is
@@ -127,6 +126,12 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     const voucher = input.voucherCode
       ? await claimVoucher(tx, input.merchantId, input.voucherCode, input.userEmail)
       : null
+
+    // Scoped to this merchant, and that predicate is the ONLY thing keeping a stranger's
+    // product out of this cart: no RLS runs on this connection. LOCKED (`for update`), which is
+    // what makes the promo cap real rather than a decoration two concurrent checkouts both walk
+    // through.
+    const products = await cartProducts(tx, input.merchantId, input.cart)
 
     const bd = priceOrder({
       products,
@@ -147,6 +152,32 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     })
 
     assertQuoteHolds(bd.total, input.quotedTotal)
+
+    // Claim the promo units, under the lock `cartProducts` already took. A promo that sold out
+    // between the customer's quote and this moment has already surfaced as `price_changed`
+    // above — they are shown the new total and asked to confirm it, never silently charged more.
+    //
+    // The UPDATE is not trusted blind: `products_promo_sold_guard` silently DISCARDS this write
+    // for any role outside {postgres, service_role, supabase_admin}, with no error and no log.
+    // If this connection ever runs as anything else — a pooler, a different prod DATABASE_URL —
+    // the order would commit, the counter would never move, and the cap would fail OPEN with
+    // nothing to show for it. So the claim reads back `promo_sold` and throws if it did not
+    // advance by exactly what was claimed, which aborts (and rolls back) the whole order rather
+    // than let it commit against a cap that silently didn't move.
+    for (const [id, qty] of Object.entries(promoClaims(bd, products))) {
+      const before = products.find(p => p.id === id)!.promoSold ?? 0
+      const claimed = await tx<{ promo_sold: number }[]>`
+        update products set promo_sold = promo_sold + ${qty}
+        where id = ${id}
+        returning promo_sold
+      `
+      if (claimed.length !== 1 || claimed[0].promo_sold !== before + qty) {
+        throw new Error(
+          `promo_sold for product ${id} did not advance by ${qty} (expected ${before + qty}, ` +
+          `got ${claimed[0]?.promo_sold ?? 'no row'}) — the promo cap may be failing open`,
+        )
+      }
+    }
 
     const items = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice }))
     const discount = bd.discount > 0 ? bd.discount : null
@@ -216,7 +247,7 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
- * The cart's products, scoped to this merchant and to what is actually on sale.
+ * The cart's products, scoped to this merchant, on sale, and LOCKED.
  *
  * An id that comes back missing is REFUSED, not dropped: a cart quietly shrinking to the
  * products that happen to exist would commit an order the customer never placed, at a total
@@ -227,9 +258,19 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
  * and surface as a 500 — a bad request dressed up as a server fault. It is a refusal, and the
  * client is told so.
  *
- * `Number(row.price)` is not defensive either. postgres.js returns `numeric` as a STRING to
- * preserve precision, so `price` arrives as '13.00' and would reach round2's `.toFixed()`
- * and throw.
+ * `for update` is the promo cap. Without it two concurrent checkouts both read the last promo
+ * unit and both take it — the same reason `claimVoucher` holds a lock, and a cap that only
+ * holds when nobody is racing it is not a cap. The lock is held until the transaction ends, so
+ * the loser reads the winner's write.
+ *
+ * `order by id` so two carts holding the same products in a different order cannot deadlock
+ * against each other. (Nothing else could anyway — every intake takes the merchant's single
+ * `order_counters` row first, which serialises the shop's intake — but the ordering costs
+ * nothing and does not depend on that staying true.)
+ *
+ * Rows go through `productFromRow`: postgres.js returns `numeric` as a STRING, and the browser
+ * quoted from PostgREST's numbers. Two mappings would refuse every promo order — and every
+ * ordinary one, since `price` goes through the same mapper.
  */
 async function cartProducts(
   tx: postgres.TransactionSql,
@@ -243,16 +284,19 @@ async function cartProducts(
   if (ids.length === 0) throw new OrderError('product_unavailable')
   if (!ids.every(id => UUID.test(id))) throw new OrderError('product_unavailable')
 
-  const rows = await tx<{ id: string; name: string; price: string }[]>`
-    select id, name, price from products
+  const rows = await tx<Record<string, unknown>[]>`
+    select id, name, price, promo_price, promo_limit, promo_end, promo_sold
+    from products
     where merchant_id = ${merchantId} and id = any(${ids}::uuid[]) and active
+    order by id
+    for update
   `
   // Every requested id must have come back. Fewer means one is another shop's, inactive, or
   // gone — and we cannot tell the customer WHICH without leaking whether a stranger's product
   // id exists, so all three are one refusal.
   if (rows.length !== ids.length) throw new OrderError('product_unavailable')
 
-  return rows.map(r => ({ id: r.id, name: r.name, price: Number(r.price) }))
+  return rows.map(productFromRow)
 }
 
 /**

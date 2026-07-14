@@ -35,6 +35,17 @@ app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['POST', 'GET', 
 
 app.get('/health', (c) => c.json({ ok: true }))
 
+/**
+ * The server's clock, published.
+ *
+ * `priceOrder` runs on both sides of the wire and the promo window reads a clock, so the CLOCK is
+ * a price input — and a browser minutes off ours, on the promo's last day, would quote the promo,
+ * be refused (`price_changed`), re-quote with the same skewed clock, and be refused again: a
+ * permanent refusal loop for a legitimate customer. The storefront syncs against this and prices
+ * against the corrected time, so the clock it quotes with is the clock we charge with. See #69.
+ */
+app.get('/api/time', (c) => c.json({ now: new Date().toISOString() }))
+
 // ── Region-resolved platform subscription pricing ─────────────────────────────
 // Country comes from a CDN header (or the `?country=` override for local dev/QA);
 // amounts are read from the region's Stripe Prices and cached briefly per region.

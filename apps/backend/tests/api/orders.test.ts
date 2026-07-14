@@ -81,6 +81,36 @@ async function seedVoucher(merchantId: string, code: string, maxUses: number | n
   if (error) throw new Error(`seeding voucher ${code}: ${error.message}`)
 }
 
+async function productOf(productId: string) {
+  const { data } = await svc().from('products').select('*').eq('id', productId).maybeSingle()
+  return data
+}
+
+/**
+ * A fresh product with a promo, seeded in the SAME two-statement shape as tests/rls/promo.test.ts:
+ * the guard resets promo_sold to 0 whenever promo_price changes (any role, including the service
+ * client), so a non-zero promo_sold has to land in a LATER update that never touches promo_price.
+ */
+async function seedPromoProduct(merchantId: string, opts: {
+  price: number
+  promoPrice: number
+  promoLimit?: number | null
+  promoEnd?: string | null
+  promoSold?: number
+}) {
+  const id = await seedProduct({ merchant_id: merchantId, price: opts.price })
+  const priced = await svc()
+    .from('products')
+    .update({ promo_price: opts.promoPrice, promo_limit: opts.promoLimit ?? null, promo_end: opts.promoEnd ?? null })
+    .eq('id', id)
+  if (priced.error) throw new Error(`seeding promo product (price): ${priced.error.message}`)
+  if (opts.promoSold) {
+    const sold = await svc().from('products').update({ promo_sold: opts.promoSold }).eq('id', id)
+    if (sold.error) throw new Error(`seeding promo product (sold): ${sold.error.message}`)
+  }
+  return id
+}
+
 describe('POST /api/orders', () => {
   let shop: string
   let pendingShop: string
@@ -729,5 +759,90 @@ describe('POST /api/orders', () => {
       expect(Number(order.total)).toBe(23.4)
       expect(order.voucher_code).toBe('SAVE10')
     })
+  })
+
+  // ── Promo pricing: the backend prices and CLAIMS units under the row lock ────
+  //
+  // `promo_sold` is the counter the browser cannot move (products_promo_sold_guard,
+  // #69) — these tests are the other half: proving the backend's own claim actually
+  // advances it, and that the cap really binds a unit at a time under concurrency.
+  describe('promo pricing', () => {
+    it('commits at the promo price and moves the counter', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8 })
+
+      const res = await post(body(shop, promoProductId, { cart: { [promoProductId]: 2 }, quotedTotal: 16 }))
+
+      expect(res.status).toBe(200)
+      const [order] = await ordersOf(shop)
+      expect(Number(order.total)).toBe(16)
+      expect(order.items).toEqual([{ id: promoProductId, name: 'Matcha Cookie', qty: 2, price: 8 }])
+      expect((await productOf(promoProductId))!.promo_sold).toBe(2)
+    })
+
+    // THE CAP BINDS PER UNIT. A cart of 5 against 3 remaining is 3 + 2, not all-or-nothing —
+    // two entries sharing one product id, at two different prices.
+    it('the Nth+1 unit does not get the promo price', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 3, promoSold: 0 })
+
+      const res = await post(body(shop, promoProductId, {
+        cart: { [promoProductId]: 5 },
+        quotedTotal: 3 * 8 + 2 * 10,
+      }))
+
+      expect(res.status).toBe(200)
+      const [order] = await ordersOf(shop)
+      expect(order.items).toEqual([
+        { id: promoProductId, name: 'Matcha Cookie', qty: 3, price: 8 },
+        { id: promoProductId, name: 'Matcha Cookie', qty: 2, price: 10 },
+      ])
+      expect((await productOf(promoProductId))!.promo_sold).toBe(3)
+    })
+
+    // THE ACCEPTANCE CRITERION. Modeled on 'holds a voucher's cap under concurrent load' above,
+    // and the same caveat applies: every intake takes the merchant's single `order_counters` row
+    // FIRST, so these two racers serialize on THAT lock before either ever reaches the product
+    // row's `for update`. A green result here does not, by itself, prove the product lock works
+    // — it proves the cap holds under the counter's serialization, which is the only concurrency
+    // this merchant's intake can ever actually present. The product-row `for update` is what
+    // would still hold the line if that stopped being true (a claim path that did not share the
+    // counter). Kept for the same reason the voucher test is kept: real Postgres, real locks.
+    it('two checkouts race the last promo unit and exactly one wins', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 1, promoSold: 0 })
+      const one = () => post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+
+      const [a, b] = await Promise.all([one(), one()])
+      const statuses = [a.status, b.status].sort()
+
+      // price_changed is a 409 in this API (see 'the backend is the price authority' above),
+      // never a new code — the wire contract does not move for a promo that sold out either.
+      expect(statuses).toEqual([200, 409])
+      const loser = a.status === 409 ? a : b
+      expect(await errorOf(loser)).toBe('price_changed')
+      expect((await productOf(promoProductId))!.promo_sold).toBe(1)
+      expect(await ordersOf(shop)).toHaveLength(1)
+    })
+
+    it('an elapsed promo does not apply', async () => {
+      const past = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoEnd: past })
+
+      const stale = await post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+      expect(stale.status).toBe(409)
+      expect(await errorOf(stale)).toBe('price_changed')
+
+      const fresh = await post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 10 }))
+      expect(fresh.status).toBe(200)
+      expect((await productOf(promoProductId))!.promo_sold).toBe(0)
+    })
+  })
+})
+
+describe('GET /api/time', () => {
+  it('returns a parseable instant', async () => {
+    const res = await app.request('/api/time')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { now: string }
+    expect(Number.isFinite(Date.parse(body.now))).toBe(true)
   })
 })
