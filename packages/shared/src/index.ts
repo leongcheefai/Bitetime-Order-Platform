@@ -2,7 +2,7 @@
 // workspaces compile TypeScript themselves (Vite/esbuild/Vitest), so there is no build
 // step and no dist — the consumers bundle this source directly.
 export { MIN_PASSWORD_LENGTH, isPasswordLongEnough } from './password.js'
-export { priceOrder, voucherError, effectivePrice, shippingFee, EM_STATES } from './pricing.js'
+export { priceOrder, voucherError, effectivePrice, shippingFee, voucherFromRow, EM_STATES } from './pricing.js'
 export type {
   PriceInput, PriceBreakdown, PriceLine,
   VoucherCtx, VoucherErrorCode,

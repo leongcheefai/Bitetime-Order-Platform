@@ -1,4 +1,5 @@
 import type { User } from '@supabase/supabase-js';
+import { voucherFromRow } from '@bitetime/shared';
 import { supabase } from './supabase';
 import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
@@ -429,23 +430,17 @@ export function voucherFullyUsed(v: Voucher) {
 // Reads the merchant-scoped `vouchers` table and maps its columns onto the
 // Voucher shape the pricing module expects.
 
-export function voucherFromRow(row: any): Voucher {
-  return {
-    id: row.id,
-    code: row.code,
-    type: row.kind,                 // 'percent' | 'fixed'
-    value: Number(row.amount),
-    maxUses: row.max_uses ?? null,
-    usedBy: Array.isArray(row.used_by) ? row.used_by : [],
-  } as Voucher;
-}
+// The row → domain mapping now lives in @bitetime/shared: the backend prices orders from the
+// same voucher rows, and a second copy of this mapping is a second way for the two sides to
+// disagree about what a voucher is worth.
+export { voucherFromRow } from '@bitetime/shared'
 
 export async function fetchMerchantVouchers(merchantId: string): Promise<Voucher[]> {
   if (!merchantId) return [];
   const { data, error } = await supabase
     .from('vouchers').select('*').eq('merchant_id', merchantId);
   if (error) return [];
-  return (data ?? []).map(voucherFromRow);
+  return (data ?? []).map(voucherFromRow) as Voucher[];
 }
 
 // Fetch one voucher by code with its current used_by, bypassing any stale
@@ -457,7 +452,7 @@ export async function fetchMerchantVoucher(merchantId: string, code: string): Pr
     .from('vouchers').select('*')
     .eq('merchant_id', merchantId).eq('code', code).maybeSingle();
   if (error || !data) return null;
-  return voucherFromRow(data);
+  return voucherFromRow(data) as Voucher;
 }
 
 // `redeemVoucher` is gone, and its absence is the fix. Redemption was a SECOND call made
@@ -478,7 +473,7 @@ export async function createMerchantVoucher(input: {
     max_uses: input.maxUses ?? null,
   }).select().single();
   if (error) throw error;
-  return voucherFromRow(data);
+  return voucherFromRow(data) as Voucher;
 }
 
 export async function deleteMerchantVoucher(id: string) {

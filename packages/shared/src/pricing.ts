@@ -168,3 +168,23 @@ function promoActive(p: any, now: Date, sold: number): boolean {
   const dateOk = !hasEnd || now <= new Date(p.promoEnd + 'T23:59:59')
   return (p.promoPrice || 0) > 0 && (hasLimit || hasEnd) && limitOk && dateOk
 }
+
+/**
+ * A `vouchers` row → the shape the discount math reads. The column names (`kind`, `amount`,
+ * `max_uses`, `used_by`) and the field names (`type`, `value`, `maxUses`, `usedBy`) are not
+ * the same, and BOTH sides of the wire go through here so neither has to know that.
+ *
+ * `Number(row.amount)` is not defensive: postgres.js returns `numeric` as a STRING to keep
+ * precision, so on the backend `amount` arrives as '10.00'. Unmapped, it reaches `round2`'s
+ * `.toFixed()` and throws.
+ */
+export function voucherFromRow(row: Record<string, unknown>): PricedVoucher {
+  return {
+    id: row.id as string | undefined,
+    code: row.code as string,
+    type: row.kind as string,               // 'percent' | 'fixed'
+    value: Number(row.amount),
+    maxUses: (row.max_uses ?? null) as number | null,
+    usedBy: Array.isArray(row.used_by) ? (row.used_by as string[]) : [],
+  }
+}

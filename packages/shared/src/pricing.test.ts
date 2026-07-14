@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { priceOrder, voucherError } from './pricing.js'
+import { priceOrder, voucherError, voucherFromRow } from './pricing.js'
 import type { PricedProduct } from './pricing.js'
 
 const RATES = { WM: 8, EM: 12 }
@@ -179,5 +179,30 @@ describe('voucherError', () => {
 
   it('returns null for a valid voucher', () => {
     expect(voucherError({ code: 'X', minOrder: 50, email: 'me@x.com' } as any, CTX)).toBeNull()
+  })
+})
+
+describe('voucherFromRow', () => {
+  it('maps the vouchers row columns onto the names the discount math reads', () => {
+    const v = voucherFromRow({
+      id: 'v1', code: 'SAVE10', kind: 'percent', amount: '10',
+      max_uses: 50, used_by: ['a@b.com'],
+    })
+    expect(v).toMatchObject({
+      id: 'v1', code: 'SAVE10', type: 'percent', value: 10,
+      maxUses: 50, usedBy: ['a@b.com'],
+    })
+  })
+
+  // postgres.js hands back `numeric` as a string; supabase-js hands back a number. The
+  // discount math multiplies and rounds, so a string `amount` would reach `.toFixed` and
+  // throw. Both sides of the wire go through this mapper precisely so neither has to know.
+  it('coerces a numeric amount to a number, whichever driver produced it', () => {
+    expect(voucherFromRow({ code: 'X', kind: 'fixed', amount: '5.50' }).value).toBe(5.5)
+    expect(voucherFromRow({ code: 'X', kind: 'fixed', amount: 5.5 }).value).toBe(5.5)
+  })
+
+  it('defaults a missing used_by to an empty list, never undefined', () => {
+    expect(voucherFromRow({ code: 'X', kind: 'fixed', amount: 5 }).usedBy).toEqual([])
   })
 })
