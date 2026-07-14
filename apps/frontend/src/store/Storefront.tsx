@@ -6,10 +6,11 @@ import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError, shopRates, MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
+import { priceOrder, voucherError, shopRates, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
+import { useServerClock } from '../serverClock'
 import { lookupPostcode } from '../postcodes'
 import { MY_STATES } from '../states-my'
 import type { Product, Voucher, AddressParts } from '../types'
@@ -245,10 +246,22 @@ export default function Storefront() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantId])
 
+  // The SERVER's clock, not the device's — the promo window is priced on both sides of the wire and
+  // a disagreement is a refusal. See serverClock.ts.
+  const { now: serverNow, resync: resyncClock } = useServerClock()
+  const now = serverNow()
+
+  // The menu, mapped once for the pricing rule: the rows arrive snake_cased from PostgREST and
+  // `priceOrder` reads `promoPrice`. Unmapped, every promo silently prices at the base price here
+  // and at the promo price on the backend — which is a refused checkout for every promo order.
+  const pricedProducts = activeProducts.map(productFromRow)
+  const promoById = new Map(pricedProducts.map(p => [p.id, promoState(p, now)]))
+
   // One pricing breakdown drives the summary, the order, and the success view.
   const bd = priceOrder({
-    products: activeProducts,
+    products: pricedProducts,
     cart,
+    now,
     mode,
     state: mode === 'delivery' ? address.state : null,
     rates: { WM: rateWM, EM: rateEM },
@@ -296,7 +309,7 @@ export default function Storefront() {
     const err = voucherError(v, {
       subtotal: bd.subtotal + bd.shipping,
       userEmail: voucherEntry,
-      now: new Date(),
+      now,
       fullyUsed: v ? voucherFullyUsed(v) : true,
     })
     if (err || !v) {
@@ -391,6 +404,11 @@ export default function Storefront() {
       lookupProducts(merchant.id).catch(() => null),
       code ? lookupMerchantVoucher(merchant.id, code).catch(() => ({ ok: false as const })) : null,
     ])
+    // The clock is a quote input too, and the only one a menu refetch cannot repair: if the initial
+    // sync failed we are pricing the promo window against the device's clock, and re-sending the
+    // same quote would be refused identically, forever. A backend that can refuse an order can
+    // answer /api/time.
+    void resyncClock()
     // `[]` is an ANSWER — the shop really sells nothing, and pruning the whole cart is right.
     // `null` is the absence of one, and prunes nothing.
     // adoptProducts, not setProducts: a refusal that refreshed the menu but left the dead id in
@@ -419,7 +437,7 @@ export default function Storefront() {
           const verr = voucherError(fresh, {
             subtotal: bd.subtotal + bd.shipping,
             userEmail: voucherEntry,
-            now: new Date(),
+            now,
             fullyUsed: voucherFullyUsed(fresh),
           })
           if (verr) {
@@ -599,8 +617,8 @@ export default function Storefront() {
             </p>
 
             <div className="max-w-[360px] mx-auto mb-5 text-left px-4 py-3 bg-surface-raised border-[1.5px] border-divider rounded-md">
-              {success.items.map(item => (
-                <div key={item.id} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+              {success.items.map((item, i) => (
+                <div key={i} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                   <span className="shrink-0">{item.name} × {item.qty}</span>
                   <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
                 </div>
@@ -728,9 +746,35 @@ export default function Storefront() {
                       {productDescr(p) && (
                         <div className="text-[12px] text-rose-muted mt-0.5 leading-[1.4]">{productDescr(p)}</div>
                       )}
-                      <div className="text-[13px] font-medium text-oxblood mt-[5px]">
-                        {formatMoney(p.price, currency)} / {formatUnit(p.unit_quantity, p.unit || t('unit', '个'))}
-                      </div>
+                      {(() => {
+                        const promo = promoById.get(p.id)
+                        const unit = formatUnit(p.unit_quantity, p.unit || t('unit', '个'))
+                        if (!promo) {
+                          return (
+                            <div className="text-[13px] font-medium text-oxblood mt-[5px]">
+                              {formatMoney(p.price, currency)} / {unit}
+                            </div>
+                          )
+                        }
+                        return (
+                          <div className="flex items-center gap-2 mt-[5px] flex-wrap">
+                            <span className="text-[13px] font-medium text-oxblood">
+                              {formatMoney(promo.price, currency)} / {unit}
+                            </span>
+                            <span className="text-[12px] text-rose-muted line-through">
+                              {formatMoney(p.price, currency)}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
+                              {t('Promo', '优惠')}
+                            </span>
+                            {Number.isFinite(promo.remaining) && (
+                              <span className="text-[11px] text-rose-muted">
+                                {t(`${promo.remaining} left at this price`, `此价格剩 ${promo.remaining} 件`)}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -967,11 +1011,11 @@ export default function Storefront() {
               </p>
             ) : (
               <>
-                {cartItems.map(item => {
+                {cartItems.map((item, i) => {
                   const prod = activeProducts.find(p => p.id === item.id)
                   const displayName = (lang === 'zh' && prod?.name_zh) ? prod.name_zh : item.name
                   return (
-                    <div key={item.id} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                    <div key={i} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                       <span className="shrink-0">{displayName} × {item.qty}</span>
                       <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
                     </div>
