@@ -163,7 +163,7 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
   }
   if (input.extraLines) lines.push(...input.extraLines)
 
-  const subtotal = lines.reduce((s, l) => s + l.lineTotal, 0)
+  const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0))
   const shipping = input.resolvedShipping ?? shippingFee(input.mode, input.state, input.rates, input.samedayFee)
 
   const beforeDiscount = subtotal + shipping
@@ -230,7 +230,13 @@ export interface PromoState {
 export function promoState(p: PricedProduct, now: Date): PromoState | null {
   const price = num(p.promoPrice)
   if (price === null) return null
-  if (p.promoEnd && now > new Date(p.promoEnd)) return null
+  if (p.promoEnd) {
+    const end = new Date(p.promoEnd)
+    // An unparseable end date must FAIL CLOSED (no promo), never "runs forever": every NaN
+    // comparison (`now > NaN-date`) is false, so a bad string would otherwise sail through.
+    if (isNaN(end.getTime())) return null
+    if (now > end) return null // inclusive: a promo is still live at exactly promo_end
+  }
 
   const limit = num(p.promoLimit)
   if (limit === null) return { price, remaining: Infinity }   // uncapped, and that is a choice
@@ -242,10 +248,19 @@ export function promoState(p: PricedProduct, now: Date): PromoState | null {
 /**
  * How many units of each product this breakdown claims at the promo price — what the backend
  * increments `promo_sold` by, and nothing else. The units claimed are exactly the units priced.
+ *
+ * `products` (pass `input.products`, the same array given to `priceOrder`) is what tells a cart
+ * line apart from an `extraLines` line: `priceOrder` appends `extraLines` (e.g. a free referral
+ * gift) straight onto `bd.lines`, and a `promo: true` extra line has no row behind it — claiming
+ * it would `update products set promo_sold = promo_sold + 1 where id = <an id that need not
+ * exist>`. Only ids that came from the cart (i.e. appear in `products`) are ever claimed.
  */
-export function promoClaims(bd: PriceBreakdown): Record<string, number> {
+export function promoClaims(bd: PriceBreakdown, products: PricedProduct[]): Record<string, number> {
+  const ids = new Set(products.map(p => p.id))
   const claims: Record<string, number> = {}
-  for (const l of bd.lines) if (l.promo) claims[l.id] = (claims[l.id] ?? 0) + l.qty
+  for (const l of bd.lines) {
+    if (l.promo && ids.has(l.id)) claims[l.id] = (claims[l.id] ?? 0) + l.qty
+  }
   return claims
 }
 
@@ -259,18 +274,32 @@ export function promoClaims(bd: PriceBreakdown): Record<string, number> {
  *
  * The row is spread through, so the caller keeps the fields pricing does not read (`image_urls`,
  * `unit`, `active`, …).
+ *
+ * `price` is `numeric not null` in Postgres, so a missing/unparseable value is unreachable from
+ * a real row — but it is also the one field where "default to 0" means FREE, and this mapper is
+ * the module's public front door. A `select` that forgets the column throws here, loudly, rather
+ * than shipping every item at RM0.
+ *
+ * `promo_end` maps to `null` (no promo end, not "no promo") when it is unparseable: unreachable
+ * from a real `timestamptz` column, but `new Date('garbage').toISOString()` throws a `RangeError`
+ * mid-checkout otherwise — a 500 where the answer should be a plain refusal.
  */
 export function productFromRow(row: Record<string, unknown>): PricedProduct {
+  const price = num(row.price)
+  if (price === null) {
+    throw new Error(`productFromRow: missing/unparseable price for product ${String(row.id)}`)
+  }
   const end = row.promo_end
+  const promoEnd = end ? new Date(end as string | Date) : null
   return {
     ...row,
     id: row.id as string,
     name: row.name as string,
-    price: num(row.price) ?? 0,
+    price,
     promoPrice: num(row.promo_price),
     promoLimit: num(row.promo_limit),
     // postgres.js hands back a Date; PostgREST hands back an ISO string. `new Date` takes both.
-    promoEnd: end ? new Date(end as string | Date).toISOString() : null,
+    promoEnd: promoEnd && !isNaN(promoEnd.getTime()) ? promoEnd.toISOString() : null,
     promoSold: num(row.promo_sold) ?? 0,
   }
 }

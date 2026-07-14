@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   priceOrder, voucherError, voucherFromRow, shopRates, DEFAULT_WM_RATE,
-  promoClaims, productFromRow,
+  promoClaims, productFromRow, promoState,
 } from './pricing.js'
 import type { PricedProduct } from './pricing.js'
 
@@ -183,18 +183,86 @@ describe('promo', () => {
       { id: 'a', name: 'a', qty: 7, unitPrice: 100, lineTotal: 700, promo: false },
     ])
     expect(bd.subtotal).toBe(940)
-    expect(promoClaims(bd)).toEqual({ a: 3 })
+    expect(promoClaims(bd, [product('a', 100, { promoPrice: 80, promoLimit: 5, promoSold: 2 })])).toEqual({ a: 3 })
   })
 
   it('a sold-out cap prices the whole line at base, and claims nothing', () => {
+    const products = [product('a', 100, { promoPrice: 80, promoLimit: 5, promoSold: 5 })]
     const bd = priceOrder({
-      products: [product('a', 100, { promoPrice: 80, promoLimit: 5, promoSold: 5 })],
-      cart: { a: 2 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+      products, cart: { a: 2 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
     })
     expect(bd.lines).toEqual([
       { id: 'a', name: 'a', qty: 2, unitPrice: 100, lineTotal: 200, promo: false },
     ])
-    expect(promoClaims(bd)).toEqual({})
+    expect(promoClaims(bd, products)).toEqual({})
+  })
+
+  it('promoClaims never claims an extraLines id, even when it is flagged promo: true', () => {
+    const products = [product('a', 100, { promoPrice: 80, promoEnd: FUTURE })]
+    const bd = priceOrder({
+      products, cart: { a: 1 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+      extraLines: [{ id: 'gift', name: '🎁 Gift', qty: 1, unitPrice: 0, lineTotal: 0, promo: true }],
+    })
+    // the cart line for 'a' is claimed; the extra 'gift' line is not, because it never came
+    // from `products` — there is no `products` row backing it to increment `promo_sold` on.
+    expect(promoClaims(bd, products)).toEqual({ a: 1 })
+  })
+
+  it('promoClaims aggregates the same product id across two promo lines', () => {
+    const products = [product('a', 100, { promoPrice: 80, promoEnd: FUTURE })]
+    const bd = priceOrder({ products, cart: { a: 2 }, mode: 'pickup', rates: { WM: 8, EM: 18 } })
+    // synthesize a second promo line for the same id, as a caller merging two carts might
+    const merged = { ...bd, lines: [...bd.lines, { ...bd.lines[0], qty: 3 }] }
+    expect(promoClaims(merged, products)).toEqual({ a: 5 })
+  })
+
+  it('a promo product priced alongside a normal product in one cart', () => {
+    const products = [
+      product('promo-item', 100, { promoPrice: 80, promoEnd: FUTURE }),
+      product('normal-item', 30),
+    ]
+    const bd = priceOrder({
+      products, cart: { 'promo-item': 1, 'normal-item': 2 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+    })
+    expect(bd.lines).toEqual([
+      { id: 'promo-item', name: 'promo-item', qty: 1, unitPrice: 80, lineTotal: 80, promo: true },
+      { id: 'normal-item', name: 'normal-item', qty: 2, unitPrice: 30, lineTotal: 60, promo: false },
+    ])
+    expect(bd.subtotal).toBe(140)
+    expect(promoClaims(bd, products)).toEqual({ 'promo-item': 1 })
+  })
+
+  it('unrounded line totals sum to a rounded subtotal (0.1 + 0.2 display defect)', () => {
+    const bd = priceOrder({
+      products: [product('a', 0.1), product('b', 0.2)],
+      cart: { a: 1, b: 1 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+    })
+    expect(bd.subtotal).toBe(0.3)
+  })
+})
+
+describe('promoState', () => {
+  it('promoLimit: 0 means no promo (sold out), not "uncapped"', () => {
+    const p = product('a', 100, { promoPrice: 80, promoLimit: 0, promoSold: 0 })
+    expect(promoState(p, NOW)).toBeNull()
+  })
+
+  it('promoSold greater than promoLimit means no promo, and promoClaims is {}', () => {
+    const p = product('a', 100, { promoPrice: 80, promoLimit: 5, promoSold: 9 })
+    expect(promoState(p, NOW)).toBeNull()
+    const bd = priceOrder({ products: [p], cart: { a: 1 }, mode: 'pickup', rates: { WM: 8, EM: 18 }, now: NOW })
+    expect(promoClaims(bd, [p])).toEqual({})
+  })
+
+  it('a promo is still live at exactly promo_end — the check is inclusive', () => {
+    const end = '2027-01-01T00:00:00.000Z'
+    const p = product('a', 100, { promoPrice: 80, promoEnd: end })
+    expect(promoState(p, new Date(end))).toEqual({ price: 80, remaining: Infinity })
+  })
+
+  it('an unparseable promoEnd fails closed: no promo, never "runs forever"', () => {
+    const p = product('a', 100, { promoPrice: 80, promoEnd: 'garbage' })
+    expect(promoState(p, NOW)).toBeNull()
   })
 })
 
@@ -217,6 +285,52 @@ describe('productFromRow', () => {
   it('a row with no promo maps to no promo, and 0 survives', () => {
     expect(productFromRow({ id: 'a', name: 'a', price: 10, promo_price: null }).promoPrice).toBeNull()
     expect(productFromRow({ id: 'a', name: 'a', price: 10, promo_price: '0' }).promoPrice).toBe(0)
+  })
+
+  // Unreachable from a real timestamptz column, but this mapper is the module's public front
+  // door: `new Date('garbage').toISOString()` throws a RangeError, which would turn into a 500
+  // mid-checkout instead of a plain refusal.
+  it('an unparseable promo_end maps to null, rather than throwing', () => {
+    expect(() => productFromRow({ id: 'a', name: 'a', price: 10, promo_end: 'garbage' })).not.toThrow()
+    expect(productFromRow({ id: 'a', name: 'a', price: 10, promo_end: 'garbage' }).promoEnd).toBeNull()
+  })
+
+  // products.price is `numeric not null`, so this is unreachable from a real row — but it is
+  // the one default in this file that would round money DOWN, and a select that forgot the
+  // column must not ship the item for free.
+  it('throws rather than defaulting a missing/unparseable price to 0', () => {
+    expect(() => productFromRow({ id: 'a', name: 'a', price: null })).toThrow()
+    expect(() => productFromRow({ id: 'a', name: 'a', price: 'not-a-number' })).toThrow()
+    expect(() => productFromRow({ id: 'a', name: 'a' })).toThrow()
+  })
+
+  // The doc comment promises the row is spread through untouched; nothing checked that.
+  it('preserves untouched columns the pricing rule does not read', () => {
+    const p = productFromRow({
+      id: 'a', name: 'a', price: 10,
+      image_urls: ['x.jpg'], unit: 'plate', active: true,
+    })
+    expect(p.image_urls).toEqual(['x.jpg'])
+    expect(p.unit).toBe('plate')
+    expect(p.active).toBe(true)
+  })
+
+  // The wire is not pinned shut by any test otherwise: PricedProduct keeps an index signature,
+  // so a raw snake_case row type-checks fine with promoPrice: undefined — silent no-promo. This
+  // pins the two real driver shapes (postgres.js vs. PostgREST) to an identical breakdown.
+  it('both drivers price a promo identically — this is what holds the wire shut', () => {
+    // postgres.js (backend): numerics arrive as STRINGS, timestamptz as a Date.
+    const pg = productFromRow({
+      id: 'a', name: 'a', price: '100.00', promo_price: '80.00',
+      promo_limit: 5, promo_sold: 2, promo_end: new Date('2027-01-01T00:00:00Z'),
+    })
+    // PostgREST (browser): numerics arrive as NUMBERS, timestamptz as an ISO string.
+    const rest = productFromRow({
+      id: 'a', name: 'a', price: 100, promo_price: 80,
+      promo_limit: 5, promo_sold: 2, promo_end: '2027-01-01T00:00:00+00:00',
+    })
+    const opts = { cart: { a: 10 }, mode: 'pickup' as const, rates: { WM: 8, EM: 18 } }
+    expect(priceOrder({ products: [pg], ...opts })).toEqual(priceOrder({ products: [rest], ...opts }))
   })
 })
 
