@@ -141,6 +141,40 @@ export default function Storefront() {
   // server then refuses. A voucher requires an account: there is no guest key (#72).
   const voucherEntry = (account?.email ?? '').trim().toLowerCase()
 
+  /**
+   * The session can END under a mounted storefront — a SIGNED_OUT from another tab, a token
+   * refresh that fails — and a voucher is keyed to an ACCOUNT (#72). So when the account goes,
+   * the voucher must go with it.
+   *
+   * Nothing else here notices. The Voucher section tests `appliedVoucher` BEFORE `!account`, so
+   * it would keep showing "Applied: CODE / Remove", and `priceOrder` would keep subtracting the
+   * discount, for a customer who can no longer claim it: the backend refuses a guest's claim
+   * outright (`voucher_requires_account`) and rolls the order back. Nothing commits, so this is
+   * not a hole — it is a promise the checkout cannot keep, and the customer would only learn
+   * that by submitting and eating the refusal.
+   *
+   * Reconciled during render against the account this voucher was applied under, not in an
+   * effect: an effect would paint the stale discount first and take it back a frame later, and
+   * `setState` in an effect is what the compiler's lint (rightly) refuses. Same instinct as
+   * `adoptProducts` below — drop what can no longer be honoured at the moment the change
+   * arrives, and SAY so rather than letting it vanish silently.
+   */
+  const [voucherAccount, setVoucherAccount] = useState(account)
+  if (account !== voucherAccount) {
+    setVoucherAccount(account)
+    // Only a session that ENDED clears anything. `account` is a fresh object on every token
+    // refresh, so an identity change with a still-signed-in customer must not confiscate their
+    // voucher — and `undefined` (the session still resolving, at mount) can hold no voucher yet.
+    if (!account && appliedVoucher) {
+      setAppliedVoucher(null)
+      setVoucherInput('')
+      setVoucherMsg(t(
+        `Signed out — the voucher ${appliedVoucher.code} was removed. Sign in again to use it.`,
+        `已退出登录 — 优惠券 ${appliedVoucher.code} 已移除，请重新登录后使用。`,
+      ))
+    }
+  }
+
   const productName = (p: Product) =>
     (lang === 'zh' && p.name_zh) ? p.name_zh : p.name
   const productDescr = (p: Product) =>
@@ -872,17 +906,16 @@ export default function Storefront() {
           {/* Voucher */}
           <div className="mb-7">
             <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Voucher', '优惠券')}</div>
-            {appliedVoucher ? (
-              <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                <span className="shrink-0">{t('Applied', '已应用')}: <strong>{appliedVoucher.code}</strong></span>
-                <button type="button" className="text-[13px] text-rose-muted cursor-pointer underline mt-5 inline-block" onClick={removeVoucher}>
-                  {t('Remove', '移除')}
-                </button>
-              </div>
-            ) : !account ? (
+            {!account ? (
               // A voucher is keyed to a verified account, so a guest cannot carry one (#72).
               // This is an OFFER, not a gate: the checkout path itself is untouched and guest
               // checkout is still one tap. You just cannot bring a discount through it.
+              //
+              // `!account` is asked FIRST, before `appliedVoucher`. The reconciliation above
+              // already clears the voucher when the session ends, so the two can never disagree
+              // — but asked the other way round, a signed-out customer holding an applied
+              // voucher was shown "Applied: CODE" for a discount the backend would refuse. The
+              // branch that decides is the one that cannot be wrong.
               <button
                 type="button"
                 onClick={() => setSignInOpen(true)}
@@ -890,6 +923,13 @@ export default function Storefront() {
               >
                 {t('Sign in to use a voucher', '登录后可使用优惠券')}
               </button>
+            ) : appliedVoucher ? (
+              <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                <span className="shrink-0">{t('Applied', '已应用')}: <strong>{appliedVoucher.code}</strong></span>
+                <button type="button" className="text-[13px] text-rose-muted cursor-pointer underline mt-5 inline-block" onClick={removeVoucher}>
+                  {t('Remove', '移除')}
+                </button>
+              </div>
             ) : (
               <div className="flex items-stretch gap-2">
                 <Input
