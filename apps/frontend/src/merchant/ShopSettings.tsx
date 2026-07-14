@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
 import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret, merchantHasOrders } from '../store'
+import { shopRates } from '@bitetime/shared'
 import { CURRENCIES, CURRENCY_CODES, DEFAULT_CURRENCY, currencyDef } from '../currency'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -95,12 +96,19 @@ function SaveRow({ busy, label }: { busy: boolean; label: { idle: string; busy: 
 
 function ShippingTab({ onDirtyChange }: TabProps) {
   const { t, merchant, refreshMerchant } = useSession()
-  const [saved, setSaved] = useState<SettingsFields>(() => ({
-    currency: merchant!.currency ?? DEFAULT_CURRENCY,
-    wm: String(merchant!.shipping?.WM ?? 8),
-    em: String(merchant!.shipping?.EM ?? 18),
-    pickupAddress: merchant!.pickup_address ?? '',
-  }))
+  const [saved, setSaved] = useState<SettingsFields>(() => {
+    // shopRates, not a local `?? 8` / `?? 18`: this form shows the merchant what a row with a
+    // missing key CHARGES, and the charge is decided by that one function on both sides of the
+    // wire. A third fallback rule here would show a rate (EM 18) that nobody quotes and nobody
+    // bills — and saving it would move a real price the merchant never meant to touch.
+    const rates = shopRates(merchant!.shipping)
+    return {
+      currency: merchant!.currency ?? DEFAULT_CURRENCY,
+      wm: String(rates.WM),
+      em: String(rates.EM),
+      pickupAddress: merchant!.pickup_address ?? '',
+    }
+  })
   const [fields, setFields] = useState<SettingsFields>(saved)
   const [busy, setBusy] = useState(false)
   // Currency locks after the first order so past orders/aggregates never

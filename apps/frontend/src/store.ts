@@ -516,9 +516,10 @@ const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
  * Why an order was refused, in the backend's own words.
  *
  * A DELIBERATE TWIN of `OrderErrorCode` in `apps/backend/src/orders.ts` — the backend is a
- * separate workspace, and these codes are the wire contract between them. Add a code there
- * and you must add it here and give it a message in `Storefront.tsx`'s VOUCHER_REFUSALS, or
- * the customer gets "something went wrong" for a refusal we know the reason for.
+ * separate workspace, and these codes are the wire contract between them. Add a code there and
+ * you must add it here and give it a `t(en, zh)` message in `Storefront.tsx`'s `handleSubmit`
+ * catch block (VOUCHER_REFUSALS is the table for the voucher ones), or the customer gets
+ * "something went wrong" for a refusal we know the reason for.
  */
 export type OrderErrorCode =
   | 'merchant_not_found'
@@ -529,6 +530,7 @@ export type OrderErrorCode =
   | 'voucher_entry_required'
   | 'price_changed'
   | 'product_unavailable'
+  | 'delivery_state_required'
 
 /**
  * A refusal the customer can do something about — retry without the voucher, come back later.
@@ -567,7 +569,9 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   merchantId: string
   customerName: string
   customerWa: string
-  mode: string
+  // The wire contract, not a string: the backend allowlists exactly these two and 400s on
+  // anything else, because `mode` selects the shipping fee. Mirrors PlaceOrderInput's union.
+  mode: 'pickup' | 'delivery'
   address?: AddressParts | string
   cart: Record<string, number>
   quotedTotal: number

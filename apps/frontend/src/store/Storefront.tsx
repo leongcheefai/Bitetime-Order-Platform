@@ -108,11 +108,6 @@ export default function Storefront() {
   const currency = merchant?.currency
   const slug = merchant?.slug
 
-  useEffect(() => {
-    if (!merchantId) return
-    fetchProducts(merchantId).then(setProducts)
-  }, [merchantId])
-
   // The guest choice is remembered per shop, so the gate is met once here and never again —
   // and a choice made at another shop cannot silence it at this one. `chosenAt` carries the
   // slug rather than a bare flag: this component can be reused across shops, and a bare flag
@@ -149,6 +144,60 @@ export default function Storefront() {
   const productDescr = (p: Product) =>
     (lang === 'zh' && p.descr_zh) ? p.descr_zh : (p.descr || '')
 
+  /**
+   * Take a freshly loaded menu — and DROP the cart entries it no longer sells, saying which.
+   *
+   * The pruning is the load-bearing half. The cart is what the browser POSTs, but the menu, the
+   * summary and the quote are all built from `activeProducts` — so a product deactivated or
+   * deleted mid-session leaves a cart entry that is invisible, has no −/+ control to remove it
+   * with, and prices at nothing (`priceOrder` skips an id it cannot find). The backend refuses
+   * the whole cart for it (`product_unavailable`), and without this the customer is trapped:
+   * every retry re-sends the same unremovable id and is refused identically, forever, and only
+   * a page reload gets them out. This is what makes that refusal's refetch RECOVER rather than
+   * merely re-refuse.
+   *
+   * It happens HERE, where the menu arrives, and not in an effect watching it: every route by
+   * which `products` can change goes through this function, and a `setCart` reacting to a render
+   * would just be the same write one beat later.
+   */
+  const adoptProducts = (fresh: Product[]) => {
+    setProducts(fresh)
+
+    const gone = Object.keys(cart).filter(id => !fresh.some(p => p.id === id && p.active))
+    if (gone.length === 0) return
+    setCart(prev => {
+      const next = { ...prev }
+      for (const id of gone) delete next[id]
+      return next
+    })
+
+    // A vanishing line is told, never silent — that would be the same bug wearing a nicer face.
+    // A DEACTIVATED product is still in the rows (only `active` flipped), so it can be named; a
+    // DELETED one is not, which is why the fallback exists rather than a name we would invent.
+    const names = gone
+      .map(id => fresh.find(p => p.id === id))
+      .filter((p): p is Product => !!p)
+      .map(productName)
+    toast(
+      names.length === gone.length
+        ? t(`Removed from your cart — no longer available: ${names.join(', ')}`,
+            `已从购物车移除（已下架）：${names.join('、')}`)
+        : t('An item in your cart is no longer available and has been removed.',
+            '购物车中有商品已下架，已为你移除。'),
+    )
+  }
+
+  // The menu, loaded once per shop. It stands below adoptProducts because it calls it, and the
+  // compiler's lint (rightly) refuses a hook that reaches back up for a value declared later.
+  useEffect(() => {
+    if (!merchantId) return
+    fetchProducts(merchantId).then(adoptProducts)
+    // adoptProducts is re-made every render, and depending on it would re-fetch the menu on each
+    // one; the menu is a per-SHOP load. Its closure over `cart` is the mount's empty one, and
+    // that is exactly right — nothing can be in the cart before the menu it is chosen from.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merchantId])
+
   // One pricing breakdown drives the summary, the order, and the success view.
   const bd = priceOrder({
     products: activeProducts,
@@ -159,6 +208,13 @@ export default function Storefront() {
     // Before a state is resolved, show the WM base estimate so the summary
     // matches the Delivery toggle instead of flashing RM 0.00; once the
     // postcode fills the state, region logic (WM/EM) takes over.
+    //
+    // This estimate is a DISPLAY fallback and nothing more, and what keeps it from becoming a
+    // lie is `deliveryReady` below — which is now load-bearing for the PRICE, not just for form
+    // validity. It is the only thing stopping a stateless delivery from being submitted: the
+    // quote here would say WM, the backend derives its region from `address.state` and would
+    // find none, and it refuses such an order outright (`delivery_state_required`) rather than
+    // shipping it for free. Weaken the gate and the two sides diverge.
     resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     voucher: appliedVoucher,
   })
@@ -242,6 +298,31 @@ export default function Storefront() {
     })
   }
 
+  /**
+   * Re-read everything the quote is built from: the products AND the applied voucher.
+   *
+   * Both are inputs to `priceOrder`, and the backend prices from its own fresh copy of both, so
+   * a refusal that refreshed only the products left the other half of the quote stale — and a
+   * stale input re-quotes to the same refused number on the next tap. A voucher that has since
+   * been deleted comes back null and is dropped, said out loud rather than silently: the
+   * customer can re-apply a code, but not one that no longer exists.
+   */
+  const refreshQuoteSources = async () => {
+    const [freshProducts, freshVoucher] = await Promise.all([
+      fetchProducts(merchant.id).catch(() => null),
+      appliedVoucher ? fetchMerchantVoucher(merchant.id, appliedVoucher.code).catch(() => null) : null,
+    ])
+    // adoptProducts, not setProducts: a refusal that refreshed the menu but left the dead id in
+    // the cart would be refused again on the very next tap.
+    if (freshProducts) adoptProducts(freshProducts)
+    if (appliedVoucher) {
+      setAppliedVoucher(freshVoucher)
+      if (!freshVoucher) {
+        setVoucherMsg(t('❌ That voucher is no longer available.', '❌ 此优惠券已失效。'))
+      }
+    }
+  }
+
   const handleSubmit = async () => {
     if (!canSubmit) return
     setBusy(true)
@@ -266,6 +347,13 @@ export default function Storefront() {
             setError(voucherErrorText(verr, fresh))
             return
           }
+          // ADOPT it, don't just read it. The fresh row is what the backend prices from — it
+          // locks and reads that same row inside the transaction — so a merchant who edits the
+          // voucher's amount mid-checkout leaves us quoting a discount that no longer exists.
+          // Checking the fresh row and then quoting the stale one refuses this order
+          // (`price_changed`) and refuses every retry the same way, forever, because the retry
+          // re-quotes from the same stale value. This is the line that ends that loop.
+          setAppliedVoucher(fresh)
         }
       }
       // On a storefront every signed-in user is a customer, whatever role they hold elsewhere:
@@ -323,8 +411,12 @@ export default function Storefront() {
         // the new numbers and let them decide — charging the new total silently would bill a
         // number they never agreed to, and honouring the stale one would let an old quote buy a
         // discount the shop withdrew.
-        const fresh = await fetchProducts(merchant.id).catch(() => null)
-        if (fresh) setProducts(fresh)
+        //
+        // The VOUCHER is re-read alongside the products, and it has to be: an edited
+        // `vouchers.amount` moves the total exactly as an edited price does, and re-quoting from
+        // the stale voucher would be refused again on the very next tap — the same refusal loop,
+        // forever, until the customer thought to remove and re-apply the code themselves.
+        await refreshQuoteSources()
         const msg = t(
           'Prices at this shop just changed. Please review your order and place it again.',
           '本店价格刚刚有所调整，请确认订单后重新下单。',
@@ -332,13 +424,25 @@ export default function Storefront() {
         setError(msg)
         toast.error(msg)
       } else if (code === 'product_unavailable') {
-        // Something in the cart stopped being on sale mid-checkout. Refetch so the menu tells
-        // the truth, and let them rebuild the cart rather than guessing which item it was.
-        const fresh = await fetchProducts(merchant.id).catch(() => null)
-        if (fresh) setProducts(fresh)
+        // Something in the cart stopped being on sale mid-checkout. Refetching is what RECOVERS
+        // the checkout, not just what refreshes the menu: `adoptProducts` takes the new menu and
+        // drops the cart ids that are gone, saying which. Without that, the invisible id stayed
+        // in the cart and every retry was refused identically.
+        await refreshQuoteSources()
         const msg = t(
-          'Something in your cart is no longer available. Please check your order and try again.',
-          '购物车中有商品已下架，请检查订单后重试。',
+          'Something in your cart is no longer available. It has been removed — please review your order and place it again.',
+          '购物车中有商品已下架，已为你移除，请确认订单后重新下单。',
+        )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'delivery_state_required') {
+        // Unreachable from this form — `deliveryReady` will not let a stateless delivery be
+        // submitted — and it is here precisely because that gate is the ONLY thing making it so.
+        // A delivery with no state is priced at zero shipping, which is why the backend refuses
+        // it rather than quietly eating the fee.
+        const msg = t(
+          'Please choose the state you are delivering to.',
+          '请选择送货的州属。',
         )
         setError(msg)
         toast.error(msg)
