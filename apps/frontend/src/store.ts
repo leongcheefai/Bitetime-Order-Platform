@@ -551,7 +551,7 @@ export type OrderErrorCode =
   | 'voucher_not_found'
   | 'voucher_already_used'
   | 'voucher_fully_used'
-  | 'voucher_entry_required'
+  | 'voucher_requires_account'
   | 'price_changed'
   | 'product_unavailable'
   | 'delivery_state_required'
@@ -595,7 +595,7 @@ export class OrderError extends Error {
  * client could name its own. If the backend's price disagrees with our quote it refuses with
  * `price_changed` rather than charging a number the customer never confirmed.
  */
-export async function placeOrder({ merchantId, customerName, customerWa, mode, address, cart, quotedTotal, voucherCode, voucherEntry }: {
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, cart, quotedTotal, voucherCode }: {
   merchantId: string
   customerName: string
   customerWa: string
@@ -606,7 +606,6 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   cart: Record<string, number>
   quotedTotal: number
   voucherCode?: string | null
-  voucherEntry?: string | null
 }) {
   // Optional: a guest has no session, and guest checkout is a first-class path.
   const { data: { session } } = await supabase.auth.getSession()
@@ -622,7 +621,7 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     },
     body: JSON.stringify({
       merchantId, customerName, customerWa, mode, address,
-      cart, quotedTotal, voucherCode, voucherEntry,
+      cart, quotedTotal, voucherCode,
     }),
   }).catch(() => null)
   if (!res) throw new OrderError('network')

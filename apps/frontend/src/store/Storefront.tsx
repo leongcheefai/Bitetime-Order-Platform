@@ -56,8 +56,8 @@ const VOUCHER_REFUSALS = {
     t('You have already used this voucher. Please place the order without it.', '你已使用过此优惠券，请不使用优惠券重新下单。'),
   voucher_fully_used: (t: (en: string, zh: string) => string) =>
     t('This voucher has been fully claimed. Please place the order without it.', '此优惠券已被领完，请不使用优惠券重新下单。'),
-  voucher_entry_required: (t: (en: string, zh: string) => string) =>
-    t('Enter the email or phone you are ordering with to use a voucher.', '使用优惠券需填写下单的邮箱或手机号。'),
+  voucher_requires_account: (t: (en: string, zh: string) => string) =>
+    t('Please sign in to use a voucher, then place the order again.', '使用优惠券需先登录，登录后请重新下单。'),
 } as const
 
 export default function Storefront() {
@@ -136,8 +136,44 @@ export default function Storefront() {
   // by a ringgit would not be a display bug — it would refuse the checkout.
   const { WM: rateWM, EM: rateEM } = shopRates(merchant?.shipping)
   const baseDeliveryFee = rateWM // shown on the Delivery toggle before a state is known
-  // One-per-customer identity: account email when signed in, else the WhatsApp number.
-  const voucherEntry = (account?.email || wa || '').trim().toLowerCase()
+  // The voucher's one-per-customer key — the account email, and nothing else. It must match
+  // what the SERVER keys on (the JWT's email), or this pre-flight green-lights a claim the
+  // server then refuses. A voucher requires an account: there is no guest key (#72).
+  const voucherEntry = (account?.email ?? '').trim().toLowerCase()
+
+  /**
+   * The session can END under a mounted storefront — a SIGNED_OUT from another tab, a token
+   * refresh that fails — and a voucher is keyed to an ACCOUNT (#72). So when the account goes,
+   * the voucher must go with it.
+   *
+   * Nothing else here notices. The Voucher section tests `appliedVoucher` BEFORE `!account`, so
+   * it would keep showing "Applied: CODE / Remove", and `priceOrder` would keep subtracting the
+   * discount, for a customer who can no longer claim it: the backend refuses a guest's claim
+   * outright (`voucher_requires_account`) and rolls the order back. Nothing commits, so this is
+   * not a hole — it is a promise the checkout cannot keep, and the customer would only learn
+   * that by submitting and eating the refusal.
+   *
+   * Reconciled during render against the account this voucher was applied under, not in an
+   * effect: an effect would paint the stale discount first and take it back a frame later, and
+   * `setState` in an effect is what the compiler's lint (rightly) refuses. Same instinct as
+   * `adoptProducts` below — drop what can no longer be honoured at the moment the change
+   * arrives, and SAY so rather than letting it vanish silently.
+   */
+  const [voucherAccount, setVoucherAccount] = useState(account)
+  if (account !== voucherAccount) {
+    setVoucherAccount(account)
+    // Only a session that ENDED clears anything. `account` is a fresh object on every token
+    // refresh, so an identity change with a still-signed-in customer must not confiscate their
+    // voucher — and `undefined` (the session still resolving, at mount) can hold no voucher yet.
+    if (!account && appliedVoucher) {
+      setAppliedVoucher(null)
+      setVoucherInput('')
+      setVoucherMsg(t(
+        `Signed out — the voucher ${appliedVoucher.code} was removed. Sign in again to use it.`,
+        `已退出登录 — 优惠券 ${appliedVoucher.code} 已移除，请重新登录后使用。`,
+      ))
+    }
+  }
 
   const productName = (p: Product) =>
     (lang === 'zh' && p.name_zh) ? p.name_zh : p.name
@@ -250,13 +286,6 @@ export default function Storefront() {
   const applyVoucher = async () => {
     const code = voucherInput.trim().toUpperCase()
     if (!code) return
-    // A voucher is tracked one-per-customer by WhatsApp/email; without one the
-    // redemption can't be attributed and the server rejects it. Ask up front.
-    if (!voucherEntry) {
-      setAppliedVoucher(null)
-      setVoucherMsg(t('❌ Enter your WhatsApp number before applying a voucher.', '❌ 请先填写 WhatsApp 号码再使用优惠券。'))
-      return
-    }
     // Validate against fresh DB state, not a page-load snapshot — otherwise a
     // customer who already redeemed this code (even earlier in this session)
     // sees a false "applied" that only fails at Place Order. Catch reuse here.
@@ -431,7 +460,6 @@ export default function Storefront() {
         cart: Object.fromEntries(Object.entries(cart).filter(([, qty]) => qty > 0)),
         quotedTotal: total,
         voucherCode: appliedVoucher?.code ?? null,
-        voucherEntry: appliedVoucher ? voucherEntry : null,
       })
       // Remember what they typed, silently, so they never type it again — at this shop or any
       // other. Best-effort and unawaited: the order is already placed, and a profile write that
@@ -878,7 +906,24 @@ export default function Storefront() {
           {/* Voucher */}
           <div className="mb-7">
             <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Voucher', '优惠券')}</div>
-            {appliedVoucher ? (
+            {!account ? (
+              // A voucher is keyed to a verified account, so a guest cannot carry one (#72).
+              // This is an OFFER, not a gate: the checkout path itself is untouched and guest
+              // checkout is still one tap. You just cannot bring a discount through it.
+              //
+              // `!account` is asked FIRST, before `appliedVoucher`. The reconciliation above
+              // already clears the voucher when the session ends, so the two can never disagree
+              // — but asked the other way round, a signed-out customer holding an applied
+              // voucher was shown "Applied: CODE" for a discount the backend would refuse. The
+              // branch that decides is the one that cannot be wrong.
+              <button
+                type="button"
+                onClick={() => setSignInOpen(true)}
+                className="text-[13px] text-rose-muted cursor-pointer underline inline-block hover:text-oxblood"
+              >
+                {t('Sign in to use a voucher', '登录后可使用优惠券')}
+              </button>
+            ) : appliedVoucher ? (
               <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                 <span className="shrink-0">{t('Applied', '已应用')}: <strong>{appliedVoucher.code}</strong></span>
                 <button type="button" className="text-[13px] text-rose-muted cursor-pointer underline mt-5 inline-block" onClick={removeVoucher}>

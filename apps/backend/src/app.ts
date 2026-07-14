@@ -512,6 +512,9 @@ app.post('/api/orders', async (c) => {
     const result = await placeOrder({
       merchantId: b.merchantId,
       userId: user?.id ?? null,
+      // The voucher's one-per-customer key. From the token, exactly like `userId`, and for
+      // exactly the same reason: a body-supplied key is one the customer can simply change.
+      userEmail: user?.email ?? null,
       customerName: b.customerName,
       customerWa: b.customerWa,
       mode,
@@ -519,7 +522,6 @@ app.post('/api/orders', async (c) => {
       cart: b.cart,
       quotedTotal,
       voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
-      voucherEntry: typeof b.voucherEntry === 'string' ? b.voucherEntry : null,
     })
     return c.json(result)
   } catch (err) {
