@@ -4,11 +4,12 @@
 export { MIN_PASSWORD_LENGTH, isPasswordLongEnough } from './password.js'
 export { MAX_CART_QTY, MAX_CART_LINES, isCart } from './cart.js'
 export {
-  priceOrder, voucherError, effectivePrice, shippingFee, voucherFromRow, shopRates,
+  priceOrder, voucherError, shippingFee, voucherFromRow, shopRates,
+  promoState, promoClaims, productFromRow,
   EM_STATES, DEFAULT_WM_RATE,
 } from './pricing.js'
 export type {
   PriceInput, PriceBreakdown, PriceLine,
   VoucherCtx, VoucherErrorCode,
-  PricedProduct, PricedVoucher,
+  PricedProduct, PricedVoucher, PromoState,
 } from './pricing.js'

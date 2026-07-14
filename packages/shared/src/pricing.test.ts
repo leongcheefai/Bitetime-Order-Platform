@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { priceOrder, voucherError, voucherFromRow, shopRates, DEFAULT_WM_RATE } from './pricing.js'
+import {
+  priceOrder, voucherError, voucherFromRow, shopRates, DEFAULT_WM_RATE,
+  promoClaims, productFromRow,
+} from './pricing.js'
 import type { PricedProduct } from './pricing.js'
 
 const RATES = { WM: 8, EM: 12 }
@@ -115,30 +118,6 @@ describe('priceOrder', () => {
     expect(disabled.total).toBe(10)
   })
 
-  it('applies promo price when active by end date and limit', () => {
-    const r = priceOrder({
-      products: [product('a', 100, { promoPrice: 80, promoEnd: '2026-12-31' } as any)],
-      cart: { a: 1 }, mode: 'pickup', rates: RATES, now: NOW,
-    })
-    expect(r.lines[0]).toMatchObject({ unitPrice: 80, promo: true })
-    expect(r.total).toBe(80)
-  })
-
-  it('ignores promo when expired or limit exhausted', () => {
-    const expired = priceOrder({
-      products: [product('a', 100, { promoPrice: 80, promoEnd: '2026-01-01' } as any)],
-      cart: { a: 1 }, mode: 'pickup', rates: RATES, now: NOW,
-    })
-    expect(expired.lines[0]).toMatchObject({ unitPrice: 100, promo: false })
-
-    const exhausted = priceOrder({
-      products: [product('a', 100, { promoPrice: 80, promoLimit: 5 } as any)],
-      cart: { a: 1 }, mode: 'pickup', rates: RATES, now: NOW,
-      promoSold: { a: 5 },
-    })
-    expect(exhausted.lines[0]).toMatchObject({ unitPrice: 100, promo: false })
-  })
-
   it('appends extra lines (e.g. free referral gift) into the breakdown', () => {
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 }, mode: 'pickup', rates: RATES, now: NOW,
@@ -147,6 +126,97 @@ describe('priceOrder', () => {
     expect(r.lines).toHaveLength(2)
     expect(r.subtotal).toBe(10)
     expect(r.total).toBe(10)
+  })
+})
+
+const FUTURE = '2027-01-01T00:00:00.000Z'
+const PAST = '2020-01-01T00:00:00.000Z'
+
+describe('promo', () => {
+  it('prices at the promo price while the promo runs', () => {
+    const bd = priceOrder({
+      products: [product('a', 100, { promoPrice: 80, promoEnd: FUTURE })],
+      cart: { a: 2 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+    })
+    expect(bd.lines).toEqual([
+      { id: 'a', name: 'a', qty: 2, unitPrice: 80, lineTotal: 160, promo: true },
+    ])
+    expect(bd.subtotal).toBe(160)
+  })
+
+  it('a promo with no cap and no end date runs anyway', () => {
+    const bd = priceOrder({
+      products: [product('a', 100, { promoPrice: 80 })],
+      cart: { a: 1 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+    })
+    expect(bd.lines[0].unitPrice).toBe(80)
+    expect(bd.lines[0].promo).toBe(true)
+  })
+
+  it('a promo price of 0 is a promo, not a falsy nothing', () => {
+    const bd = priceOrder({
+      products: [product('a', 100, { promoPrice: 0 })],
+      cart: { a: 3 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+    })
+    expect(bd.lines[0].unitPrice).toBe(0)
+    expect(bd.lines[0].promo).toBe(true)
+    expect(bd.subtotal).toBe(0)
+  })
+
+  it('an elapsed promo does not apply', () => {
+    const bd = priceOrder({
+      products: [product('a', 100, { promoPrice: 80, promoEnd: PAST })],
+      cart: { a: 1 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+    })
+    expect(bd.lines[0].unitPrice).toBe(100)
+    expect(bd.lines[0].promo).toBe(false)
+  })
+
+  // THE CAP. A cart of 10 against 3 remaining units is 3 promo + 7 base — not 10 of either.
+  it('splits the line at the cap', () => {
+    const bd = priceOrder({
+      products: [product('a', 100, { promoPrice: 80, promoLimit: 5, promoSold: 2 })],
+      cart: { a: 10 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+    })
+    expect(bd.lines).toEqual([
+      { id: 'a', name: 'a', qty: 3, unitPrice: 80, lineTotal: 240, promo: true },
+      { id: 'a', name: 'a', qty: 7, unitPrice: 100, lineTotal: 700, promo: false },
+    ])
+    expect(bd.subtotal).toBe(940)
+    expect(promoClaims(bd)).toEqual({ a: 3 })
+  })
+
+  it('a sold-out cap prices the whole line at base, and claims nothing', () => {
+    const bd = priceOrder({
+      products: [product('a', 100, { promoPrice: 80, promoLimit: 5, promoSold: 5 })],
+      cart: { a: 2 }, mode: 'pickup', rates: { WM: 8, EM: 18 },
+    })
+    expect(bd.lines).toEqual([
+      { id: 'a', name: 'a', qty: 2, unitPrice: 100, lineTotal: 200, promo: false },
+    ])
+    expect(promoClaims(bd)).toEqual({})
+  })
+})
+
+describe('productFromRow', () => {
+  // postgres.js hands back `numeric` as a STRING. Unmapped, '80.00' reaches round2's .toFixed()
+  // and throws — and the two sides of the wire price differently, which is a refused checkout.
+  it('coerces postgres.js numerics and maps the promo columns', () => {
+    const p = productFromRow({
+      id: 'a', name: 'Nasi', price: '100.00',
+      promo_price: '80.00', promo_limit: 5, promo_sold: 2,
+      promo_end: '2027-01-01T00:00:00.000Z',
+    })
+    expect(p.price).toBe(100)
+    expect(p.promoPrice).toBe(80)
+    expect(p.promoLimit).toBe(5)
+    expect(p.promoSold).toBe(2)
+    expect(p.promoEnd).toBe('2027-01-01T00:00:00.000Z')
+  })
+
+  it('a row with no promo maps to no promo, and 0 survives', () => {
+    expect(productFromRow({ id: 'a', name: 'a', price: 10, promo_price: null }).promoPrice).toBeNull()
+    expect(productFromRow({ id: 'a', name: 'a', price: 10, promo_price: '0' }).promoPrice).toBe(0)
   })
 })
 

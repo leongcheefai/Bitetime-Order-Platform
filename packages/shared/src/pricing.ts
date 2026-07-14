@@ -6,18 +6,25 @@
 // See CONTEXT.md → "Order pricing".
 
 /**
- * Only the fields the pricing rule actually reads. Declared here rather than imported
- * because this package is the boundary between the two workspaces: a frontend `Product`
- * row and a backend `products` row must both satisfy it, and neither owns it.
+ * Only the fields the pricing rule reads. Declared here rather than imported because this package
+ * is the boundary between the two workspaces: a frontend `Product` row and a backend `products`
+ * row must both satisfy it, and neither owns it.
  *
- * The index signature is what lets `promoActive` reach `promoPrice`/`promoLimit`/`promoEnd`.
- * Those columns DO NOT EXIST yet — the promo feature is #69 — so that branch is inert. It is
- * carried over unchanged rather than deleted, because #69 is the ticket that makes it real.
+ * The promo fields are DECLARED, not reached through the index signature: they are real columns
+ * now (#69), and a typo'd `promoPrice` silently pricing at base is exactly what the index
+ * signature used to hide.
  */
 export interface PricedProduct {
   id: string
   name: string
   price: number
+  /** null = no promo. **0 is a valid promo** (a free item) — test for null, never truthiness. */
+  promoPrice?: number | null
+  /** null = uncapped. */
+  promoLimit?: number | null
+  /** An ISO INSTANT, never a local date string. See the migration's comment. */
+  promoEnd?: string | null
+  promoSold?: number
   [key: string]: unknown
 }
 
@@ -69,7 +76,8 @@ export interface PriceInput {
   voucher?: PricedVoucher | null
   referral?: { amount: number; enabled: boolean } | null
   extraLines?: PriceLine[]
-  promoSold?: Record<string, number>
+  // NO promoSold input. The count is a column on the product row, and a second channel for it is
+  // a second thing to diverge — the browser quotes and the backend charges from the same row.
   now?: Date
 }
 
@@ -91,7 +99,7 @@ export function shippingFee(
 /** The `merchants.shipping` column's own default for West Malaysia — see `shopRates`. */
 export const DEFAULT_WM_RATE = 8
 
-const rate = (v: unknown): number | null => {
+const num = (v: unknown): number | null => {
   if (typeof v === 'number' && Number.isFinite(v)) return v
   if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
   return null
@@ -117,8 +125,8 @@ const rate = (v: unknown): number | null => {
  */
 export function shopRates(shipping: unknown): { WM: number; EM: number } {
   const s = (shipping && typeof shipping === 'object' ? shipping : {}) as Record<string, unknown>
-  const WM = rate(s.WM) ?? DEFAULT_WM_RATE
-  const EM = rate(s.EM) ?? WM
+  const WM = num(s.WM) ?? DEFAULT_WM_RATE
+  const EM = num(s.EM) ?? WM
   return { WM, EM }
 }
 
@@ -131,8 +139,27 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
     if (qty <= 0) continue
     const product = input.products.find(p => p.id === id)
     if (!product) continue
-    const { price, promo } = effectivePrice(product, now, input.promoSold?.[id] ?? 0)
-    lines.push({ id, name: product.name, qty, unitPrice: price, lineTotal: price * qty, promo })
+
+    // THE CAP BINDS PER UNIT, so one cart product can produce TWO lines at two prices. A cart of
+    // 10 against 3 remaining promo units is 3 + 7 — all-or-nothing would let a cap of 3 sell 100
+    // promo units to a single order, which is not a cap. Two lines share a product id: any list
+    // rendering these must key by INDEX.
+    const promo = promoState(product, now)
+    const promoQty = promo ? Math.min(qty, promo.remaining) : 0
+
+    if (promo && promoQty > 0) {
+      lines.push({
+        id, name: product.name, qty: promoQty,
+        unitPrice: promo.price, lineTotal: round2(promo.price * promoQty), promo: true,
+      })
+    }
+    const baseQty = qty - promoQty
+    if (baseQty > 0) {
+      lines.push({
+        id, name: product.name, qty: baseQty,
+        unitPrice: product.price, lineTotal: round2(product.price * baseQty), promo: false,
+      })
+    }
   }
   if (input.extraLines) lines.push(...input.extraLines)
 
@@ -186,21 +213,66 @@ function voucherDiscount(voucher: PricedVoucher | null | undefined, base: number
   return Math.min((voucher as any).value, base)
 }
 
-export function effectivePrice(
-  product: PricedProduct,
-  now: Date,
-  sold = 0,
-): { price: number; promo: boolean } {
-  const promo = promoActive(product, now, sold)
-  return { price: promo ? (product as any).promoPrice : product.price, promo }
+/** A promo that is currently running, and how many units of it are left. */
+export interface PromoState {
+  price: number
+  /** Infinity when the promo is uncapped. */
+  remaining: number
 }
 
-function promoActive(p: any, now: Date, sold: number): boolean {
-  const hasLimit = (p.promoLimit || 0) > 0
-  const hasEnd = !!p.promoEnd
-  const limitOk = !hasLimit || Math.max(0, (p.promoLimit || 0) - sold) > 0
-  const dateOk = !hasEnd || now <= new Date(p.promoEnd + 'T23:59:59')
-  return (p.promoPrice || 0) > 0 && (hasLimit || hasEnd) && limitOk && dateOk
+/**
+ * Is this product's promo running, and for how many more units?
+ *
+ * The null checks are load-bearing and are not defensiveness: a promo of `0.00` is a FREE ITEM,
+ * and a truthiness test (`if (!p.promoPrice)`) would silently price it at the base price. A promo
+ * exists iff the column is not null.
+ */
+export function promoState(p: PricedProduct, now: Date): PromoState | null {
+  const price = num(p.promoPrice)
+  if (price === null) return null
+  if (p.promoEnd && now > new Date(p.promoEnd)) return null
+
+  const limit = num(p.promoLimit)
+  if (limit === null) return { price, remaining: Infinity }   // uncapped, and that is a choice
+
+  const remaining = Math.max(0, limit - (num(p.promoSold) ?? 0))
+  return remaining > 0 ? { price, remaining } : null
+}
+
+/**
+ * How many units of each product this breakdown claims at the promo price — what the backend
+ * increments `promo_sold` by, and nothing else. The units claimed are exactly the units priced.
+ */
+export function promoClaims(bd: PriceBreakdown): Record<string, number> {
+  const claims: Record<string, number> = {}
+  for (const l of bd.lines) if (l.promo) claims[l.id] = (claims[l.id] ?? 0) + l.qty
+  return claims
+}
+
+/**
+ * A `products` row → the shape the pricing rule reads. Both sides of the wire go through here.
+ *
+ * `num()` is not defensive: postgres.js returns `numeric` as a STRING to preserve precision, so on
+ * the backend `price` arrives as '13.00' and `promo_price` as '8.00', while PostgREST hands the
+ * browser real numbers. Two sides mapping differently is not a rounding gap — it is a refused
+ * checkout (`price_changed`) for every promo order.
+ *
+ * The row is spread through, so the caller keeps the fields pricing does not read (`image_urls`,
+ * `unit`, `active`, …).
+ */
+export function productFromRow(row: Record<string, unknown>): PricedProduct {
+  const end = row.promo_end
+  return {
+    ...row,
+    id: row.id as string,
+    name: row.name as string,
+    price: num(row.price) ?? 0,
+    promoPrice: num(row.promo_price),
+    promoLimit: num(row.promo_limit),
+    // postgres.js hands back a Date; PostgREST hands back an ISO string. `new Date` takes both.
+    promoEnd: end ? new Date(end as string | Date).toISOString() : null,
+    promoSold: num(row.promo_sold) ?? 0,
+  }
 }
 
 /**
