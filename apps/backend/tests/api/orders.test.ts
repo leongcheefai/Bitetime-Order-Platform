@@ -19,7 +19,9 @@
 // attribution rule (user_id comes from the JWT, never the body) are TypeScript invariants on
 // this path. Everything asserting them below is load-bearing, not decoration.
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
+import postgres from 'postgres'
 import { app } from '../../src/app.js'
+import { env } from '../../src/env.js'
 import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
 import { orderDay } from '../../src/orderNumber.js'
 import { MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
@@ -690,6 +692,28 @@ describe('POST /api/orders', () => {
       expect(await errorOf(res)).toBe('product_unavailable')
     })
 
+    // THE LIVE HOLE THIS TASK CLOSES. Postgres matches `uuid` case-insensitively, so an
+    // UPPERCASE cart key sails past `= any(${ids}::uuid[])` and the "every id came back" check
+    // — but `priceOrder` finds a line by `products.find(p => p.id === id)`, a JS `===` that
+    // never matches an uppercase key against the lowercase id postgres.js returns. The line was
+    // silently DROPPED, pricing the whole cart at zero — and on a pickup (no shipping to save
+    // it), `quotedTotal: 0` sailed through `assertQuoteHolds` too. Proved against a live stack
+    // before the fix: this exact request returned 200 with an order committed at total 0.
+    it('refuses an uppercase-uuid cart key instead of silently pricing the order at zero', async () => {
+      const res = await post(body(shop, productId, {
+        cart: { [productId.toUpperCase()]: 2 },
+        quotedTotal: 0,
+      }))
+
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('product_unavailable')
+      // Not just the status code — the row itself. A regression that let this line drop and
+      // still refused for some OTHER reason (e.g. a coincidental price mismatch) would leave a
+      // committed order behind if the refusal ever stopped being the real one.
+      expect(await ordersOf(shop)).toEqual([])
+      expect(await counterOf(shop)).toBeNull()
+    })
+
     it('derives the shipping fee from the shop rates and the delivery region', async () => {
       await svc().from('merchants').update({ shipping: { WM: 8, EM: 18 } }).eq('id', shop)
 
@@ -820,6 +844,60 @@ describe('POST /api/orders', () => {
       expect(await errorOf(loser)).toBe('price_changed')
       expect((await productOf(promoProductId))!.promo_sold).toBe(1)
       expect(await ordersOf(shop)).toHaveLength(1)
+    })
+
+    // THE TEST THAT ACTUALLY ISOLATES THE PRODUCT ROW LOCK. The test above does NOT: both of
+    // its racers are full intakes, and every intake takes the merchant's single
+    // `order_counters` row FIRST, so two concurrent intakes always serialize there and never
+    // contend on the product row — that test proves the cap holds end-to-end, nothing about
+    // `for update` specifically. Verified by deleting `for update` from `cartProducts`'s
+    // select: the full suite stayed green, including that test.
+    //
+    // This one holds the product row's lock from a SECOND, independent connection that never
+    // touches `order_counters` at all, so there is no counter serialization to hide behind —
+    // only the product row's own lock can make this discriminate. Confirmed both ways: with
+    // `for update` this gets 409 `price_changed`; with it deleted, the intake's own
+    // `promo_sold` update blocks until the holder commits and then reads a stale `before`,
+    // tripping the "did not advance" guard and failing with a 500 `order_failed`.
+    it('a second connection holding the last promo unit blocks the intake — proves the product lock, not the counter', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 1, promoSold: 0 })
+
+      // A separate, independent postgres.js connection — NOT `withTransaction`/`sql` from
+      // src/db.ts, which is the very connection under test. Closed in `finally` no matter what
+      // happens below, so a failed assertion can never hang the suite or leak a connection.
+      const other = postgres(env.databaseUrl, { max: 1 })
+      let releaseHold: () => void = () => {}
+      const held = new Promise<void>(resolve => { releaseHold = resolve })
+
+      // Takes the last promo unit under an UNCOMMITTED transaction — a row lock the counter
+      // mutex cannot see, let alone serialize against.
+      const holder = other.begin(async tx => {
+        await tx`update products set promo_sold = promo_sold + 1 where id = ${promoProductId}`
+        await held // held open until the intake below is in flight against the locked row
+      })
+
+      try {
+        // Give the holder's UPDATE time to actually take the row lock before the intake's own
+        // `select ... for update` reaches for it — otherwise the two race each other and the
+        // test passes or fails at random instead of proving anything.
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        // The intake quotes the promo price for a unit that is already spoken for.
+        const resPromise = post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+
+        // Let the intake's select actually reach (and block on, if the lock is real) the row
+        // before releasing the holder.
+        await new Promise(resolve => setTimeout(resolve, 100))
+        releaseHold()
+
+        const [res] = await Promise.all([resPromise, holder])
+        expect(res.status).toBe(409)
+        expect(await errorOf(res)).toBe('price_changed')
+      } finally {
+        releaseHold()
+        await holder.catch(() => {})
+        await other.end()
+      }
     })
 
     it('an elapsed promo does not apply', async () => {

@@ -243,8 +243,23 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
   }
 }
 
-/** `products.id` is a uuid. A cart key that is not one cannot name a product. */
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/**
+ * `products.id` is a uuid. A cart key that is not one cannot name a product.
+ *
+ * NO `i` FLAG. This is not a style choice — an uppercase-but-otherwise-valid uuid is how a
+ * FREE ORDER used to commit. Postgres compares `uuid` values case-insensitively (`= any(...
+ * ::uuid[])` matches an uppercase key against a lowercase `id` just fine), but JavaScript
+ * `===` does not — and `priceOrder` (`packages/shared/src/pricing.ts`) finds each cart line
+ * by `products.find(p => p.id === id)`. So an uppercase key sailed past the existence check
+ * (`rows.length === ids.length`), then matched NOTHING in `priceOrder`, silently dropping the
+ * line (`continue`) — `lines: []`, `subtotal: 0`, and on pickup a `total` of 0 that
+ * `assertQuoteHolds(0, 0)` waved through. The storefront only ever emits lowercase uuids
+ * (Postgres canonicalises them on the way out), so refusing anything else costs no honest
+ * customer a thing. Lowercasing the key instead of refusing it would open a second hole: an
+ * uppercase and a lowercase form of the SAME id in one cart would merge into one line at
+ * double the quantity, defeating `MAX_CART_QTY` — refuse, do not normalise.
+ */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
  * The cart's products, scoped to this merchant, on sale, and LOCKED.
