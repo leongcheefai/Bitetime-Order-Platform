@@ -87,6 +87,8 @@ describe('POST /api/orders', () => {
   let suspendedShop: string
   let productId: string
   let customerToken: string
+  let strangerToken: string
+  let racerTokens: string[]
   let customerId: string
   let strangerId: string
 
@@ -101,13 +103,25 @@ describe('POST /api/orders', () => {
     customerId = (await customer.auth.getUser()).data.user!.id
     strangerId = (await stranger.auth.getUser()).data.user!.id
     customerToken = (await customer.auth.getSession()).data.session!.access_token
+    strangerToken = (await stranger.auth.getSession()).data.session!.access_token
+
+    // Six DISTINCT accounts for the cap-under-load case. The one-per-customer key is now the
+    // token's email, so six racers sharing one token would collide on `voucher_already_used`
+    // and never reach the cap at all — the very thing that test exists to prove. Sequential,
+    // not Promise.all: makeUser lists-then-deletes by email, and six of those racing each
+    // other is a fixture bug waiting to happen.
+    racerTokens = []
+    for (let i = 0; i < 6; i++) {
+      const racer = await makeUser(`ord-racer${i}@test.dev`, 'password123')
+      racerTokens.push((await racer.auth.getSession()).data.session!.access_token)
+    }
 
     // The closed shops get a different owner: current_merchant_id() resolves one shop per
     // owner, so piling three onto one owner is a state the app cannot represent.
     shop = await seedMerchant({ slug: 'ord-shop', order_prefix: 'OR', owner_id: ownerId })
     pendingShop = await seedMerchant({ slug: 'ord-pending', order_prefix: 'OP', owner_id: otherOwnerId, status: 'pending' })
     suspendedShop = await seedMerchant({ slug: 'ord-suspended', order_prefix: 'OS', owner_id: otherOwnerId, status: 'suspended' })
-  }, 30_000)
+  }, 60_000)
 
   // Each test starts from an empty shop: the counter is per-merchant and per-day, so a
   // leftover row from the previous test would make the expected order number depend on
@@ -347,20 +361,25 @@ describe('POST /api/orders', () => {
   })
 
   // ── Vouchers: the claim commits with the order, or not at all ───────────────
+  //
+  // Every case here signs in. A voucher REQUIRES AN ACCOUNT (#72): the one-per-customer key is
+  // the token's verified email and nothing else, so a voucher case run as a guest is no longer
+  // a voucher case — it is the refusal below. The assertions are unchanged; only who is
+  // holding the code has moved from a body field to a JWT.
 
   it('claims the voucher and records the order’s discount', async () => {
     await seedVoucher(shop, 'SAVE5', null)
 
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
 
     expect(res.status).toBe(200)
     const [order] = await ordersOf(shop)
     expect(order).toMatchObject({ discount: 5, voucher_code: 'SAVE5', total: 21 })
-    expect((await voucherOf(shop, 'SAVE5'))!.used_by).toEqual(['ah@meng.my'])
+    expect((await voucherOf(shop, 'SAVE5'))!.used_by).toEqual(['ord-customer@test.dev'])
   })
 
   it('rejects a voucher code that does not exist', async () => {
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_not_found' })
@@ -368,19 +387,22 @@ describe('POST /api/orders', () => {
 
   it('rejects a voucher this customer already used', async () => {
     await seedVoucher(shop, 'SAVE5', null)
-    await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
+    await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
 
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_already_used' })
   })
 
+  // Two DIFFERENT accounts, or the second would be refused one-per-customer and never reach
+  // the cap. The cap is a property of the voucher; `voucher_already_used` is a property of the
+  // person, and this test is about the former.
   it('rejects a voucher that has hit its cap', async () => {
     await seedVoucher(shop, 'CAP1', 1)
-    await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP1', voucherEntry: 'first@x.my' }))
+    await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP1' }), customerToken)
 
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP1', voucherEntry: 'second@x.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP1' }), strangerToken)
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_fully_used' })
@@ -389,7 +411,7 @@ describe('POST /api/orders', () => {
   // THE BUG THIS TICKET EXISTS TO KILL. Before, the order was already committed by the time
   // the redemption failed — so the customer kept a discount on a voucher never marked used.
   it('rolls the whole order back when the voucher claim fails — no row, no burnt counter', async () => {
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
 
     expect(res.status).toBe(409)
     expect(await ordersOf(shop)).toEqual([])
@@ -411,7 +433,7 @@ describe('POST /api/orders', () => {
       .insert({ merchant_id: shop, order_number: `OR-${DAY}-0050`, status: 'new', total: 1 })
     expect(error).toBeNull()
 
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5', voucherEntry: 'ah@meng.my' }))
+    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
 
     // Not a domain refusal — the customer did nothing wrong, so this is a 500, not a 409.
     expect(res.status).toBe(500)
@@ -424,14 +446,63 @@ describe('POST /api/orders', () => {
   })
 
   it('lets the customer retry without the voucher, and that order succeeds', async () => {
-    const failed = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE', voucherEntry: 'ah@meng.my' }))
+    const failed = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
     expect(failed.status).toBe(409)
 
-    const retry = await post(body(shop, productId))
+    const retry = await post(body(shop, productId), customerToken)
 
     expect(retry.status).toBe(200)
     // The failed attempt burned nothing: this is still the day's FIRST order.
     expect(await retry.json()).toEqual({ orderNumber: `OR-${DAY}-0050` })
+  })
+
+  // ── The one-per-customer key comes from the JWT and from nowhere else (#72) ──
+  //
+  // `voucherEntry` was the key AND a field the body supplied, so the same person re-redeemed a
+  // one-per-customer voucher forever just by varying it — and against a null `max_uses`
+  // ("unlimited in total, still 1/customer") that was an unlimited discount for one person.
+
+  describe('a voucher claim is keyed to a verified account', () => {
+    it('refuses a voucher from a guest, and writes nothing', async () => {
+      await seedVoucher(shop, 'SAVE5', null)
+
+      const res = await post(body(shop, productId, { voucherCode: 'SAVE5', quotedTotal: 21 }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('voucher_requires_account')
+      expect(await ordersOf(shop)).toHaveLength(0)
+      // Refused BEFORE the claim: the voucher must not be burnt by an order that never existed.
+      expect((await voucherOf(shop, 'SAVE5'))!.used_by).toEqual([])
+    })
+
+    it('keys used_by on the token email, not on anything the body said', async () => {
+      await seedVoucher(shop, 'SAVE5', null)
+
+      const res = await post(
+        // The body still tries to name its own key. It must be IGNORED, not honoured — the
+        // direct analogue of the suite's "never persists a status the client asked for".
+        body(shop, productId, { voucherCode: 'SAVE5', voucherEntry: 'someone@else.com', quotedTotal: 21 }),
+        customerToken,
+      )
+      expect(res.status).toBe(200)
+
+      expect((await voucherOf(shop, 'SAVE5'))!.used_by).toEqual(['ord-customer@test.dev'])
+    })
+
+    it('cannot be redeemed twice by the same account — the hole itself', async () => {
+      await seedVoucher(shop, 'SAVE5', null)
+
+      const first = await post(body(shop, productId, { voucherCode: 'SAVE5', quotedTotal: 21 }), customerToken)
+      expect(first.status).toBe(200)
+
+      // Before the fix this succeeded by simply varying `voucherEntry`. Now the body carries no
+      // key at all, so the attack cannot even be EXPRESSED — which is the point.
+      const second = await post(body(shop, productId, { voucherCode: 'SAVE5', quotedTotal: 21 }), customerToken)
+      expect(second.status).toBe(409)
+      expect(await errorOf(second)).toBe('voucher_already_used')
+
+      expect(await ordersOf(shop)).toHaveLength(1)
+      expect((await voucherOf(shop, 'SAVE5'))!.used_by).toEqual(['ord-customer@test.dev'])
+    })
   })
 
   // ── Concurrency. Real row locks, real Postgres — the point of the driver ────
@@ -445,9 +516,11 @@ describe('POST /api/orders', () => {
     expect(results.every(r => r.status === 200)).toBe(true)
   })
 
+  // The same account, twice, at once — which is what a double-tapped checkout button IS. The
+  // loser must read the winner's write through the row lock, not the stale row.
   it('lets exactly one of two concurrent orders redeem a single-use voucher', async () => {
     await seedVoucher(shop, 'ONCE', 1)
-    const one = () => post(body(shop, productId, { quotedTotal: 21, voucherCode: 'ONCE', voucherEntry: 'ah@meng.my' }))
+    const one = () => post(body(shop, productId, { quotedTotal: 21, voucherCode: 'ONCE' }), customerToken)
 
     const [a, b] = await Promise.all([one(), one()])
     const statuses = [a.status, b.status].sort()
@@ -455,17 +528,21 @@ describe('POST /api/orders', () => {
     expect(statuses).toEqual([200, 409])
     const loser = a.status === 409 ? a : b
     expect(await loser.json()).toEqual({ error: 'voucher_already_used' })
-    expect((await voucherOf(shop, 'ONCE'))!.used_by).toEqual(['ah@meng.my'])
+    expect((await voucherOf(shop, 'ONCE'))!.used_by).toEqual(['ord-customer@test.dev'])
     expect(await ordersOf(shop)).toHaveLength(1)
   })
 
   // A fifty-use voucher redeemed five hundred times is the merchant's solvency. The cap has
   // to hold when the redemptions arrive at once, which is exactly when a read-then-write
   // without a row lock does not.
+  //
+  // Six DIFFERENT accounts, one token each: the cap is what must stop the last four, and six
+  // racers behind one token would be stopped by one-per-customer instead — a green test
+  // proving something else.
   it('holds a voucher’s cap under concurrent load', async () => {
     await seedVoucher(shop, 'CAP2', 2)
-    const attempts = Array.from({ length: 6 }, (_, i) =>
-      post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP2', voucherEntry: `c${i}@x.my` })),
+    const attempts = racerTokens.map(token =>
+      post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP2' }), token),
     )
 
     const results = await Promise.all(attempts)
@@ -614,9 +691,8 @@ describe('POST /api/orders', () => {
 
       const res = await post(body(shop, productId, {
         voucherCode: 'SAVE10',
-        voucherEntry: 'ah@meng.com',
         quotedTotal: 23.4,   // 26 − 10%
-      }))
+      }), customerToken)
       expect(res.status).toBe(200)
 
       const [order] = await ordersOf(shop)

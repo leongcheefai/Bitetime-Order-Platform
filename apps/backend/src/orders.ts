@@ -20,7 +20,7 @@ export type OrderErrorCode =
   | 'voucher_not_found'
   | 'voucher_already_used'
   | 'voucher_fully_used'
-  | 'voucher_entry_required'
+  | 'voucher_requires_account'
   | 'price_changed'
   | 'product_unavailable'
   | 'delivery_state_required'
@@ -37,6 +37,15 @@ export interface PlaceOrderInput {
   merchantId: string
   /** From the verified JWT, or null for a guest. NEVER from the request body — see below. */
   userId: string | null
+  /**
+   * From the verified JWT, or null for a guest. NEVER from the request body.
+   *
+   * This is the voucher's ONE-PER-CUSTOMER KEY. It used to be `voucherEntry`, a string the
+   * BODY supplied — so the same person re-redeemed a one-per-customer voucher forever by
+   * varying it (`a@b.com`, `a+1@b.com`, `x`), and a voucher with a null `max_uses` was an
+   * unlimited discount for one person. A key the client can name is not a key.
+   */
+  userEmail: string | null
   customerName: string
   customerWa: string
   /**
@@ -58,7 +67,6 @@ export interface PlaceOrderInput {
    */
   quotedTotal: number
   voucherCode?: string | null
-  voucherEntry?: string | null
 }
 
 /**
@@ -117,7 +125,7 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     // The claim and the discount read the same locked row, so the voucher that is spent is
     // exactly the voucher that was priced.
     const voucher = input.voucherCode
-      ? await claimVoucher(tx, input.merchantId, input.voucherCode, input.voucherEntry ?? '')
+      ? await claimVoucher(tx, input.merchantId, input.voucherCode, input.userEmail)
       : null
 
     const bd = priceOrder({
@@ -302,24 +310,30 @@ async function nextCounterValue(tx: postgres.TransactionSql, merchantId: string,
 }
 
 /**
- * Claim one redemption of a voucher, under a row lock.
+ * Claim one redemption of a voucher, under a row lock, keyed to a VERIFIED account.
  *
  * `for update` is not optional and is the reason this needs a real driver: without it, two
  * concurrent checkouts both read a fifty-use voucher at forty-nine uses and both write fifty
  * — and a cap that only holds when nobody is racing it is not a cap. The lock is held until
  * the surrounding transaction ends, so the loser reads the winner's write, not the stale row.
+ *
+ * The key comes from the JWT and from nowhere else. A voucher therefore REQUIRES AN ACCOUNT:
+ * a guest has no verified identity, so their claim cannot be keyed to anything they cannot
+ * also change, and an unkeyable claim is refused rather than keyed on something spoofable.
+ * That is a deliberate product decision (#72) and it costs us a first-time customer holding a
+ * promo code, who now meets a sign-in prompt. It is what makes the cap real.
  */
 async function claimVoucher(
   tx: postgres.TransactionSql,
   merchantId: string,
   code: string,
-  rawEntry: string,
+  userEmail: string | null,
 ): Promise<PricedVoucher> {
-  const entry = (rawEntry ?? '').trim().toLowerCase()
-  // Inherited from redeem_voucher's hardening, and load-bearing: an empty entry cannot be
-  // tracked one-per-customer, and every anonymous redemption would collapse onto the same ''
-  // key — which once made a fifty-use voucher count as one.
-  if (!entry) throw new OrderError('voucher_entry_required')
+  const entry = (userEmail ?? '').trim().toLowerCase()
+  // A guest, or an account with no email address (phone-only auth). Either way the claim
+  // cannot be keyed. Refused, never keyed on '' — every anonymous redemption would otherwise
+  // collapse onto the same key, which once made a fifty-use voucher count as one.
+  if (!entry) throw new OrderError('voucher_requires_account')
 
   // `kind` and `amount` are selected because THIS row is what the order is priced from — the
   // discount must come from the voucher that was locked, not from a second, unlocked read.
