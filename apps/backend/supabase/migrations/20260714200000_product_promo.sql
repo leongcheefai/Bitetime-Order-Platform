@@ -20,10 +20,18 @@ alter table public.products
   add constraint products_promo_below_price
     check (promo_price is null or promo_price < price),
   add constraint products_promo_limit_positive
-    check (promo_limit is null or promo_limit > 0);
+    check (promo_limit is null or promo_limit > 0),
+  -- The counter's floor is a Postgres invariant, not just a guarantee of the trigger above
+  -- (which is unreachable from the browser today, but that is not a reason to leave the
+  -- column itself able to hold a negative count from the owner connection).
+  add constraint products_promo_sold_nonneg
+    check (promo_sold >= 0);
 
 create or replace function public.products_promo_sold_guard() returns trigger
-language plpgsql as $$
+language plpgsql
+security invoker
+set search_path = public
+as $$
 begin
   -- A counter the client can write is not a counter — the same rule that governs orders.user_id
   -- and the voucher's one-per-customer key.
@@ -33,7 +41,15 @@ begin
   -- rewinding the cap. The browser's roles cannot move this column at all; only the backend's
   -- owner connection, holding the row lock, can. Pinned silently rather than raised: this is a
   -- backstop against a race, not a dashboard bug to report.
-  if current_user in ('authenticated', 'anon') then
+  --
+  -- SECURITY INVOKER is load-bearing: current_user must be the CALLER's role. Making this
+  -- SECURITY DEFINER (the style of the other guards in this directory) would make it 'postgres'
+  -- on every call and silently disable the pin entirely. Do not "harden" it to match them.
+  --
+  -- A DENYLIST, not an allowlist: it names the roles that MAY move the counter, and pins everyone
+  -- else. A new browser-reachable role, or a security-definer RPC owned by postgres that writes
+  -- products on a merchant's behalf, must not get the write by default.
+  if current_user not in ('postgres', 'service_role', 'supabase_admin') then
     new.promo_sold := coalesce(old.promo_sold, 0);
   end if;
 
