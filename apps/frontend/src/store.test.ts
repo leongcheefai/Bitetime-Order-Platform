@@ -553,9 +553,8 @@ describe('placeOrder', () => {
       customerWa: '60123456789',
       mode: 'delivery',
       address: '123 Jalan ABC',
-      shippingFee: 8,
-      items: [{ id: 'p1', qty: 2 }],
-      total: 24,
+      cart: { p1: 2 },
+      quotedTotal: 24,
     })
 
     const [url, init] = fetchMock.mock.calls[0]
@@ -564,8 +563,8 @@ describe('placeOrder', () => {
     expect(JSON.parse(init.body)).toMatchObject({
       merchantId: 'm1',
       customerName: 'Alice',
-      items: [{ id: 'p1', qty: 2 }],
-      total: 24,
+      cart: { p1: 2 },
+      quotedTotal: 24,
     })
     expect(result).toEqual({ orderNumber: 'BT-260714-0050' })
   })
@@ -574,7 +573,7 @@ describe('placeOrder', () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const fetchMock = fetchOk({ orderNumber: 'BT-1' })
 
-    await placeOrder({ merchantId: 'm1', items: [], total: 0 } as any)
+    await placeOrder({ merchantId: 'm1', cart: { p1: 1 }, quotedTotal: 0 } as any)
 
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok')
   })
@@ -583,7 +582,7 @@ describe('placeOrder', () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
     const fetchMock = fetchOk({ orderNumber: 'BT-1' })
 
-    await placeOrder({ merchantId: 'm1', items: [], total: 0 } as any)
+    await placeOrder({ merchantId: 'm1', cart: { p1: 1 }, quotedTotal: 0 } as any)
 
     expect(fetchMock.mock.calls[0][1].headers.Authorization).toBeUndefined()
   })
@@ -594,7 +593,7 @@ describe('placeOrder', () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const fetchMock = fetchOk({ orderNumber: 'BT-1' })
 
-    await placeOrder({ merchantId: 'm1', items: [], total: 0, user_id: 'someone-else' } as any)
+    await placeOrder({ merchantId: 'm1', cart: { p1: 1 }, quotedTotal: 0, user_id: 'someone-else' } as any)
 
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).not.toHaveProperty('user_id')
   })
@@ -605,7 +604,7 @@ describe('placeOrder', () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
     fetchRefused('voucher_already_used')
 
-    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any))
+    await expect(placeOrder({ merchantId: 'm1', cart: { p1: 1 }, quotedTotal: 0 } as any))
       .rejects.toMatchObject({ code: 'voucher_already_used' })
   })
 
@@ -615,7 +614,7 @@ describe('placeOrder', () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
 
-    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any))
+    await expect(placeOrder({ merchantId: 'm1', cart: { p1: 1 }, quotedTotal: 0 } as any))
       .rejects.toMatchObject({ code: 'network' })
   })
 
@@ -623,7 +622,7 @@ describe('placeOrder', () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, json: async () => { throw new Error('no body') } }))
 
-    await expect(placeOrder({ merchantId: 'm1', items: [], total: 0 } as any))
+    await expect(placeOrder({ merchantId: 'm1', cart: { p1: 1 }, quotedTotal: 0 } as any))
       .rejects.toMatchObject({ code: 'order_failed' })
   })
 })

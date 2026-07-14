@@ -5,8 +5,8 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
-import { fetchProducts, placeOrder, fetchMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError } from '../pricing'
+import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
+import { priceOrder, voucherError, shopRates, MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
@@ -108,11 +108,6 @@ export default function Storefront() {
   const currency = merchant?.currency
   const slug = merchant?.slug
 
-  useEffect(() => {
-    if (!merchantId) return
-    fetchProducts(merchantId).then(setProducts)
-  }, [merchantId])
-
   // The guest choice is remembered per shop, so the gate is met once here and never again —
   // and a choice made at another shop cannot silence it at this one. `chosenAt` carries the
   // slug rather than a bare flag: this component can be reused across shops, and a bare flag
@@ -136,8 +131,10 @@ export default function Storefront() {
   }
 
   const activeProducts = products.filter(p => p.active)
-  const rateWM = merchant?.shipping?.WM ?? 8
-  const rateEM = merchant?.shipping?.EM ?? rateWM
+  // The rates come from the SAME function the backend prices with: it commits at its own
+  // total and refuses a quote that disagrees (`price_changed`), so a fallback that differed
+  // by a ringgit would not be a display bug — it would refuse the checkout.
+  const { WM: rateWM, EM: rateEM } = shopRates(merchant?.shipping)
   const baseDeliveryFee = rateWM // shown on the Delivery toggle before a state is known
   // One-per-customer identity: account email when signed in, else the WhatsApp number.
   const voucherEntry = (account?.email || wa || '').trim().toLowerCase()
@@ -146,6 +143,71 @@ export default function Storefront() {
     (lang === 'zh' && p.name_zh) ? p.name_zh : p.name
   const productDescr = (p: Product) =>
     (lang === 'zh' && p.descr_zh) ? p.descr_zh : (p.descr || '')
+
+  /**
+   * Take a freshly loaded menu — and DROP the cart entries it no longer sells, saying which.
+   *
+   * The pruning is the load-bearing half. The cart is what the browser POSTs, but the menu, the
+   * summary and the quote are all built from `activeProducts` — so a product deactivated or
+   * deleted mid-session leaves a cart entry that is invisible, has no −/+ control to remove it
+   * with, and prices at nothing (`priceOrder` skips an id it cannot find). The backend refuses
+   * the whole cart for it (`product_unavailable`), and without this the customer is trapped:
+   * every retry re-sends the same unremovable id and is refused identically, forever, and only
+   * a page reload gets them out. This is what makes that refusal's refetch RECOVER rather than
+   * merely re-refuse.
+   *
+   * It happens HERE, where the menu arrives, and not in an effect watching it: every route by
+   * which `products` can change goes through this function, and a `setCart` reacting to a render
+   * would just be the same write one beat later.
+   */
+  const adoptProducts = (fresh: Product[]) => {
+    setProducts(fresh)
+
+    const gone = Object.keys(cart).filter(id => !fresh.some(p => p.id === id && p.active))
+    if (gone.length === 0) return
+    setCart(prev => {
+      const next = { ...prev }
+      for (const id of gone) delete next[id]
+      return next
+    })
+
+    // A vanishing line is told, never silent — that would be the same bug wearing a nicer face.
+    // A DEACTIVATED product is still in the rows (only `active` flipped), so it can be named; a
+    // DELETED one is not, which is why the anonymous half of the message exists rather than a
+    // name we would invent.
+    //
+    // A MIXED prune says both halves. Naming what we can and then throwing those names away
+    // because one line came back unnameable would tell a customer who lost a cake and a coffee
+    // strictly less than we know — and less than either of them alone would have been told.
+    const names = gone
+      .map(id => fresh.find(p => p.id === id))
+      .filter((p): p is Product => !!p)
+      .map(productName)
+    const unnamed = gone.length - names.length
+    const named = names.length > 0
+      ? t(`Removed from your cart — no longer available: ${names.join(', ')}`,
+          `已从购物车移除（已下架）：${names.join('、')}`)
+      : ''
+    const rest = unnamed > 0
+      ? (unnamed === 1
+          ? t('An item in your cart is no longer available and has been removed.',
+              '购物车中有商品已下架，已为你移除。')
+          : t(`${unnamed} items in your cart are no longer available and have been removed.`,
+              `购物车中有 ${unnamed} 件商品已下架，已为你移除。`))
+      : ''
+    toast([named, rest].filter(Boolean).join(' '))
+  }
+
+  // The menu, loaded once per shop. It stands below adoptProducts because it calls it, and the
+  // compiler's lint (rightly) refuses a hook that reaches back up for a value declared later.
+  useEffect(() => {
+    if (!merchantId) return
+    fetchProducts(merchantId).then(adoptProducts)
+    // adoptProducts is re-made every render, and depending on it would re-fetch the menu on each
+    // one; the menu is a per-SHOP load. Its closure over `cart` is the mount's empty one, and
+    // that is exactly right — nothing can be in the cart before the menu it is chosen from.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [merchantId])
 
   // One pricing breakdown drives the summary, the order, and the success view.
   const bd = priceOrder({
@@ -157,6 +219,13 @@ export default function Storefront() {
     // Before a state is resolved, show the WM base estimate so the summary
     // matches the Delivery toggle instead of flashing RM 0.00; once the
     // postcode fills the state, region logic (WM/EM) takes over.
+    //
+    // This estimate is a DISPLAY fallback and nothing more, and what keeps it from becoming a
+    // lie is `deliveryReady` below — which is now load-bearing for the PRICE, not just for form
+    // validity. It is the only thing stopping a stateless delivery from being submitted: the
+    // quote here would say WM, the backend derives its region from `address.state` and would
+    // find none, and it refuses such an order outright (`delivery_state_required`) rather than
+    // shipping it for free. Weaken the gate and the two sides diverge.
     resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     voucher: appliedVoucher,
   })
@@ -229,15 +298,81 @@ export default function Storefront() {
     }
   }
 
+  /**
+   * The cart's ceilings, MIRRORED from the backend — the same `MAX_CART_QTY`/`MAX_CART_LINES`
+   * the intake route refuses on, imported from @bitetime/shared rather than retyped.
+   *
+   * They are enforced HERE, at the only place a cart can grow, so the UI cannot build a basket
+   * the door will reject: an over-cap cart is refused with `invalid_body`, and a 400 at Place
+   * Order is a dead end the customer cannot reason their way out of. Stopping them at the
+   * ceiling, and SAYING so, turns a refusal into an instruction.
+   *
+   * Checked against `cart` in render scope rather than inside the updater: the toast is a side
+   * effect, and setState updaters must stay pure (React may run one twice).
+   */
   const updateQty = (productId: string, delta: number) => {
+    const current = cart[productId] || 0
+    const next = Math.max(0, current + delta)
+    if (next === current) return
+
+    if (next > MAX_CART_QTY) {
+      toast(t(`You can order at most ${MAX_CART_QTY} of one item.`,
+              `每种商品每单最多 ${MAX_CART_QTY} 件。`))
+      return
+    }
+    // A new LINE, not a bigger one: only an id that is not in the cart yet can breach the
+    // line cap, so raising an existing line is never blocked by it.
+    if (current === 0 && Object.keys(cart).length >= MAX_CART_LINES) {
+      toast(t(`You can order at most ${MAX_CART_LINES} different items in one order.`,
+              `每单最多 ${MAX_CART_LINES} 种不同商品。`))
+      return
+    }
+
     setCart(prev => {
-      const next = Math.max(0, (prev[productId] || 0) + delta)
       if (next === 0) {
         const { [productId]: _removed, ...rest } = prev
         return rest
       }
       return { ...prev, [productId]: next }
     })
+  }
+
+  /**
+   * Re-read everything the quote is built from: the products AND the applied voucher.
+   *
+   * Both are inputs to `priceOrder`, and the backend prices from its own fresh copy of both, so
+   * a refusal that refreshed only the products left the other half of the quote stale — and a
+   * stale input re-quotes to the same refused number on the next tap. A voucher that has since
+   * been deleted comes back null and is dropped, said out loud rather than silently: the
+   * customer can re-apply a code, but not one that no longer exists.
+   *
+   * IT ASKS WITH `lookupProducts`/`lookupMerchantVoucher`, AND THAT IS THE LOAD-BEARING PART.
+   * This runs on the RECOVERY path — the one moment a connection is most likely to be flaky —
+   * and everything it does is DESTRUCTIVE: `adoptProducts` deletes cart lines the menu no
+   * longer has, and a null voucher is confiscated. The plain fetchers cannot report a failure
+   * (supabase-js resolves `{ data: null, error }`, so `fetchProducts` returns `[]` and
+   * `fetchMerchantVoucher` returns `null` — an ERROR wearing the face of an ANSWER), and
+   * adopting that `[]` would empty the entire cart, blank the menu and blame the shop, for a
+   * dropped packet. So: an answer we could not get changes NOTHING. The refusal costs a retry;
+   * a wrong prune costs the order.
+   */
+  const refreshQuoteSources = async () => {
+    const code = appliedVoucher?.code ?? null
+    const [freshProducts, voucher] = await Promise.all([
+      lookupProducts(merchant.id).catch(() => null),
+      code ? lookupMerchantVoucher(merchant.id, code).catch(() => ({ ok: false as const })) : null,
+    ])
+    // `[]` is an ANSWER — the shop really sells nothing, and pruning the whole cart is right.
+    // `null` is the absence of one, and prunes nothing.
+    // adoptProducts, not setProducts: a refusal that refreshed the menu but left the dead id in
+    // the cart would be refused again on the very next tap.
+    if (freshProducts) adoptProducts(freshProducts)
+    if (voucher?.ok) {
+      setAppliedVoucher(voucher.voucher)
+      if (!voucher.voucher) {
+        setVoucherMsg(t('❌ That voucher is no longer available.', '❌ 此优惠券已失效。'))
+      }
+    }
   }
 
   const handleSubmit = async () => {
@@ -264,6 +399,18 @@ export default function Storefront() {
             setError(voucherErrorText(verr, fresh))
             return
           }
+          // ADOPT it, don't just read it. The fresh row is what the backend prices from — it
+          // locks and reads that same row inside the transaction — so a merchant who edits the
+          // voucher's amount mid-checkout leaves us quoting a discount that no longer exists,
+          // and THIS attempt is refused (`price_changed`) whatever we do here: `quotedTotal` was
+          // computed from the render that ran before this handler, and no setState can reach
+          // back into a closure that has already captured it.
+          //
+          // What ends the loop is `refreshQuoteSources()` in the `price_changed` catch, whose
+          // re-render makes the NEXT tap quote from fresh sources. This line is only a pre-warm
+          // of that render — worth keeping, worthless alone. Do not read it as the fix and
+          // delete the voucher half of refreshQuoteSources as redundant: that half IS the fix.
+          setAppliedVoucher(fresh)
         }
       }
       // On a storefront every signed-in user is a customer, whatever role they hold elsewhere:
@@ -279,11 +426,10 @@ export default function Storefront() {
         customerWa: wa.trim(),
         mode,
         address: mode === 'delivery' ? address : '',
-        shippingFee: fee,
-        items: cartItems,
-        total,
-        currency,
-        discount,
+        // What they want, and what they saw. Never what it costs: the shop's own rows are the
+        // only thing that may say that, and `bd` is only ever a quote.
+        cart: Object.fromEntries(Object.entries(cart).filter(([, qty]) => qty > 0)),
+        quotedTotal: total,
         voucherCode: appliedVoucher?.code ?? null,
         voucherEntry: appliedVoucher ? voucherEntry : null,
       })
@@ -315,6 +461,59 @@ export default function Storefront() {
         toast.error(voucherRefusal(t))
       } else if (code === 'merchant_inactive' || code === 'merchant_not_found') {
         const msg = t('This shop is not taking orders right now.', '本店目前暂不接单。')
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'price_changed') {
+        // The shop's prices moved while they were checking out. NOTHING was written. Show them
+        // the new numbers and let them decide — charging the new total silently would bill a
+        // number they never agreed to, and honouring the stale one would let an old quote buy a
+        // discount the shop withdrew.
+        //
+        // The VOUCHER is re-read alongside the products, and it has to be: an edited
+        // `vouchers.amount` moves the total exactly as an edited price does, and re-quoting from
+        // the stale voucher would be refused again on the very next tap — the same refusal loop,
+        // forever, until the customer thought to remove and re-apply the code themselves.
+        await refreshQuoteSources()
+        const msg = t(
+          'Prices at this shop just changed. Please review your order and place it again.',
+          '本店价格刚刚有所调整，请确认订单后重新下单。',
+        )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'product_unavailable') {
+        // Something in the cart stopped being on sale mid-checkout. Refetching is what RECOVERS
+        // the checkout, not just what refreshes the menu: `adoptProducts` takes the new menu and
+        // drops the cart ids that are gone, saying which. Without that, the invisible id stayed
+        // in the cart and every retry was refused identically.
+        await refreshQuoteSources()
+        const msg = t(
+          'Something in your cart is no longer available. It has been removed — please review your order and place it again.',
+          '购物车中有商品已下架，已为你移除，请确认订单后重新下单。',
+        )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'delivery_state_required') {
+        // Unreachable from this form — `deliveryReady` will not let a stateless delivery be
+        // submitted — and it is here precisely because that gate is the ONLY thing making it so.
+        // A delivery with no state is priced at zero shipping, which is why the backend refuses
+        // it rather than quietly eating the fee.
+        const msg = t(
+          'Please choose the state you are delivering to.',
+          '请选择送货的州属。',
+        )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'invalid_body') {
+        // The door refused the SHAPE of the order, not the order — almost always a cart past
+        // the caps, which `updateQty` now stops at, so an honest checkout should never get
+        // here. It is a permanent refusal: retrying the same cart is refused identically. Say
+        // what would change it, in words. Without this branch the customer read the literal
+        // string `invalid_body` on the checkout screen — `OrderError`'s `super(code)` puts the
+        // wire code in `err.message`, and the final `else` renders it.
+        const msg = t(
+          `Your order is too large. Please order at most ${MAX_CART_QTY} of any one item, and at most ${MAX_CART_LINES} different items.`,
+          `订单过大。每种商品最多 ${MAX_CART_QTY} 件，每单最多 ${MAX_CART_LINES} 种不同商品。`,
+        )
         setError(msg)
         toast.error(msg)
       } else if (code === 'network') {

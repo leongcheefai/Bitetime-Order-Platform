@@ -4,15 +4,23 @@ Names for the load-bearing concepts in the ordering app. Use these terms in code
 
 ## Order pricing
 
-The deep, pure module (`apps/frontend/src/pricing.ts`) that turns a cart + context into a money breakdown. Single source of truth for every total the app shows. Owns shipping-region selection, promo price resolution, voucher discount, and referral discount — in that order. No I/O: the clock, the loaded voucher, the sameday quote, and the resolved referral are all passed in.
+The deep, pure module (`packages/shared/src/pricing.ts`) that turns a cart + context into a money breakdown. Single source of truth for every total the app **shows** and every total the backend **charges** — it lives in `@bitetime/shared` for exactly that reason. Owns shipping-region selection, promo price resolution, voucher discount, and referral discount — in that order. No I/O: the clock, the loaded voucher, the sameday quote, and the resolved referral are all passed in.
 
-- **`priceOrder(input) -> PriceBreakdown`** — the one interface. The Storefront is its only caller. Returns `{ lines, subtotal, shipping, discount, referralDiscount, total }`. The `lines` carry resolved unit prices so the success screen and the Telegram message consume the breakdown instead of re-deriving it.
-- **`voucherError(voucher, ctx) -> string | null`** — pure voucher rules (expiry, `usedBy`, assignment, `minOrder` gate). Loading the codes stays I/O in the caller; the rules are testable without a network.
+**The backend is the price authority.** The Storefront's `priceOrder` call is a *quote*, for display; the backend's, inside the order transaction, is the *charge*. `POST /api/orders` carries a cart (`{productId: qty}`) and `quotedTotal` — the number the customer saw — and no prices at all: `items`, `total`, `shipping_fee`, `discount` and `currency` are every one derived from the shop's own rows. The quote is **checked, never trusted**. A disagreement is refused (`price_changed`) and the whole transaction rolls back — not even a counter slot is burnt — so a customer is never charged a number they did not confirm, and a stale quote never buys a withdrawn discount. Before this, a client could POST `total: 0` and the order committed at zero.
+
+One input to that derivation still comes from the body, and it is worth naming: the shipping **rate** is read from `merchants.shipping`, but the shipping **region** is read from the delivery address's `state` — the parcel's own destination, which only the customer can say. So the fee is *charged from the shop's rows, for the region the customer declared*. A `delivery` that declares no state is **refused** (`delivery_state_required`), never priced: with no state, `shippingFee` falls through to 0, and the shop would ship to Sabah for free. The rest — quantities aside, and those are capped — the client cannot influence at all.
+
+- **`priceOrder(input) -> PriceBreakdown`** — the one interface, called on **both** sides of the wire. Returns `{ lines, subtotal, shipping, discount, referralDiscount, total }`. The `lines` carry resolved unit prices, so the order row, the success screen and the Telegram message consume the breakdown instead of re-deriving it.
+- **`voucherError(voucher, ctx) -> string | null`** — pure voucher rules. The **browser's pre-flight only**; the backend enforces redemption under a row lock in `claimVoucher` instead. Three of its six codes (`min_order`, `expired`, `not_assigned`) can never fire, because no column backs them — see #71.
+- **`voucherFromRow(row) -> PricedVoucher`** — the `vouchers` row → domain mapping, shared because both sides price from the same rows. Coerces `amount`, which **postgres.js returns as a string**.
+- **`shopRates(shipping) -> { WM, EM }`** — the `merchants.shipping` jsonb → rates mapping, shared for the same reason: the two sides disagreeing is now a refused checkout, not a rounding difference. A missing `EM` falls back to `WM`, never to 0 — a 0 would ship to East Malaysia free.
 - **`effectivePrice(product, now, sold)`** — promo resolution (`promoActive` by date and quantity limit).
 
-Two of `priceOrder`'s inputs have no caller supplying them, so two documented rules do not currently run: `referral` (so `referralDiscount` is always 0) and `promoSold` (so a promo's quantity limit never binds — a capped promo runs unlimited). Both were fed by the deleted legacy order form. Tracked in #66; do not read those two rules as live behaviour.
+`mode` is an **allowlist** (`pickup` | `delivery`), not a free string, and that is a price rule: `mode` selects the shipping fee, so any unrecognised value prices shipping at 0. `sameday` is deliberately absent — it is unreachable from the Storefront and has no rate behind it. The cart is capped at the door too (≤ 1000 per line, ≤ 100 lines, `invalid_body`): `Number.isInteger(1e21)` is true, and the price check cannot catch a quantity the client both asks for and quotes.
 
-Discount order is load-bearing: voucher applies to items+shipping, then referral applies to the post-voucher total (`min(amount, totalAfterVoucher)`). Rounding is `parseFloat(toFixed(2))` per step.
+Promo is **unbuilt**, not unwired: `products` has no `promo_price`/`promo_limit`/`promo_end` column and the dashboard offers no promo field, so `promoActive` is always false and no merchant has ever been able to set a promo, capped or otherwise (#69). The `referral` input likewise has no caller, so `referralDiscount` is always 0 (#70). Do not read either as live behaviour.
+
+Discount order is load-bearing: voucher applies to items+shipping, then referral applies to the post-voucher total (`min(amount, totalAfterVoucher)`). Rounding is `parseFloat(toFixed(2))` per step, and the quote/charge comparison is made in whole cents.
 
 ## Order intake
 
@@ -28,7 +36,7 @@ Two things share the name.
 
 **Referral capture** — live. A merchant signs up under another member's code, which is stamped on `merchants.referred_by_code`; the referrer can list the shops they brought in (`GET /api/referrals/shops`). A member's code is the first 8 hex characters of their user id, uppercased. The code is always derived from the caller's verified identity, never accepted from the request — a referrer's shops are not their own tenant, so reading them is a cross-tenant read, and the un-choosable code is the only thing that makes it safe. Display-only: no reward is granted.
 
-**Referral discount** — a discount on a customer's order, capped at the post-voucher total. The cap math is in `priceOrder`, which takes a resolved `referral` as input — but nothing supplies one, so this does not currently run. See Order pricing.
+**Referral discount** — a discount on a customer's order, capped at the post-voucher total. The cap math is in `priceOrder`, which takes a resolved `referral` as input — but nothing supplies one, so this does not currently run. Reconnecting it is not a wiring job: the legacy program was two-sided (a first-order discount for the referred customer *and* a gift product for the referrer, merchant-confirmed), and it needs a product decision first. See #70 and Order pricing.
 
 ## Customer signup
 

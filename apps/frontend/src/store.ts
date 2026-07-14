@@ -1,4 +1,5 @@
 import type { User } from '@supabase/supabase-js';
+import { voucherFromRow } from '@bitetime/shared';
 import { supabase } from './supabase';
 import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
@@ -429,16 +430,10 @@ export function voucherFullyUsed(v: Voucher) {
 // Reads the merchant-scoped `vouchers` table and maps its columns onto the
 // Voucher shape the pricing module expects.
 
-export function voucherFromRow(row: any): Voucher {
-  return {
-    id: row.id,
-    code: row.code,
-    type: row.kind,                 // 'percent' | 'fixed'
-    value: Number(row.amount),
-    maxUses: row.max_uses ?? null,
-    usedBy: Array.isArray(row.used_by) ? row.used_by : [],
-  } as Voucher;
-}
+// The row → domain mapping now lives in @bitetime/shared: the backend prices orders from the
+// same voucher rows, and a second copy of this mapping is a second way for the two sides to
+// disagree about what a voucher is worth.
+export { voucherFromRow } from '@bitetime/shared'
 
 export async function fetchMerchantVouchers(merchantId: string): Promise<Voucher[]> {
   if (!merchantId) return [];
@@ -448,16 +443,40 @@ export async function fetchMerchantVouchers(merchantId: string): Promise<Voucher
   return (data ?? []).map(voucherFromRow);
 }
 
-// Fetch one voucher by code with its current used_by, bypassing any stale
-// in-memory snapshot. Used to re-validate one-per-customer just before an order
-// is placed (the page-load snapshot never sees this session's own redemption).
-export async function fetchMerchantVoucher(merchantId: string, code: string): Promise<Voucher | null> {
-  if (!merchantId || !code) return null;
+/**
+ * The answer to "does this shop still have this voucher?", with "I could not ask" as its own
+ * answer and not a `null` shaped like "no".
+ *
+ * supabase-js does not reject on a network or PostgREST failure — it RESOLVES with
+ * `{ data: null, error }`. So a lookup that collapses both onto `null` cannot tell a voucher
+ * the merchant deleted from a voucher it simply failed to reach, and a caller that DROPS the
+ * voucher on `null` confiscates a perfectly valid one the moment the connection flickers —
+ * while telling the customer it "is no longer available", which is a lie about their money.
+ */
+export type VoucherLookup =
+  | { ok: true; voucher: Voucher | null }  // we asked; `null` = the shop no longer has it
+  | { ok: false }                          // we could not ask; the caller must change nothing
+
+export async function lookupMerchantVoucher(merchantId: string, code: string): Promise<VoucherLookup> {
+  if (!merchantId || !code) return { ok: true, voucher: null };
   const { data, error } = await supabase
     .from('vouchers').select('*')
     .eq('merchant_id', merchantId).eq('code', code).maybeSingle();
-  if (error || !data) return null;
-  return voucherFromRow(data);
+  if (error) return { ok: false };
+  return { ok: true, voucher: data ? voucherFromRow(data) : null };
+}
+
+// Fetch one voucher by code with its current used_by, bypassing any stale
+// in-memory snapshot. Used to re-validate one-per-customer just before an order
+// is placed (the page-load snapshot never sees this session's own redemption).
+//
+// A failure reads as a MISS here, which is safe only because both of this function's callers
+// treat a miss as "carry on with what you have" — the submit pre-flight falls through to the
+// server's own guard, and applyVoucher was never going to apply a voucher it could not read.
+// A caller that would DROP something on a miss must use `lookupMerchantVoucher` instead.
+export async function fetchMerchantVoucher(merchantId: string, code: string): Promise<Voucher | null> {
+  const found = await lookupMerchantVoucher(merchantId, code);
+  return found.ok ? found.voucher : null;
 }
 
 // `redeemVoucher` is gone, and its absence is the fix. Redemption was a SECOND call made
@@ -521,9 +540,10 @@ const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
  * Why an order was refused, in the backend's own words.
  *
  * A DELIBERATE TWIN of `OrderErrorCode` in `apps/backend/src/orders.ts` — the backend is a
- * separate workspace, and these codes are the wire contract between them. Add a code there
- * and you must add it here and give it a message in `Storefront.tsx`'s VOUCHER_REFUSALS, or
- * the customer gets "something went wrong" for a refusal we know the reason for.
+ * separate workspace, and these codes are the wire contract between them. Add a code there and
+ * you must add it here and give it a `t(en, zh)` message in `Storefront.tsx`'s `handleSubmit`
+ * catch block (VOUCHER_REFUSALS is the table for the voucher ones), or the customer gets
+ * "something went wrong" for a refusal we know the reason for.
  */
 export type OrderErrorCode =
   | 'merchant_not_found'
@@ -532,23 +552,32 @@ export type OrderErrorCode =
   | 'voucher_already_used'
   | 'voucher_fully_used'
   | 'voucher_entry_required'
+  | 'price_changed'
+  | 'product_unavailable'
+  | 'delivery_state_required'
 
 /**
  * A refusal the customer can do something about — retry without the voucher, come back later.
  *
  * `network` and `order_failed` are the browser's own additions, and have no backend twin: the
  * first is a fetch that never landed, the second a server fault with no code to explain it.
+ *
+ * `invalid_body` is the route's own 400 (app.ts, not orders.ts) — the body did not have the
+ * shape of an order at all. It reaches the customer only if the UI has built a cart the door
+ * refuses, which the shared caps (`MAX_CART_QTY`/`MAX_CART_LINES`) exist to make impossible;
+ * it still needs a message, because `super(code)` means the alternative is the customer
+ * reading the literal string "invalid_body" on the checkout screen.
  */
 export class OrderError extends Error {
-  constructor(readonly code: OrderErrorCode | 'order_failed' | 'network') {
+  constructor(readonly code: OrderErrorCode | 'invalid_body' | 'order_failed' | 'network') {
     super(code)
     this.name = 'OrderError'
   }
 }
 
 /**
- * Place an order: ONE call, which commits the order number, the order row and the voucher
- * claim in a single transaction server-side.
+ * Place an order: ONE call, which commits the order number, the order row, the voucher claim
+ * and THE PRICE in a single transaction server-side.
  *
  * This used to be three trips from the browser with no transaction around them — take a
  * number, insert the order, then record the redemption — and the storefront threw the third
@@ -560,18 +589,22 @@ export class OrderError extends Error {
  * The browser no longer has INSERT on `orders` at all (the grant is revoked), so there is no
  * path back to the old shape even by accident. `user_id` is not sent: the backend takes it
  * from this request's JWT, and sending it would be ignored.
+ *
+ * We send what the customer WANTS (the cart) and what they SAW (`quotedTotal`) — never what it
+ * costs. The backend derives every number from its own rows; sending a total would mean any
+ * client could name its own. If the backend's price disagrees with our quote it refuses with
+ * `price_changed` rather than charging a number the customer never confirmed.
  */
-export async function placeOrder({ merchantId, customerName, customerWa, mode, address, shippingFee, items, total, currency, discount, voucherCode, voucherEntry }: {
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, cart, quotedTotal, voucherCode, voucherEntry }: {
   merchantId: string
   customerName: string
   customerWa: string
-  mode: string
+  // The wire contract, not a string: the backend allowlists exactly these two and 400s on
+  // anything else, because `mode` selects the shipping fee. Mirrors PlaceOrderInput's union.
+  mode: 'pickup' | 'delivery'
   address?: AddressParts | string
-  shippingFee?: number
-  items: any
-  total: number
-  currency?: string
-  discount?: number
+  cart: Record<string, number>
+  quotedTotal: number
   voucherCode?: string | null
   voucherEntry?: string | null
 }) {
@@ -589,10 +622,7 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     },
     body: JSON.stringify({
       merchantId, customerName, customerWa, mode, address,
-      shippingFee: shippingFee ?? 0,
-      items, total,
-      currency: currency ?? 'MYR',
-      discount, voucherCode, voucherEntry,
+      cart, quotedTotal, voucherCode, voucherEntry,
     }),
   }).catch(() => null)
   if (!res) throw new OrderError('network')
@@ -738,13 +768,35 @@ export async function fetchMerchantCustomers(merchantId: string) {
 
 // ── Products ──────────────────────────────────────────────────────────────────
 
-export async function fetchProducts(merchantId: string) {
+/**
+ * The shop's menu — or `null`, meaning WE COULD NOT ASK.
+ *
+ * That distinction is the whole point of this function existing next to `fetchProducts`.
+ * supabase-js does not reject on a network or PostgREST failure: it RESOLVES with
+ * `{ data: null, error }`. So a fetcher that returns `[]` on error is telling its caller "this
+ * shop sells nothing" — and a caller that PRUNES the cart against the menu (Storefront's
+ * `adoptProducts` does, and must) would answer a flaky connection by deleting every line the
+ * customer chose, blanking the menu behind it, and blaming the shop. That is a destroyed order,
+ * not a retry.
+ *
+ * `[]` from here is the real answer to a real question: the shop genuinely sells nothing, and
+ * pruning everything is CORRECT. `null` is not an answer at all. Do not collapse them.
+ */
+export async function lookupProducts(merchantId: string) {
   if (!merchantId) return []
   const { data, error } = await supabase
     .from('products').select('*').eq('merchant_id', merchantId)
     .order('sort', { ascending: true }).order('created_at', { ascending: true })
-  if (error) return []
+  if (error) return null
   return data ?? []
+}
+
+// The menu, with a failure reported as an empty shop. Kept for the callers that only DISPLAY
+// the rows (the merchant's product manager, the order-history name lookup): an empty list
+// there costs a render, and they were all written against it. A caller that deletes anything
+// on the strength of this list must use `lookupProducts` and do nothing on `null`.
+export async function fetchProducts(merchantId: string) {
+  return (await lookupProducts(merchantId)) ?? []
 }
 
 export async function upsertProduct(product: any) {

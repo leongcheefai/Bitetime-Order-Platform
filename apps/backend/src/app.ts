@@ -27,6 +27,7 @@ import { fetchRegionPricing, createPricingCache, type PricingPayload } from './p
 import { listReferredShops } from './referrals.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
+import { isCart } from '@bitetime/shared'
 
 export const app = new Hono()
 
@@ -456,14 +457,16 @@ app.post('/api/customer/signup', async (c) => {
   return c.json({ ok: true })
 })
 
-// ── Order intake — counter, order and voucher in ONE transaction ──────────────
+// ── Order intake — counter, voucher, PRICE and order in ONE transaction ───────
 // The JWT is OPTIONAL: guest checkout is a first-class path and must keep working.
 //
+// The body carries a cart and the total the customer saw. It carries NO prices: every number
+// on the order is derived from Postgres inside placeOrder. It used to carry `total`, which
+// meant any client could POST total: 0 and have the order commit at zero.
+//
 // Attribution comes from the token and from nowhere else. `user_id` is never read from the
-// body — see placeOrder's contract for why that is now a security property rather than a
-// tidiness one: the orders_set_user_id trigger coalesces instead of overwriting, so a
-// user_id that reaches it is trusted, and the only reason nothing untrusted can reach it is
-// that anon/authenticated no longer hold INSERT on orders.
+// body — see placeOrder's contract for why that is a security property rather than a tidiness
+// one.
 app.post('/api/orders', async (c) => {
   const bodyJson = await c.req.json().catch(() => null)
   if (!bodyJson || typeof bodyJson !== 'object') return c.json({ error: 'invalid_body' }, 400)
@@ -475,24 +478,32 @@ app.post('/api/orders', async (c) => {
 
   const b = bodyJson as Record<string, unknown>
 
-  // Reject a malformed body rather than coercing it. `Number('abc')` is NaN, which sails past
-  // TypeScript, reaches Postgres and comes back a 500 — a bad request dressed up as a server
-  // fault. A number field that is not a number is the client's bug, and it is told so.
-  const num = (v: unknown, fallback: number): number | null => {
-    if (v === undefined || v === null) return fallback
-    return typeof v === 'number' && Number.isFinite(v) ? v : null
-  }
-  const shippingFee = num(b.shippingFee, 0)
-  const total = num(b.total, 0)
-  const discount = num(b.discount, 0)
+  // A cart is ids → positive whole quantities, within the caps — `isCart` from @bitetime/shared
+  // is the rule, and it is shared for the same reason the pricing is: the storefront stops the
+  // customer AT those caps, so the UI cannot build a cart this door then refuses. A local copy
+  // of the numbers here is a copy that can drift, and a drifted cap is a dead checkout — the
+  // customer sees `invalid_body` with nothing to do about it.
+  const quotedTotal = typeof b.quotedTotal === 'number' && Number.isFinite(b.quotedTotal)
+    ? b.quotedTotal
+    : null
+
+  // An ALLOWLIST, not a string check: `mode` SELECTS THE SHIPPING FEE. Any value other than
+  // 'delivery' prices shipping at 0, so a free string is a client-chosen value that zeroes a
+  // fee — the same hole as a client-supplied `total`, and `mode: 'sameday'` walked straight
+  // through it with an address attached.
+  //
+  // 'sameday' is DELIBERATELY not here: it is unreachable from the Storefront (which offers
+  // exactly these two) and has no rate behind it. Adding it back without a real fee re-opens
+  // the hole.
+  const mode = b.mode === 'pickup' || b.mode === 'delivery' ? b.mode : null
 
   if (
     typeof b.merchantId !== 'string' || !b.merchantId ||
     typeof b.customerName !== 'string' ||
     typeof b.customerWa !== 'string' ||
-    typeof b.mode !== 'string' ||
-    !Array.isArray(b.items) ||
-    shippingFee === null || total === null || discount === null
+    mode === null ||
+    !isCart(b.cart) ||
+    quotedTotal === null
   ) {
     return c.json({ error: 'invalid_body' }, 400)
   }
@@ -503,20 +514,17 @@ app.post('/api/orders', async (c) => {
       userId: user?.id ?? null,
       customerName: b.customerName,
       customerWa: b.customerWa,
-      mode: b.mode,
+      mode,
       address: b.address ?? null,
-      shippingFee,
-      items: b.items,
-      total,
-      currency: typeof b.currency === 'string' ? b.currency : undefined,
-      discount,
+      cart: b.cart,
+      quotedTotal,
       voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
       voucherEntry: typeof b.voucherEntry === 'string' ? b.voucherEntry : null,
     })
     return c.json(result)
   } catch (err) {
-    // A refusal the customer can act on — a closed shop, a spent voucher — carries its code
-    // so the storefront can say which, and can offer the retry without the voucher. Anything
+    // A refusal the customer can act on — a closed shop, a spent voucher, a price that moved —
+    // carries its code so the storefront can say which, and can offer the right retry. Anything
     // else is a bug, and must not be dressed up as a domain error the customer can "fix".
     if (err instanceof OrderError) {
       return c.json({ error: err.code }, err.code === 'merchant_not_found' ? 404 : 409)

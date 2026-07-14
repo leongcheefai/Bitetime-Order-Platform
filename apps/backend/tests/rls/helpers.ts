@@ -92,6 +92,27 @@ export async function seedMerchant(fields: {
   return data!.id as string
 }
 
+/** Seed one product for a merchant. Returns its id. */
+export async function seedProduct(fields: {
+  merchant_id: string
+  name?: string
+  price: number
+  active?: boolean
+}) {
+  const { data, error } = await serviceClient()
+    .from('products')
+    .insert({
+      merchant_id: fields.merchant_id,
+      name: fields.name ?? 'Matcha Cookie',
+      price: fields.price,
+      active: fields.active ?? true,
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(`seeding product: ${error.message}`)
+  return data!.id as string
+}
+
 /**
  * Create a confirmed auth user via the service role, then sign them in with
  * the anon client and return the signed-in client.
