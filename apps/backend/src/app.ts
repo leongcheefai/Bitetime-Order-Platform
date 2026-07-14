@@ -25,6 +25,7 @@ import { clientIp } from './clientIp.js'
 import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
 import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
 import { listReferredShops } from './referrals.js'
+import { trackOrder } from './orderTracking.js'
 
 export const app = new Hono()
 
@@ -462,6 +463,34 @@ app.post('/api/notify/order', async (c) => {
   const result = await notifyOrderPlaced(admin, telegramSend, { merchantId, orderNumber })
   if (!result.ok) return c.json(result, result.error === 'order not found' ? 404 : 400)
   return c.json(result)
+})
+
+// ── Guest order tracking ──────────────────────────────────────────────────────
+// Replaces the track_order SECURITY DEFINER function. Unauthenticated on purpose: tracking
+// a guest order without an account is the entire point of it.
+//
+// Every miss — wrong number, wrong phone, missing field, unparseable body — is the SAME bare
+// null with the SAME 200. That uniformity is the security property. Order numbers are a
+// per-shop daily counter and therefore guessable; the phone is what makes a guess cost ~10^8
+// tries instead of one, and a response that tells "no such order" apart from "wrong phone"
+// hands back exactly the enumeration oracle the phone exists to remove. Do not add a helpful
+// error message here, and do not 404 the miss.
+app.post('/api/orders/track', async (c) => {
+  const { merchantId, orderNumber, phone } = await c.req.json().catch(() => ({}))
+  if (typeof merchantId !== 'string' || typeof orderNumber !== 'string' || typeof phone !== 'string') {
+    return c.json(null)
+  }
+
+  try {
+    return c.json(await trackOrder(merchantId, orderNumber, phone))
+  } catch (err) {
+    // A merchantId that is not a uuid makes Postgres throw, and an uncaught throw is a 500 —
+    // a response that says "your order number was real, your merchant was not". Same null,
+    // logged for the operator rather than reported to the caller. This is also what the RPC
+    // it replaces did: PostgREST errored, and the browser turned any error into a null.
+    console.error('Order tracking failed:', err instanceof Error ? err.message : String(err))
+    return c.json(null)
+  }
 })
 
 // ── Stripe webhook — authoritative subscription state ──────────────────────────
