@@ -56,8 +56,8 @@ const VOUCHER_REFUSALS = {
     t('You have already used this voucher. Please place the order without it.', '你已使用过此优惠券，请不使用优惠券重新下单。'),
   voucher_fully_used: (t: (en: string, zh: string) => string) =>
     t('This voucher has been fully claimed. Please place the order without it.', '此优惠券已被领完，请不使用优惠券重新下单。'),
-  voucher_entry_required: (t: (en: string, zh: string) => string) =>
-    t('Enter the email or phone you are ordering with to use a voucher.', '使用优惠券需填写下单的邮箱或手机号。'),
+  voucher_requires_account: (t: (en: string, zh: string) => string) =>
+    t('Please sign in to use a voucher, then place the order again.', '使用优惠券需先登录，登录后请重新下单。'),
 } as const
 
 export default function Storefront() {
@@ -136,8 +136,10 @@ export default function Storefront() {
   // by a ringgit would not be a display bug — it would refuse the checkout.
   const { WM: rateWM, EM: rateEM } = shopRates(merchant?.shipping)
   const baseDeliveryFee = rateWM // shown on the Delivery toggle before a state is known
-  // One-per-customer identity: account email when signed in, else the WhatsApp number.
-  const voucherEntry = (account?.email || wa || '').trim().toLowerCase()
+  // The voucher's one-per-customer key — the account email, and nothing else. It must match
+  // what the SERVER keys on (the JWT's email), or this pre-flight green-lights a claim the
+  // server then refuses. A voucher requires an account: there is no guest key (#72).
+  const voucherEntry = (account?.email ?? '').trim().toLowerCase()
 
   const productName = (p: Product) =>
     (lang === 'zh' && p.name_zh) ? p.name_zh : p.name
@@ -250,13 +252,6 @@ export default function Storefront() {
   const applyVoucher = async () => {
     const code = voucherInput.trim().toUpperCase()
     if (!code) return
-    // A voucher is tracked one-per-customer by WhatsApp/email; without one the
-    // redemption can't be attributed and the server rejects it. Ask up front.
-    if (!voucherEntry) {
-      setAppliedVoucher(null)
-      setVoucherMsg(t('❌ Enter your WhatsApp number before applying a voucher.', '❌ 请先填写 WhatsApp 号码再使用优惠券。'))
-      return
-    }
     // Validate against fresh DB state, not a page-load snapshot — otherwise a
     // customer who already redeemed this code (even earlier in this session)
     // sees a false "applied" that only fails at Place Order. Catch reuse here.
@@ -431,7 +426,6 @@ export default function Storefront() {
         cart: Object.fromEntries(Object.entries(cart).filter(([, qty]) => qty > 0)),
         quotedTotal: total,
         voucherCode: appliedVoucher?.code ?? null,
-        voucherEntry: appliedVoucher ? voucherEntry : null,
       })
       // Remember what they typed, silently, so they never type it again — at this shop or any
       // other. Best-effort and unawaited: the order is already placed, and a profile write that
@@ -885,6 +879,17 @@ export default function Storefront() {
                   {t('Remove', '移除')}
                 </button>
               </div>
+            ) : !account ? (
+              // A voucher is keyed to a verified account, so a guest cannot carry one (#72).
+              // This is an OFFER, not a gate: the checkout path itself is untouched and guest
+              // checkout is still one tap. You just cannot bring a discount through it.
+              <button
+                type="button"
+                onClick={() => setSignInOpen(true)}
+                className="text-[13px] text-rose-muted cursor-pointer underline inline-block hover:text-oxblood"
+              >
+                {t('Sign in to use a voucher', '登录后可使用优惠券')}
+              </button>
             ) : (
               <div className="flex items-stretch gap-2">
                 <Input
