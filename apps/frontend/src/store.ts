@@ -440,7 +440,7 @@ export async function fetchMerchantVouchers(merchantId: string): Promise<Voucher
   const { data, error } = await supabase
     .from('vouchers').select('*').eq('merchant_id', merchantId);
   if (error) return [];
-  return (data ?? []).map(voucherFromRow) as Voucher[];
+  return (data ?? []).map(voucherFromRow);
 }
 
 // Fetch one voucher by code with its current used_by, bypassing any stale
@@ -452,7 +452,7 @@ export async function fetchMerchantVoucher(merchantId: string, code: string): Pr
     .from('vouchers').select('*')
     .eq('merchant_id', merchantId).eq('code', code).maybeSingle();
   if (error || !data) return null;
-  return voucherFromRow(data) as Voucher;
+  return voucherFromRow(data);
 }
 
 // `redeemVoucher` is gone, and its absence is the fix. Redemption was a SECOND call made
@@ -473,7 +473,7 @@ export async function createMerchantVoucher(input: {
     max_uses: input.maxUses ?? null,
   }).select().single();
   if (error) throw error;
-  return voucherFromRow(data) as Voucher;
+  return voucherFromRow(data);
 }
 
 export async function deleteMerchantVoucher(id: string) {

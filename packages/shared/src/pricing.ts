@@ -32,7 +32,7 @@ export interface PricedProduct {
  * nothing new starts depending on the dead branches here.
  */
 export interface PricedVoucher {
-  code?: string
+  code: string
   type?: string
   value?: number
   maxUses?: number | string | null
