@@ -491,11 +491,21 @@ app.post('/api/orders', async (c) => {
     ? b.quotedTotal
     : null
 
+  // An ALLOWLIST, not a string check: `mode` SELECTS THE SHIPPING FEE. Any value other than
+  // 'delivery' prices shipping at 0, so a free string is a client-chosen value that zeroes a
+  // fee — the same hole as a client-supplied `total`, and `mode: 'sameday'` walked straight
+  // through it with an address attached.
+  //
+  // 'sameday' is DELIBERATELY not here: it is unreachable from the Storefront (which offers
+  // exactly these two) and has no rate behind it. Adding it back without a real fee re-opens
+  // the hole.
+  const mode = b.mode === 'pickup' || b.mode === 'delivery' ? b.mode : null
+
   if (
     typeof b.merchantId !== 'string' || !b.merchantId ||
     typeof b.customerName !== 'string' ||
     typeof b.customerWa !== 'string' ||
-    typeof b.mode !== 'string' ||
+    mode === null ||
     !isCart(b.cart) ||
     quotedTotal === null
   ) {
@@ -508,7 +518,7 @@ app.post('/api/orders', async (c) => {
       userId: user?.id ?? null,
       customerName: b.customerName,
       customerWa: b.customerWa,
-      mode: b.mode,
+      mode,
       address: b.address ?? null,
       cart: b.cart,
       quotedTotal,

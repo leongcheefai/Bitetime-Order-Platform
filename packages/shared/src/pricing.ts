@@ -88,6 +88,40 @@ export function shippingFee(
   return 0
 }
 
+/** The `merchants.shipping` column's own default for West Malaysia — see `shopRates`. */
+export const DEFAULT_WM_RATE = 8
+
+const rate = (v: unknown): number | null => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v))) return Number(v)
+  return null
+}
+
+/**
+ * A `merchants.shipping` jsonb value → the rates `priceOrder` reads.
+ *
+ * BOTH sides of the wire go through here, and that is not tidiness: the browser prices to
+ * quote and the backend prices to commit, and the backend now REFUSES a quote it disagrees
+ * with (`price_changed`). Two fallback rules would not be a rounding difference — a row that
+ * ever lacked an `EM` key would refuse every East-Malaysia delivery outright.
+ *
+ * The fallbacks, chosen rather than inherited:
+ *   * a missing or unusable `WM` falls back to DEFAULT_WM_RATE — the column's own default
+ *     (`'{"WM":8,"EM":18}'`), which is what every existing row already carries;
+ *   * a missing or unusable `EM` falls back to `WM`. A shop that named one rate charges that
+ *     rate everywhere. Falling back to 0 would ship to East Malaysia for FREE — a fee zeroed
+ *     by a value nobody chose, which is the exact species of bug this module exists to close.
+ *
+ * Both match what the storefront already quotes, so adopting them moves no customer-visible
+ * number today; they only decide what happens to a row that is missing a key.
+ */
+export function shopRates(shipping: unknown): { WM: number; EM: number } {
+  const s = (shipping && typeof shipping === 'object' ? shipping : {}) as Record<string, unknown>
+  const WM = rate(s.WM) ?? DEFAULT_WM_RATE
+  const EM = rate(s.EM) ?? WM
+  return { WM, EM }
+}
+
 export function priceOrder(input: PriceInput): PriceBreakdown {
   const now = input.now ?? new Date()
 

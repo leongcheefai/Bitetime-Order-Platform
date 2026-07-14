@@ -203,6 +203,66 @@ describe('POST /api/orders', () => {
     expect(await ordersOf(shop)).toEqual([])
   })
 
+  // The cart's SHAPE is validated at the door, and each of these is a 400 rather than a 500 or
+  // a committed order. The quantity cases are the sharp ones: a non-numeric qty would reach
+  // Postgres as NaN and come back a server fault, and a zero/negative one would leave a cart
+  // that prices to nothing.
+  describe('a cart that is not a cart is a bad request', () => {
+    const cases: [string, unknown][] = [
+      ['a non-integer quantity', 'abc'],
+      ['a fractional quantity', 1.5],
+      ['a negative quantity', -1],
+      ['a zero quantity', 0],
+    ]
+
+    for (const [name, qty] of cases) {
+      it(`rejects ${name}`, async () => {
+        const res = await post(body(shop, productId, { cart: { [productId]: qty } }))
+
+        expect(res.status).toBe(400)
+        expect(await errorOf(res)).toBe('invalid_body')
+        expect(await ordersOf(shop)).toEqual([])
+      })
+    }
+
+    it('rejects an empty cart', async () => {
+      const res = await post(body(shop, productId, { cart: {} }))
+
+      expect(res.status).toBe(400)
+      expect(await errorOf(res)).toBe('invalid_body')
+      expect(await ordersOf(shop)).toEqual([])
+    })
+
+    // An array has no ids at all — `Object.values([])` is empty, so a laxer check would call
+    // it valid and hand cartProducts a cart with nothing in it.
+    it('rejects a cart sent as an array', async () => {
+      const res = await post(body(shop, productId, { cart: [] }))
+
+      expect(res.status).toBe(400)
+      expect(await errorOf(res)).toBe('invalid_body')
+      expect(await ordersOf(shop)).toEqual([])
+    })
+  })
+
+  // `mode` SELECTS THE SHIPPING FEE — only 'delivery' reads the shop's rates, so any other
+  // value prices shipping at 0. It was validated as a bare string, which meant
+  // `{ mode: 'sameday', address: {…} }` bought a delivery for free, and `mode: 'banana'`
+  // committed garbage into a text column with no check constraint. It is an allowlist now.
+  describe('mode is an allowlist, because it picks the shipping fee', () => {
+    for (const mode of ['sameday', 'banana', '', 'DELIVERY']) {
+      it(`refuses mode ${JSON.stringify(mode)}, and writes nothing`, async () => {
+        const res = await post(body(shop, productId, {
+          mode,
+          address: { line1: '1 Jalan Besar', postcode: '88000', city: 'Kota Kinabalu', state: 'Sabah' },
+        }))
+
+        expect(res.status).toBe(400)
+        expect(await errorOf(res)).toBe('invalid_body')
+        expect(await ordersOf(shop)).toEqual([])
+      })
+    }
+  })
+
   // ── Attribution: the JWT decides, the body never does ───────────────────────
 
   it('attributes a signed-in customer’s order to them', async () => {
@@ -379,13 +439,27 @@ describe('POST /api/orders', () => {
       expect(await ordersOf(shop)).toHaveLength(0)
     })
 
+    // The body states every price it can, and none of them survive. Same shape as `never
+    // persists a status the client asked for`: the hostile value is SENT, and the committed
+    // row is what proves it was ignored rather than merely absent.
     it('commits the server-derived total and items, not anything the body said', async () => {
-      const res = await post(body(shop, productId))
+      const res = await post(body(shop, productId, {
+        items: [{ id: 'x', name: 'Free Ferrari', qty: 1, price: 0 }],
+        total: 0,
+        shippingFee: -50,
+        shipping_fee: -50,
+        discount: 999,
+        currency: 'USD',
+      }))
       expect(res.status).toBe(200)
 
       const [order] = await ordersOf(shop)
       expect(Number(order.total)).toBe(26)
       expect(Number(order.shipping_fee)).toBe(0)
+      // No voucher was claimed, so there is no discount — 999 is not a number the body gets to
+      // hand itself, and the currency is the shop's.
+      expect(order.discount).toBeNull()
+      expect(order.currency).toBe('MYR')
       // Built from the products rows, so the name and the unit price are the shop's own — not
       // whatever the browser felt like calling them.
       expect(order.items).toEqual([

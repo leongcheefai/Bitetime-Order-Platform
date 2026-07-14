@@ -6,7 +6,7 @@ import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, placeOrder, fetchMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError } from '@bitetime/shared'
+import { priceOrder, voucherError, shopRates } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
@@ -136,8 +136,10 @@ export default function Storefront() {
   }
 
   const activeProducts = products.filter(p => p.active)
-  const rateWM = merchant?.shipping?.WM ?? 8
-  const rateEM = merchant?.shipping?.EM ?? rateWM
+  // The rates come from the SAME function the backend prices with: it commits at its own
+  // total and refuses a quote that disagrees (`price_changed`), so a fallback that differed
+  // by a ringgit would not be a display bug — it would refuse the checkout.
+  const { WM: rateWM, EM: rateEM } = shopRates(merchant?.shipping)
   const baseDeliveryFee = rateWM // shown on the Delivery toggle before a state is known
   // One-per-customer identity: account email when signed in, else the WhatsApp number.
   const voucherEntry = (account?.email || wa || '').trim().toLowerCase()

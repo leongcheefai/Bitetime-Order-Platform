@@ -1,5 +1,5 @@
 import type postgres from 'postgres'
-import { priceOrder, voucherFromRow } from '@bitetime/shared'
+import { priceOrder, voucherFromRow, shopRates } from '@bitetime/shared'
 import type { PricedProduct, PricedVoucher } from '@bitetime/shared'
 import { withTransaction } from './db.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
@@ -37,7 +37,16 @@ export interface PlaceOrderInput {
   userId: string | null
   customerName: string
   customerWa: string
-  mode: string
+  /**
+   * The two modes the Storefront offers, as a UNION and not a string — `mode` selects the
+   * shipping fee, so a free string is a client-chosen value that can zero one. It was a
+   * string, and `mode: 'sameday'` bought a delivery with a shipping_fee of 0.
+   *
+   * 'sameday' is DELIBERATELY absent: it is unreachable from the Storefront and has no rate
+   * behind it (`shippingFee` reads a `samedayFee` nobody passes, so it prices at 0). It is
+   * tracked separately — do not re-widen this union without giving it a real rate.
+   */
+  mode: 'pickup' | 'delivery'
   address?: unknown
   /** What they want, not what it costs. `{ [productId]: qty }`. */
   cart: Record<string, number>
@@ -102,7 +111,7 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     const bd = priceOrder({
       products,
       cart: input.cart,
-      mode: input.mode as 'pickup' | 'delivery' | 'sameday',
+      mode: input.mode,
       // Read off the address that is actually being shipped to, so the region that sets the
       // rate and the region on the parcel cannot disagree.
       state: deliveryState(input.mode, input.address),
@@ -162,7 +171,7 @@ interface OrderableMerchant {
  * different layer. (#65 used the term for this check; the glossary wins.)
  */
 async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: string): Promise<OrderableMerchant> {
-  const rows = await tx<{ order_prefix: string; status: string; shipping: { WM?: unknown; EM?: unknown } | null; currency: string | null }[]>`
+  const rows = await tx<{ order_prefix: string; status: string; shipping: unknown; currency: string | null }[]>`
     select order_prefix, status::text, shipping, currency from merchants where id = ${merchantId}
   `
   const merchant = rows[0]
@@ -170,10 +179,9 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
   if (merchant.status !== 'active') throw new OrderError('merchant_inactive')
   return {
     order_prefix: merchant.order_prefix,
-    rates: {
-      WM: Number(merchant.shipping?.WM ?? 0),
-      EM: Number(merchant.shipping?.EM ?? 0),
-    },
+    // shopRates, not a local fallback: the storefront quotes from the same function, and the
+    // penalty for the two disagreeing is now a REFUSAL (`price_changed`), not a rounding gap.
+    rates: shopRates(merchant.shipping),
     currency: merchant.currency ?? 'MYR',
   }
 }
@@ -203,6 +211,9 @@ async function cartProducts(
   cart: Record<string, number>,
 ): Promise<PricedProduct[]> {
   const ids = Object.keys(cart).filter(id => (cart[id] ?? 0) > 0)
+  // Unreachable over HTTP — app.ts's isCart already requires at least one positive quantity —
+  // and kept as the module's own guard, not as a tested path. An empty cart must never reach
+  // `= any('{}'::uuid[])`, which matches nothing and would commit an order for no products.
   if (ids.length === 0) throw new OrderError('product_unavailable')
   if (!ids.every(id => UUID.test(id))) throw new OrderError('product_unavailable')
 
@@ -219,7 +230,7 @@ async function cartProducts(
 }
 
 /** The state that sets the shipping region — only a delivery has one. */
-function deliveryState(mode: string, address: unknown): string | null {
+function deliveryState(mode: PlaceOrderInput['mode'], address: unknown): string | null {
   if (mode !== 'delivery') return null
   if (!address || typeof address !== 'object') return null
   const state = (address as Record<string, unknown>).state

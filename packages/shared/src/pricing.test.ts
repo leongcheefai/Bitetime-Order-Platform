@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { priceOrder, voucherError, voucherFromRow } from './pricing.js'
+import { priceOrder, voucherError, voucherFromRow, shopRates, DEFAULT_WM_RATE } from './pricing.js'
 import type { PricedProduct } from './pricing.js'
 
 const RATES = { WM: 8, EM: 12 }
@@ -204,5 +204,44 @@ describe('voucherFromRow', () => {
 
   it('defaults a missing used_by to an empty list, never undefined', () => {
     expect(voucherFromRow({ code: 'X', kind: 'fixed', amount: 5 }).usedBy).toEqual([])
+  })
+})
+
+// The two callers of priceOrder must agree to the cent — the backend REFUSES a quote it
+// disagrees with — so the fallbacks are pinned here rather than in each caller.
+describe('shopRates', () => {
+  it('reads both rates off a well-formed shipping row', () => {
+    expect(shopRates({ WM: 8, EM: 18 })).toEqual({ WM: 8, EM: 18 })
+  })
+
+  // A shop that named one rate charges it everywhere. Falling back to 0 would ship to East
+  // Malaysia for free — a fee zeroed by a value nobody chose.
+  it('falls a missing EM back to WM, never to free shipping', () => {
+    expect(shopRates({ WM: 12 })).toEqual({ WM: 12, EM: 12 })
+  })
+
+  it('falls a missing WM back to the column default', () => {
+    expect(shopRates({ EM: 20 })).toEqual({ WM: DEFAULT_WM_RATE, EM: 20 })
+  })
+
+  it('falls a null/undefined/non-object shipping value back to the column default, both regions', () => {
+    const both = { WM: DEFAULT_WM_RATE, EM: DEFAULT_WM_RATE }
+    expect(shopRates(null)).toEqual(both)
+    expect(shopRates(undefined)).toEqual(both)
+    expect(shopRates({})).toEqual(both)
+    expect(shopRates('nonsense')).toEqual(both)
+  })
+
+  // A zero a merchant actually TYPED is free shipping and is honoured — only an absent key
+  // falls back.
+  it('honours a rate of 0 that is really there', () => {
+    expect(shopRates({ WM: 0, EM: 0 })).toEqual({ WM: 0, EM: 0 })
+  })
+
+  // jsonb can carry a number as a string, and an unusable value must not become NaN — that
+  // is what reaches round2's .toFixed() and throws.
+  it('coerces a numeric string, and refuses anything that is not a number', () => {
+    expect(shopRates({ WM: '8.50', EM: '18' })).toEqual({ WM: 8.5, EM: 18 })
+    expect(shopRates({ WM: 'abc', EM: null })).toEqual({ WM: DEFAULT_WM_RATE, EM: DEFAULT_WM_RATE })
   })
 })
