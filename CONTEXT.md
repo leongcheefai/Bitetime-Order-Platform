@@ -10,7 +10,7 @@ The deep, pure module (`packages/shared/src/pricing.ts`) that turns a cart + con
 
 One input to that derivation still comes from the body, and it is worth naming: the shipping **rate** is read from `merchants.shipping`, but the shipping **region** is read from the delivery address's `state` — the parcel's own destination, which only the customer can say. So the fee is *charged from the shop's rows, for the region the customer declared*. A `delivery` that declares no state is **refused** (`delivery_state_required`), never priced: with no state, `shippingFee` falls through to 0, and the shop would ship to Sabah for free. The rest — quantities aside, and those are capped — the client cannot influence at all.
 
-- **`priceOrder(input) -> PriceBreakdown`** — the one interface, called on **both** sides of the wire. Returns `{ lines, subtotal, shipping, discount, referralDiscount, total }`. The `lines` carry resolved unit prices, so the order row, the success screen and the Telegram message consume the breakdown instead of re-deriving it.
+- **`priceOrder(input) -> PriceBreakdown`** — the one interface, called on **both** sides of the wire. Returns `{ lines, subtotal, shipping, discount, total }`. The `lines` carry resolved unit prices, so the order row, the success screen and the Telegram message consume the breakdown instead of re-deriving it.
 - **`voucherError(voucher, ctx) -> string | null`** — pure voucher rules. The **browser's pre-flight only**; the backend enforces redemption under a row lock in `claimVoucher` instead. Three of its six codes (`min_order`, `expired`, `not_assigned`) can never fire, because no column backs them — see #71.
 - **`voucherFromRow(row) -> PricedVoucher`** — the `vouchers` row → domain mapping, shared because both sides price from the same rows. Coerces `amount`, which **postgres.js returns as a string**.
 - **`shopRates(shipping) -> { WM, EM }`** — the `merchants.shipping` jsonb → rates mapping, shared for the same reason: the two sides disagreeing is now a refused checkout, not a rounding difference. A missing `EM` falls back to `WM`, never to 0 — a 0 would ship to East Malaysia free.
@@ -21,9 +21,9 @@ One input to that derivation still comes from the body, and it is worth naming: 
 
 A **cart key must be a canonical (lowercase) uuid** — the regex has no `i` flag, and that is money, not style. Postgres compares `uuid` case-insensitively and JavaScript `===` does not: an uppercase key matched the row in `= any(…::uuid[])`, sailed past the "every requested id came back" refusal, and then matched *nothing* in `priceOrder`'s `products.find(p => p.id === id)` — so the line was silently dropped, the cart priced at 0, and on a pickup `quotedTotal: 0` agreed with it. Any product, any quantity, committed free. **Refuse a non-canonical key; do not normalise it** — lowercasing would let the upper- and lowercase forms of one id merge into a single line at double the quantity, walking past `MAX_CART_QTY`.
 
-The `referral` input has no caller, so `referralDiscount` is always 0 (#70). Do not read it as live behaviour.
+There is no order-level referral discount. The legacy `referral` input and `referralDiscount` output were removed (#70) — the referral program is a **subscription** reward (see *Referral* below), not a discount on a customer's food order.
 
-Discount order is load-bearing: voucher applies to items+shipping, then referral applies to the post-voucher total (`min(amount, totalAfterVoucher)`). Rounding is `parseFloat(toFixed(2))` per step, and the quote/charge comparison is made in whole cents.
+Rounding is `parseFloat(toFixed(2))` per step, and the quote/charge comparison is made in whole cents.
 
 ## Promo
 
@@ -63,7 +63,7 @@ Two things share the name.
 
 **Referral capture** — live. A merchant signs up under another member's code, which is stamped on `merchants.referred_by_code`; the referrer can list the shops they brought in (`GET /api/referrals/shops`). A member's code is the first 8 hex characters of their user id, uppercased. The code is always derived from the caller's verified identity, never accepted from the request — a referrer's shops are not their own tenant, so reading them is a cross-tenant read, and the un-choosable code is the only thing that makes it safe. Display-only: no reward is granted.
 
-**Referral discount** — a discount on a customer's order, capped at the post-voucher total. The cap math is in `priceOrder`, which takes a resolved `referral` as input — but nothing supplies one, so this does not currently run. Reconnecting it is not a wiring job: the legacy program was two-sided (a first-order discount for the referred customer *and* a gift product for the referrer, merchant-confirmed), and it needs a product decision first. See #70 and Order pricing.
+**Referral reward** — a **subscription** reward, not an order discount (decided in #70, `docs/prd-referral-reward.md`). When a merchant who signed up under a member's code pays their **first invoice**, that referring member earns **one month free of their own plan** — a credit on their Stripe customer balance, valued at their current plan (yearly → annual ÷ 12). The referred merchant gets nothing. Stacks with no cap, granted once per referred shop, no clawback. The old order-level `referral`/`referralDiscount` path in `priceOrder` was deleted — a customer typing a code at checkout for money off their food was never this program.
 
 ## Customer signup
 

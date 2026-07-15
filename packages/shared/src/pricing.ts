@@ -2,7 +2,7 @@
 // breakdown. THE single source of truth for every total the app shows AND every
 // total the backend charges: the browser prices to quote, the backend prices to
 // commit, and two copies would drift into charging a customer a number they never
-// saw. No I/O: the clock, the loaded voucher and the resolved referral are passed in.
+// saw. No I/O: the clock and the loaded voucher are passed in.
 // See CONTEXT.md → "Order pricing".
 
 /**
@@ -56,7 +56,6 @@ export interface PriceBreakdown {
   subtotal: number
   shipping: number
   discount: number
-  referralDiscount: number
   total: number
 }
 
@@ -69,7 +68,6 @@ export interface PriceInput {
   samedayFee?: number
   resolvedShipping?: number // caller-resolved flat fee; wins over region logic
   voucher?: PricedVoucher | null
-  referral?: { amount: number; enabled: boolean } | null
   extraLines?: PriceLine[]
   // NO promoSold input. The count is a column on the product row, and a second channel for it is
   // a second thing to diverge — the browser quotes and the backend charges from the same row.
@@ -163,14 +161,9 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
 
   const beforeDiscount = subtotal + shipping
   const discount = voucherDiscount(input.voucher, beforeDiscount)
-  const afterVoucher = round2(beforeDiscount - discount)
+  const total = round2(beforeDiscount - discount)
 
-  const referralDiscount = input.referral?.enabled
-    ? Math.min(input.referral.amount, afterVoucher)
-    : 0
-  const total = round2(afterVoucher - referralDiscount)
-
-  return { lines, subtotal, shipping, discount, referralDiscount, total }
+  return { lines, subtotal, shipping, discount, total }
 }
 
 export type VoucherErrorCode =
@@ -237,8 +230,8 @@ export function promoState(p: PricedProduct, now: Date): PromoState | null {
  * increments `promo_sold` by, and nothing else. The units claimed are exactly the units priced.
  *
  * `products` (pass `input.products`, the same array given to `priceOrder`) is what tells a cart
- * line apart from an `extraLines` line: `priceOrder` appends `extraLines` (e.g. a free referral
- * gift) straight onto `bd.lines`, and a `promo: true` extra line has no row behind it — claiming
+ * line apart from an `extraLines` line: `priceOrder` appends `extraLines` (e.g. a free gift
+ * line) straight onto `bd.lines`, and a `promo: true` extra line has no row behind it — claiming
  * it would `update products set promo_sold = promo_sold + 1 where id = <an id that need not
  * exist>`. Only ids that came from the cart (i.e. appear in `products`) are ever claimed.
  */
