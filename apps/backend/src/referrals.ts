@@ -51,3 +51,37 @@ export async function listReferredShops(userId: string): Promise<ReferredShop[]>
     status: r.status,
   }))
 }
+
+export interface EarnedReward {
+  referred_shop_name: string
+  amount: number // smallest currency unit (cents)
+  currency: string
+  created_at: string
+}
+
+/**
+ * The referral rewards this user has EARNED — one free month per shop they brought in that
+ * converted to a paying plan. PRD: docs/prd-referral-reward.md (#70).
+ *
+ * Same security shape as listReferredShops: the caller's merchant is resolved from their
+ * verified id (`owner_id = ${userId}`), never from the request. This runs on the RLS-exempt
+ * `sql` connection, so scoping to the caller's own merchant here is the ONLY thing keeping
+ * one member from reading another's rewards — do not add a merchant/code parameter.
+ */
+export async function listEarnedRewards(userId: string): Promise<EarnedReward[]> {
+  const rows = await sql<{ referred_shop_name: string; amount: number; currency: string; created_at: Date }[]>`
+    select referred.name as referred_shop_name, rr.amount, rr.currency, rr.created_at
+    from public.referral_rewards rr
+    join public.merchants me       on me.id = rr.referrer_merchant_id
+    join public.merchants referred on referred.id = rr.referred_merchant_id
+    where me.owner_id = ${userId}
+    order by rr.created_at desc
+  `
+
+  return rows.map(r => ({
+    referred_shop_name: r.referred_shop_name,
+    amount: r.amount,
+    currency: r.currency,
+    created_at: r.created_at.toISOString(),
+  }))
+}

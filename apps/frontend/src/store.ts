@@ -5,7 +5,7 @@ import { resolveSlug, RESERVED_SLUGS } from './slug';
 import { orderPrefix } from './orderPrefix';
 import { resolveReferredByCode } from './referralCode'
 import { SignupError, signupErrorCode } from './signupError'
-import type { Order, ReferredShop, Voucher } from './types';
+import type { EarnedReward, Order, ReferredShop, Voucher } from './types';
 import type { SavedDetails } from './savedDetails';
 import { resetRedirectUrl } from './resetPassword';
 import type { AddressParts } from './types'
@@ -550,6 +550,23 @@ export async function fetchReferredShops(): Promise<ReferredShop[]> {
     throw new Error(error || 'Could not load referred shops')
   }
   return (await res.json()) as ReferredShop[]
+}
+
+// The referral rewards the current user has earned — free months for shops they brought in
+// that started paying. Like fetchReferredShops, the code is never sent: the backend scopes
+// to the caller's own merchant from the bearer token.
+export async function fetchEarnedRewards(): Promise<EarnedReward[]> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/referrals/rewards`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || 'Could not load referral rewards')
+  }
+  return (await res.json()) as EarnedReward[]
 }
 
 // ── Multi-tenant order placement ─────────────────────────────────────────────

@@ -36,6 +36,13 @@ export interface ReferredShop {
   status: MerchantStatus
 }
 
+export interface EarnedReward {
+  referred_shop_name: string
+  amount: number // smallest currency unit (cents)
+  currency: string
+  created_at: string
+}
+
 export interface Profile {
   id: string
   name?: string

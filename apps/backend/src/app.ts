@@ -24,7 +24,7 @@ import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
 import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
 import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
-import { listReferredShops } from './referrals.js'
+import { listReferredShops, listEarnedRewards } from './referrals.js'
 import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
@@ -404,6 +404,16 @@ app.get('/api/referrals/shops', async (c) => {
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
   return c.json(await listReferredShops(user.id))
+})
+
+// The referral rewards this member has earned. Same JWT-derived scoping as /shops — the
+// caller's merchant comes from the verified token, never the request.
+app.get('/api/referrals/rewards', async (c) => {
+  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+  const user = await getUserFromToken(token)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  return c.json(await listEarnedRewards(user.id))
 })
 
 app.post('/api/customer/signup', async (c) => {
