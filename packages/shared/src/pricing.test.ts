@@ -366,7 +366,7 @@ describe('productFromRow', () => {
 })
 
 describe('voucherError', () => {
-  const CTX = { subtotal: 50, userEmail: 'me@x.com', now: NOW }
+  const CTX = { userEmail: 'me@x.com' }
 
   it('returns invalid for a missing voucher', () => {
     expect(voucherError(null, CTX)).toBe('invalid')
@@ -376,24 +376,12 @@ describe('voucherError', () => {
     expect(voucherError({ code: 'X', usedBy: ['me@x.com'] } as any, CTX)).toBe('already_used')
   })
 
-  it('returns not_assigned when the voucher targets another email', () => {
-    expect(voucherError({ code: 'X', email: 'other@x.com' } as any, CTX)).toBe('not_assigned')
-  })
-
-  it('returns expired past expiresAt', () => {
-    expect(voucherError({ code: 'X', expiresAt: '2026-01-01' } as any, CTX)).toBe('expired')
-  })
-
-  it('returns min_order when subtotal is below minOrder', () => {
-    expect(voucherError({ code: 'X', minOrder: 80 } as any, CTX)).toBe('min_order')
-  })
-
   it('honors a precomputed fullyUsed flag', () => {
     expect(voucherError({ code: 'X' } as any, { ...CTX, fullyUsed: true })).toBe('fully_used')
   })
 
   it('returns null for a valid voucher', () => {
-    expect(voucherError({ code: 'X', minOrder: 50, email: 'me@x.com' } as any, CTX)).toBeNull()
+    expect(voucherError({ code: 'X' } as any, CTX)).toBeNull()
   })
 })
 

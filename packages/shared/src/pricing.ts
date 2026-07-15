@@ -32,11 +32,6 @@ export interface PricedProduct {
  * A voucher as the discount math needs it — `type` and `value` are the mapped names, NOT the
  * `kind`/`amount` columns. `voucherFromRow` (Task 2) is what maps one to the other, and both
  * sides of the wire must go through it or the discount diverges on shape alone.
- *
- * `minOrder`, `expiresAt` and `email` have no columns behind them, so `voucherError`'s
- * `min_order`, `expired` and `not_assigned` branches can never fire. That is #71, deliberately
- * deferred: this task moves the module as-is. The backend never calls `voucherError`, so
- * nothing new starts depending on the dead branches here.
  */
 export interface PricedVoucher {
   code: string
@@ -182,14 +177,9 @@ export type VoucherErrorCode =
   | 'invalid'
   | 'fully_used'
   | 'already_used'
-  | 'not_assigned'
-  | 'expired'
-  | 'min_order'
 
 export interface VoucherCtx {
-  subtotal: number // items + shipping, matching the legacy minOrder gate
   userEmail: string
-  now: Date
   fullyUsed?: boolean // caller precomputes via store.voucherFullyUsed
 }
 
@@ -201,9 +191,6 @@ export function voucherError(voucher: PricedVoucher | null | undefined, ctx: Vou
   const v = voucher as any
   if (ctx.fullyUsed) return 'fully_used'
   if ((v.usedBy || []).includes(email)) return 'already_used'
-  if (v.email && v.email !== email) return 'not_assigned'
-  if (v.expiresAt && new Date(v.expiresAt) < ctx.now) return 'expired'
-  if (v.minOrder && ctx.subtotal < v.minOrder) return 'min_order'
   return null
 }
 

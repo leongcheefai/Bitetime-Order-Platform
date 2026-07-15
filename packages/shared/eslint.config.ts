@@ -17,11 +17,9 @@ export default tseslint.config(
       'no-unused-vars': 'off',
       '@typescript-eslint/no-unused-vars': ['error', { varsIgnorePattern: '^_', argsIgnorePattern: '^_' }],
       // Matches apps/frontend and apps/backend, which both disable this rule. The pricing
-      // rule carries `as any` casts reaching voucher columns that do not exist yet
-      // (minOrder/expiresAt/email) — inert and deliberately left as-is until #71 makes them
-      // real. (The promo fields this comment used to cover, promoPrice/promoLimit/promoEnd,
-      // are real columns as of #69 and are now declared on PricedProduct, not cast through
-      // `any`.) Turning the rule on here means rewriting code this move must not touch.
+      // rule carries `as any` casts on the loosely-typed voucher shape (`type`/`value`/`usedBy`
+      // reached through PricedVoucher's index signature). Turning the rule on here means
+      // rewriting code this workspace deliberately keeps structurally identical to its callers.
       '@typescript-eslint/no-explicit-any': 'off',
     },
   },

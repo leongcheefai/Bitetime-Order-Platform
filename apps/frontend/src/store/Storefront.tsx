@@ -312,14 +312,12 @@ export default function Storefront() {
     const v = await fetchMerchantVoucher(merchant.id, code)
     setVoucherBusy(false)
     const err = voucherError(v, {
-      subtotal: bd.subtotal + bd.shipping,
       userEmail: voucherEntry,
-      now,
       fullyUsed: v ? voucherFullyUsed(v) : true,
     })
     if (err || !v) {
       setAppliedVoucher(null)
-      setVoucherMsg(voucherErrorText(err ?? 'invalid', v))
+      setVoucherMsg(voucherErrorText(err ?? 'invalid'))
       return
     }
     setAppliedVoucher(v)
@@ -333,14 +331,11 @@ export default function Storefront() {
     setVoucherMsg('')
   }
 
-  function voucherErrorText(code: string, v?: Voucher | null): string {
+  function voucherErrorText(code: string): string {
     switch (code) {
       case 'invalid': return t('❌ Invalid voucher code.', '❌ 无效的优惠码。')
       case 'fully_used': return t('❌ This voucher has been fully redeemed.', '❌ 此优惠券已用完。')
       case 'already_used': return t('❌ You have already used this voucher.', '❌ 您已使用过此优惠券。')
-      case 'not_assigned': return t('❌ This voucher is not assigned to your account.', '❌ 此优惠券不属于您的账户。')
-      case 'expired': return t('❌ This voucher has expired.', '❌ 此优惠券已过期。')
-      case 'min_order': return t(`❌ Minimum order of ${formatMoney((v as any)?.minOrder, currency)} required.`, `❌ 需要最低消费 ${formatMoney((v as any)?.minOrder, currency)}。`)
       default: return ''
     }
   }
@@ -451,15 +446,13 @@ export default function Storefront() {
         const fresh = await fetchMerchantVoucher(merchant.id, appliedVoucher.code)
         if (fresh) {
           const verr = voucherError(fresh, {
-            subtotal: bd.subtotal + bd.shipping,
             userEmail: voucherEntry,
-            now,
             fullyUsed: voucherFullyUsed(fresh),
           })
           if (verr) {
             setAppliedVoucher(null)
-            setVoucherMsg(voucherErrorText(verr, fresh))
-            setError(voucherErrorText(verr, fresh))
+            setVoucherMsg(voucherErrorText(verr))
+            setError(voucherErrorText(verr))
             return
           }
           // ADOPT it, don't just read it. The fresh row is what the backend prices from — it
