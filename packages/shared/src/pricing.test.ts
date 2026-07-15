@@ -24,7 +24,6 @@ describe('priceOrder', () => {
     expect(r.subtotal).toBe(25)
     expect(r.shipping).toBe(0)
     expect(r.discount).toBe(0)
-    expect(r.referralDiscount).toBe(0)
     expect(r.total).toBe(25)
     expect(r.lines).toEqual([
       { id: 'a', name: 'a', qty: 2, unitPrice: 10, lineTotal: 20, promo: false },
@@ -90,35 +89,7 @@ describe('priceOrder', () => {
     expect(r.total).toBe(0)
   })
 
-  it('referral applies after voucher and is capped at the post-voucher total', () => {
-    const r = priceOrder({
-      products: [product('a', 100)], cart: { a: 1 },
-      mode: 'pickup', rates: RATES, now: NOW,
-      voucher: { code: 'X', type: 'fixed', value: 30 } as any,
-      referral: { amount: 20, enabled: true },
-    })
-    expect(r.discount).toBe(30)
-    expect(r.referralDiscount).toBe(20) // min(20, 100-30)
-    expect(r.total).toBe(50)
-  })
-
-  it('referral capped at remaining total, ignored when disabled', () => {
-    const capped = priceOrder({
-      products: [product('a', 10)], cart: { a: 1 }, mode: 'pickup', rates: RATES, now: NOW,
-      referral: { amount: 50, enabled: true },
-    })
-    expect(capped.referralDiscount).toBe(10)
-    expect(capped.total).toBe(0)
-
-    const disabled = priceOrder({
-      products: [product('a', 10)], cart: { a: 1 }, mode: 'pickup', rates: RATES, now: NOW,
-      referral: { amount: 5, enabled: false },
-    })
-    expect(disabled.referralDiscount).toBe(0)
-    expect(disabled.total).toBe(10)
-  })
-
-  it('appends extra lines (e.g. free referral gift) into the breakdown', () => {
+  it('appends extra lines (e.g. a free gift line) into the breakdown', () => {
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 }, mode: 'pickup', rates: RATES, now: NOW,
       extraLines: [{ id: 'gift', name: '🎁 Gift', qty: 1, unitPrice: 0, lineTotal: 0, promo: false }],

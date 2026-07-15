@@ -114,7 +114,10 @@ credit the referrer one month of their current plan.
       still... — see Open Questions on forfeit permanence).
 - [ ] Reward amount = the referrer's **current plan monthly price**, read from the referrer's
       **active Stripe subscription** (authoritative amount lives in Stripe, per the
-      location-based-pricing rule), in the subscription's currency.
+      location-based-pricing rule), in the subscription's currency. Yearly cycle → **annual
+      amount ÷ 12** (integer cents); monthly cycle → the monthly amount.
+- [ ] Skip (log, no credit, no ledger row) when the referred merchant and referrer **share a
+      Stripe customer or payment-method fingerprint** — the self-referral guard (FR-12).
 - [ ] Apply the credit via `stripe.customers.createBalanceTransaction(referrerCustomerId,
       { amount: -<monthlyPrice>, currency })` — negative amount = credit.
 - [ ] Insert the `referral_rewards` row with the returned balance-transaction id **in the same
@@ -158,7 +161,9 @@ gone, because this program is billing-level and that path has no caller and neve
 - **FR-3:** The reward is granted **at most once per referred merchant**, enforced by the
   `referral_rewards` primary key on `referred_merchant_id`.
 - **FR-4:** The reward value is the referrer's **current plan monthly price at trigger time**,
-  read from the referrer's active Stripe subscription, in that subscription's currency.
+  read from the referrer's active Stripe subscription, in that subscription's currency. On a
+  **yearly** cycle, one month = the subscription's **annual amount ÷ 12** (integer cents,
+  rounded); on a monthly cycle it is the monthly amount directly.
 - **FR-5:** The reward is delivered as a **negative Stripe customer balance transaction** on
   the referrer's customer, consumed automatically against future invoices.
 - **FR-6:** If the referrer has **no active paid plan** at trigger time, the reward is
@@ -175,6 +180,9 @@ gone, because this program is billing-level and that path has no caller and neve
   referrer resolves to at most one shop. When the 8-hex code lookup returns **≠1** eligible
   referrer (nobody, or a cross-owner code collision), the reward is **skipped and logged** —
   never credited to an ambiguous match.
+- **FR-12:** The reward is **skipped** when the referred merchant and the resolved referrer
+  **share a Stripe customer or a payment-method fingerprint** — the obvious self-referral
+  loop. Logged, no credit, no ledger row.
 
 ## Non-Goals
 
@@ -230,6 +238,13 @@ gone, because this program is billing-level and that path has no caller and neve
   code**: two distinct owners whose ids share the first 8 hex. That is a money path, so the
   reward resolver **grants only on exactly one eligible referrer and skips (logs) otherwise**
   (FR-11) — it never guesses. No "pick the highest-tier shop" logic is needed or wanted.
+- **Yearly-cycle value (was Open Question 3).** *Resolved: annual amount ÷ 12.* One month free
+  is a literal twelfth of what the referrer pays on a yearly plan (integer cents), read from
+  the subscription amount — not the equivalent monthly-plan rate (FR-4).
+- **Sybil / self-referral (was Open Question 2).** *Resolved: guard it.* Skip the reward when
+  the referred merchant and referrer share a Stripe customer or payment-method fingerprint
+  (FR-12). The economics already price casual abuse (a full paid month to earn one free), but
+  the shared-card check blocks the obvious one-person-two-accounts loop cheaply.
 
 ## Open Questions
 
@@ -237,15 +252,6 @@ gone, because this program is billing-level and that path has no caller and neve
    and writes no ledger row. Should a forfeited reward be *recoverable* if the referrer later
    subscribes (i.e. hold instead of forfeit)? Locked answer is forfeit; re-confirm we don't
    want a pending state.
-2. **Sybil / self-referral.** With first-paid-invoice + no-clawback, an abuser must actually
-   pay a full month on a second account to earn a free month on the first — roughly
-   revenue-neutral and rate-limited by real card charges. Is that acceptable, or do we want a
-   same-owner / same-card guard (e.g. block reward when referred and referrer share a Stripe
-   customer or payment fingerprint)?
-3. **Referrer on a yearly cycle.** "One month free" against a yearly plan — credit one month's
-   worth (annual price ÷ 12) of balance, or one twelfth-of-year handled as a proration note on
-   the next annual invoice? Proposal: credit `min(monthly-equivalent, ...)` as a plain balance
-   amount; confirm the annual-cycle math.
-4. **Currency of a stacked credit.** If a referrer changes billing region between two earned
+2. **Currency of a stacked credit.** If a referrer changes billing region between two earned
    rewards, balance transactions in two currencies can coexist on one customer. Stripe applies
    credits per-currency against matching-currency invoices — acceptable, or normalise?

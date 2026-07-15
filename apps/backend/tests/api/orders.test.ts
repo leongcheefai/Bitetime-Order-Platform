@@ -127,11 +127,13 @@ describe('POST /api/orders', () => {
   beforeAll(async () => {
     const owner = await makeUser('ord-owner@test.dev', 'password123')
     const otherOwner = await makeUser('ord-other-owner@test.dev', 'password123')
+    const thirdOwner = await makeUser('ord-third-owner@test.dev', 'password123')
     const customer = await makeUser('ord-customer@test.dev', 'password123')
     const stranger = await makeUser('ord-stranger@test.dev', 'password123')
 
     const ownerId = (await owner.auth.getUser()).data.user!.id
     const otherOwnerId = (await otherOwner.auth.getUser()).data.user!.id
+    const thirdOwnerId = (await thirdOwner.auth.getUser()).data.user!.id
     customerId = (await customer.auth.getUser()).data.user!.id
     strangerId = (await stranger.auth.getUser()).data.user!.id
     customerToken = (await customer.auth.getSession()).data.session!.access_token
@@ -148,11 +150,12 @@ describe('POST /api/orders', () => {
       racerTokens.push((await racer.auth.getSession()).data.session!.access_token)
     }
 
-    // The closed shops get a different owner: current_merchant_id() resolves one shop per
-    // owner, so piling three onto one owner is a state the app cannot represent.
+    // Each shop gets its OWN owner: current_merchant_id() resolves one shop per owner, and
+    // that invariant is now a unique index on merchants(owner_id) — piling more than one
+    // shop onto an owner is a state the app cannot represent and the DB now refuses.
     shop = await seedMerchant({ slug: 'ord-shop', order_prefix: 'OR', owner_id: ownerId })
     pendingShop = await seedMerchant({ slug: 'ord-pending', order_prefix: 'OP', owner_id: otherOwnerId, status: 'pending' })
-    suspendedShop = await seedMerchant({ slug: 'ord-suspended', order_prefix: 'OS', owner_id: otherOwnerId, status: 'suspended' })
+    suspendedShop = await seedMerchant({ slug: 'ord-suspended', order_prefix: 'OS', owner_id: thirdOwnerId, status: 'suspended' })
   }, 60_000)
 
   // Each test starts from an empty shop: the counter is per-merchant and per-day, so a

@@ -3,9 +3,10 @@ import { Copy, QrCode } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
-import { referralCodeOf, fetchReferredShops } from '../store'
+import { referralCodeOf, fetchReferredShops, fetchEarnedRewards } from '../store'
 import { referralSignupUrl } from '../referralSignupUrl'
-import type { ReferredShop } from '../types'
+import { currencyDef, formatMoney } from '../currency'
+import type { EarnedReward, ReferredShop } from '../types'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -17,12 +18,17 @@ export default function ReferralTab() {
   const [qrOpen, setQrOpen] = useState(false)
   const [shops, setShops] = useState<ReferredShop[] | null>(null)
   const [loadError, setLoadError] = useState(false)
+  const [rewards, setRewards] = useState<EarnedReward[] | null>(null)
+  const [rewardsError, setRewardsError] = useState(false)
 
   useEffect(() => {
     let alive = true
     fetchReferredShops()
       .then((rows) => { if (alive) setShops(rows) })
       .catch(() => { if (alive) setLoadError(true) })
+    fetchEarnedRewards()
+      .then((rows) => { if (alive) setRewards(rows) })
+      .catch(() => { if (alive) setRewardsError(true) })
     return () => { alive = false }
   }, [])
 
@@ -94,6 +100,40 @@ export default function ReferralTab() {
       <Card>
         <CardHeader>
           <CardTitle>
+            {t('Rewards earned', '已获得奖励')}{rewards ? ` (${rewards.length})` : ''}
+          </CardTitle>
+          <CardDescription>
+            {t('One free month each time an invited shop starts paying.', '每有一家受邀店铺开始付费，即获得一个月免费。')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {rewardsError ? (
+            <p className="text-[13px] text-rose-muted">{t('Could not load rewards.', '无法加载奖励。')}</p>
+          ) : rewards === null ? (
+            <p className="text-[13px] text-rose-muted">{t('Loading…', '加载中…')}</p>
+          ) : rewards.length === 0 ? (
+            <p className="text-[13px] text-rose-muted">{t('No rewards yet — you earn one when an invited shop starts paying.', '还没有奖励 — 当受邀店铺开始付费时即可获得。')}</p>
+          ) : (
+            <ul className="flex flex-col divide-y divide-clay-border">
+              {rewards.map((r, i) => (
+                <li key={i} className="flex items-center justify-between py-2">
+                  <div className="flex flex-col">
+                    <span className="text-[14px] text-ink">{r.referred_shop_name}</span>
+                    <span className="text-[12px] text-rose-muted">{new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
+                  <span className="text-[13px] font-medium text-oxblood">
+                    {t('1 month free', '免费1个月')} · {formatRewardAmount(r)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
             {t('Invited shops', '已邀请店铺')}{shops ? ` (${shops.length})` : ''}
           </CardTitle>
           <CardDescription>
@@ -124,6 +164,15 @@ export default function ReferralTab() {
       </Card>
     </div>
   )
+}
+
+// The reward `amount` is Stripe's smallest currency unit (cents); its `currency` is Stripe's
+// lowercase code. Convert to major units by the currency's own decimals, then render through
+// the shared money formatter (uppercased to match the currency registry's keys).
+function formatRewardAmount(r: EarnedReward): string {
+  const code = r.currency.toUpperCase()
+  const major = r.amount / 10 ** currencyDef(code).decimals
+  return formatMoney(major, code)
 }
 
 function StatusBadge({ status, t }: { status: ReferredShop['status']; t: (en: string, zh?: string) => string }) {

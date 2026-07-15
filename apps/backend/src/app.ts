@@ -24,7 +24,8 @@ import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
 import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
 import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
-import { listReferredShops } from './referrals.js'
+import { listReferredShops, listEarnedRewards } from './referrals.js'
+import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
@@ -405,6 +406,16 @@ app.get('/api/referrals/shops', async (c) => {
   return c.json(await listReferredShops(user.id))
 })
 
+// The referral rewards this member has earned. Same JWT-derived scoping as /shops — the
+// caller's merchant comes from the verified token, never the request.
+app.get('/api/referrals/rewards', async (c) => {
+  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+  const user = await getUserFromToken(token)
+  if (!user) return c.json({ error: 'Unauthorized' }, 401)
+
+  return c.json(await listEarnedRewards(user.id))
+})
+
 app.post('/api/customer/signup', async (c) => {
   const { email, password } = await c.req.json().catch(() => ({}))
   // Anything else the body carries — a role, a merchant_id — is ignored: only email and
@@ -670,6 +681,34 @@ app.post('/api/stripe/webhook', async (c) => {
           parent?.subscription_details?.metadata?.merchant_id ||
           inv.metadata?.merchant_id
         if (merchantId) await upsertBilling(merchantId, { status: 'past_due' })
+        break
+      }
+      case 'invoice.paid': {
+        const inv = event.data.object
+        // The referred merchant's FIRST real payment is the referral-reward trigger.
+        // `amount_paid > 0` excludes the $0 trial-start invoice; the billing_reason
+        // allowlist keeps it to a subscription's own invoices (create = paid signup /
+        // reactivation, cycle = trial converting or renewing). The reward is granted at
+        // most once per referred shop (referral_rewards PK), so a later renewal cycle
+        // finds the row and no-ops — only the first qualifying paid invoice pays out.
+        const reason = (inv as { billing_reason?: string }).billing_reason
+        const firstPaid =
+          (inv.amount_paid ?? 0) > 0 &&
+          (reason === 'subscription_create' || reason === 'subscription_cycle')
+        if (!firstPaid) break
+
+        // Same metadata drift-hardening as invoice.payment_failed above.
+        const parent = (inv as { parent?: { subscription_details?: { metadata?: Record<string, string> } } }).parent
+        const merchantId =
+          (inv as { subscription_details?: { metadata?: Record<string, string> } }).subscription_details?.metadata?.merchant_id ||
+          parent?.subscription_details?.metadata?.merchant_id ||
+          inv.metadata?.merchant_id
+        if (merchantId) {
+          const decision = await processReferralReward(merchantId)
+          if (!decision.grant && decision.reason !== 'not_referred' && decision.reason !== 'already_rewarded') {
+            console.log(`Referral reward skipped for referred merchant ${merchantId}: ${decision.reason}`)
+          }
+        }
         break
       }
       case 'customer.subscription.trial_will_end': {

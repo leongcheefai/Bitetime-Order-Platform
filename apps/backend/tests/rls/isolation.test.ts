@@ -64,10 +64,14 @@ describe('tenant isolation (RLS)', () => {
   })
 
   it('an owner cannot insert a merchant that is already active (forced to pending)', async () => {
-    const uA = (await merchantA.auth.getUser()).data.user!.id
-    const { data, error } = await merchantA
+    // A FRESH owner with no shop yet: merchants(owner_id) is now unique, so merchantA (who
+    // already owns idA) could not insert a second shop at all — a different failure than the
+    // status guard this test is about.
+    const fresh = await makeUser('rls-fresh@test.dev', 'password123')
+    const uFresh = (await fresh.auth.getUser()).data.user!.id
+    const { data, error } = await fresh
       .from('merchants')
-      .insert({ name: 'Self', slug: 'shop-rls-self', order_prefix: 'SS', owner_id: uA, status: 'active' })
+      .insert({ name: 'Self', slug: 'shop-rls-self', order_prefix: 'SS', owner_id: uFresh, status: 'active' })
       .select('status')
       .single()
     expect(error).toBeNull()
