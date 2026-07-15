@@ -74,6 +74,12 @@ export interface OrderItem {
   qty: number
   price?: number
   unit?: string
+  // Whether this line was priced at the promo rate. A split promo (I-2) writes TWO entries
+  // sharing the same product id, one `promo: true` and one `promo: false` — never key a list
+  // of these by id. Rows written before I-2 lack the key entirely, which every reader must
+  // treat as `false`, not as a crash: `it.promo` on a missing key is already `undefined`, and
+  // `undefined` is falsy, so `it.promo &&` guards do this for free.
+  promo?: boolean
   [key: string]: any
 }
 

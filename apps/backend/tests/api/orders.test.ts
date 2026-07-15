@@ -19,7 +19,9 @@
 // attribution rule (user_id comes from the JWT, never the body) are TypeScript invariants on
 // this path. Everything asserting them below is load-bearing, not decoration.
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
+import postgres from 'postgres'
 import { app } from '../../src/app.js'
+import { env } from '../../src/env.js'
 import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
 import { orderDay } from '../../src/orderNumber.js'
 import { MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
@@ -79,6 +81,36 @@ async function seedVoucher(merchantId: string, code: string, maxUses: number | n
     .from('vouchers')
     .insert({ merchant_id: merchantId, code, kind: 'fixed', amount: 5, max_uses: maxUses, used_by: [] })
   if (error) throw new Error(`seeding voucher ${code}: ${error.message}`)
+}
+
+async function productOf(productId: string) {
+  const { data } = await svc().from('products').select('*').eq('id', productId).maybeSingle()
+  return data
+}
+
+/**
+ * A fresh product with a promo, seeded in the SAME two-statement shape as tests/rls/promo.test.ts:
+ * the guard resets promo_sold to 0 whenever promo_price changes (any role, including the service
+ * client), so a non-zero promo_sold has to land in a LATER update that never touches promo_price.
+ */
+async function seedPromoProduct(merchantId: string, opts: {
+  price: number
+  promoPrice: number
+  promoLimit?: number | null
+  promoEnd?: string | null
+  promoSold?: number
+}) {
+  const id = await seedProduct({ merchant_id: merchantId, price: opts.price })
+  const priced = await svc()
+    .from('products')
+    .update({ promo_price: opts.promoPrice, promo_limit: opts.promoLimit ?? null, promo_end: opts.promoEnd ?? null })
+    .eq('id', id)
+  if (priced.error) throw new Error(`seeding promo product (price): ${priced.error.message}`)
+  if (opts.promoSold) {
+    const sold = await svc().from('products').update({ promo_sold: opts.promoSold }).eq('id', id)
+    if (sold.error) throw new Error(`seeding promo product (sold): ${sold.error.message}`)
+  }
+  return id
 }
 
 describe('POST /api/orders', () => {
@@ -616,9 +648,9 @@ describe('POST /api/orders', () => {
       expect(order.discount).toBeNull()
       expect(order.currency).toBe('MYR')
       // Built from the products rows, so the name and the unit price are the shop's own — not
-      // whatever the browser felt like calling them.
+      // whatever the browser felt like calling them. `promo: false` — this product has none.
       expect(order.items).toEqual([
-        { id: productId, name: 'Matcha Cookie', qty: 2, price: 13 },
+        { id: productId, name: 'Matcha Cookie', qty: 2, price: 13, promo: false },
       ])
     })
 
@@ -752,5 +784,170 @@ describe('POST /api/orders', () => {
       expect(Number(order.total)).toBe(23.4)
       expect(order.voucher_code).toBe('SAVE10')
     })
+  })
+
+  // ── Promo pricing: the backend prices and CLAIMS units under the row lock ────
+  //
+  // `promo_sold` is the counter the browser cannot move (products_promo_sold_guard,
+  // #69) — these tests are the other half: proving the backend's own claim actually
+  // advances it, and that the cap really binds a unit at a time under concurrency.
+  describe('promo pricing', () => {
+    it('commits at the promo price and moves the counter', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8 })
+
+      const res = await post(body(shop, promoProductId, { cart: { [promoProductId]: 2 }, quotedTotal: 16 }))
+
+      expect(res.status).toBe(200)
+      const [order] = await ordersOf(shop)
+      expect(Number(order.total)).toBe(16)
+      // `promo: true` rides along (I-2, #69 final review) so the STORED record explains the
+      // split after the fact, not just the in-memory breakdown the success screen reads.
+      expect(order.items).toEqual([{ id: promoProductId, name: 'Matcha Cookie', qty: 2, price: 8, promo: true }])
+      expect((await productOf(promoProductId))!.promo_sold).toBe(2)
+    })
+
+    // THE CAP BINDS PER UNIT. A cart of 5 against 3 remaining is 3 + 2, not all-or-nothing —
+    // two entries sharing one product id, at two different prices.
+    it('the Nth+1 unit does not get the promo price', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 3, promoSold: 0 })
+
+      const res = await post(body(shop, promoProductId, {
+        cart: { [promoProductId]: 5 },
+        quotedTotal: 3 * 8 + 2 * 10,
+      }))
+
+      expect(res.status).toBe(200)
+      const [order] = await ordersOf(shop)
+      // Both halves of the split carry their own `promo` flag (I-2) — the two entries share a
+      // product id and would otherwise be indistinguishable to anything reading the stored row.
+      expect(order.items).toEqual([
+        { id: promoProductId, name: 'Matcha Cookie', qty: 3, price: 8, promo: true },
+        { id: promoProductId, name: 'Matcha Cookie', qty: 2, price: 10, promo: false },
+      ])
+      expect((await productOf(promoProductId))!.promo_sold).toBe(3)
+    })
+
+    // I-2 (#69 final review): before this fix, `orders.ts` dropped `PriceLine.promo` when
+    // mapping to the stored `items` — the split was priced correctly but UNEXPLAINABLE
+    // afterwards, because nothing on the row said which half was which. Assert it directly
+    // against the real stored jsonb, not just against the in-memory breakdown the success
+    // screen reads.
+    it('stores the promo flag on each line, so the split is explainable after the fact', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 3, promoSold: 0 })
+      const normalProductId = await seedProduct({ merchant_id: shop, price: 5 })
+
+      const res = await post(body(shop, promoProductId, {
+        cart: { [promoProductId]: 3, [normalProductId]: 1 },
+        quotedTotal: 3 * 8 + 5,
+      }))
+
+      expect(res.status).toBe(200)
+      const [order] = await ordersOf(shop)
+      expect(order.items).toEqual([
+        { id: promoProductId, name: 'Matcha Cookie', qty: 3, price: 8, promo: true },
+        { id: normalProductId, name: expect.any(String), qty: 1, price: 5, promo: false },
+      ])
+    })
+
+    // THE ACCEPTANCE CRITERION. Modeled on 'holds a voucher's cap under concurrent load' above,
+    // and the same caveat applies: every intake takes the merchant's single `order_counters` row
+    // FIRST, so these two racers serialize on THAT lock before either ever reaches the product
+    // row's `for update`. A green result here does not, by itself, prove the product lock works
+    // — it proves the cap holds under the counter's serialization, which is the only concurrency
+    // this merchant's intake can ever actually present. The product-row `for update` is what
+    // would still hold the line if that stopped being true (a claim path that did not share the
+    // counter). Kept for the same reason the voucher test is kept: real Postgres, real locks.
+    it('two checkouts race the last promo unit and exactly one wins', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 1, promoSold: 0 })
+      const one = () => post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+
+      const [a, b] = await Promise.all([one(), one()])
+      const statuses = [a.status, b.status].sort()
+
+      // price_changed is a 409 in this API (see 'the backend is the price authority' above),
+      // never a new code — the wire contract does not move for a promo that sold out either.
+      expect(statuses).toEqual([200, 409])
+      const loser = a.status === 409 ? a : b
+      expect(await errorOf(loser)).toBe('price_changed')
+      expect((await productOf(promoProductId))!.promo_sold).toBe(1)
+      expect(await ordersOf(shop)).toHaveLength(1)
+    })
+
+    // THE TEST THAT ACTUALLY ISOLATES THE PRODUCT ROW LOCK. The test above does NOT: both of
+    // its racers are full intakes, and every intake takes the merchant's single
+    // `order_counters` row FIRST, so two concurrent intakes always serialize there and never
+    // contend on the product row — that test proves the cap holds end-to-end, nothing about
+    // `for update` specifically. Verified by deleting `for update` from `cartProducts`'s
+    // select: the full suite stayed green, including that test.
+    //
+    // This one holds the product row's lock from a SECOND, independent connection that never
+    // touches `order_counters` at all, so there is no counter serialization to hide behind —
+    // only the product row's own lock can make this discriminate. Confirmed both ways: with
+    // `for update` this gets 409 `price_changed`; with it deleted, the intake's own
+    // `promo_sold` update blocks until the holder commits and then reads a stale `before`,
+    // tripping the "did not advance" guard and failing with a 500 `order_failed`.
+    it('a second connection holding the last promo unit blocks the intake — proves the product lock, not the counter', async () => {
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 1, promoSold: 0 })
+
+      // A separate, independent postgres.js connection — NOT `withTransaction`/`sql` from
+      // src/db.ts, which is the very connection under test. Closed in `finally` no matter what
+      // happens below, so a failed assertion can never hang the suite or leak a connection.
+      const other = postgres(env.databaseUrl, { max: 1 })
+      let releaseHold: () => void = () => {}
+      const held = new Promise<void>(resolve => { releaseHold = resolve })
+
+      // Takes the last promo unit under an UNCOMMITTED transaction — a row lock the counter
+      // mutex cannot see, let alone serialize against.
+      const holder = other.begin(async tx => {
+        await tx`update products set promo_sold = promo_sold + 1 where id = ${promoProductId}`
+        await held // held open until the intake below is in flight against the locked row
+      })
+
+      try {
+        // Give the holder's UPDATE time to actually take the row lock before the intake's own
+        // `select ... for update` reaches for it — otherwise the two race each other and the
+        // test passes or fails at random instead of proving anything.
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        // The intake quotes the promo price for a unit that is already spoken for.
+        const resPromise = post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+
+        // Let the intake's select actually reach (and block on, if the lock is real) the row
+        // before releasing the holder.
+        await new Promise(resolve => setTimeout(resolve, 100))
+        releaseHold()
+
+        const [res] = await Promise.all([resPromise, holder])
+        expect(res.status).toBe(409)
+        expect(await errorOf(res)).toBe('price_changed')
+      } finally {
+        releaseHold()
+        await holder.catch(() => {})
+        await other.end()
+      }
+    })
+
+    it('an elapsed promo does not apply', async () => {
+      const past = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
+      const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoEnd: past })
+
+      const stale = await post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+      expect(stale.status).toBe(409)
+      expect(await errorOf(stale)).toBe('price_changed')
+
+      const fresh = await post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 10 }))
+      expect(fresh.status).toBe(200)
+      expect((await productOf(promoProductId))!.promo_sold).toBe(0)
+    })
+  })
+})
+
+describe('GET /api/time', () => {
+  it('returns a parseable instant', async () => {
+    const res = await app.request('/api/time')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { now: string }
+    expect(Number.isFinite(Date.parse(body.now))).toBe(true)
   })
 })

@@ -6,10 +6,11 @@ import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError, shopRates, MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
+import { priceOrder, voucherError, shopRates, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
+import { useServerClock } from '../serverClock'
 import { lookupPostcode } from '../postcodes'
 import { MY_STATES } from '../states-my'
 import type { Product, Voucher, AddressParts } from '../types'
@@ -30,6 +31,11 @@ interface CartLine {
   name: string
   qty: number
   price: number
+  // Which of a split pair this row is — the base and promo halves of the SAME product share an
+  // `id`, so without this the two rows render identically and the arithmetic looks broken (a
+  // "3 ×" row costing more than a "2 ×" row of the same thing, with nothing on screen to explain
+  // why). See the `Promo` badge reused from the product card, below.
+  promo: boolean
 }
 
 interface SuccessState {
@@ -245,10 +251,22 @@ export default function Storefront() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [merchantId])
 
+  // The SERVER's clock, not the device's — the promo window is priced on both sides of the wire and
+  // a disagreement is a refusal. See serverClock.ts.
+  const { now: serverNow, resync: resyncClock, adopt: adoptClock } = useServerClock()
+  const now = serverNow()
+
+  // The menu, mapped once for the pricing rule: the rows arrive snake_cased from PostgREST and
+  // `priceOrder` reads `promoPrice`. Unmapped, every promo silently prices at the base price here
+  // and at the promo price on the backend — which is a refused checkout for every promo order.
+  const pricedProducts = activeProducts.map(productFromRow)
+  const promoById = new Map(pricedProducts.map(p => [p.id, promoState(p, now)]))
+
   // One pricing breakdown drives the summary, the order, and the success view.
   const bd = priceOrder({
-    products: activeProducts,
+    products: pricedProducts,
     cart,
+    now,
     mode,
     state: mode === 'delivery' ? address.state : null,
     rates: { WM: rateWM, EM: rateEM },
@@ -265,7 +283,7 @@ export default function Storefront() {
     resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     voucher: appliedVoucher,
   })
-  const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice }))
+  const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice, promo: l.promo }))
   const subtotal = bd.subtotal
   const discount = bd.discount
   const total = bd.total
@@ -296,7 +314,7 @@ export default function Storefront() {
     const err = voucherError(v, {
       subtotal: bd.subtotal + bd.shipping,
       userEmail: voucherEntry,
-      now: new Date(),
+      now,
       fullyUsed: v ? voucherFullyUsed(v) : true,
     })
     if (err || !v) {
@@ -385,11 +403,27 @@ export default function Storefront() {
    * dropped packet. So: an answer we could not get changes NOTHING. The refusal costs a retry;
    * a wrong prune costs the order.
    */
-  const refreshQuoteSources = async () => {
+  /**
+   * @param serverNow - The backend's own clock, when the refusal that triggered this recovery
+   * happened to carry one (`price_changed` only — see `OrderError.now` in store.ts). When
+   * present, ADOPT it instead of re-fetching `/api/time`: that avoids a second network request
+   * that can fail in exactly the way the first one just did (I-3, #69) — a browser whose
+   * `/api/time` is persistently unreachable would otherwise `resync()`, fail again, and re-quote
+   * against the still-skewed device clock, refused forever. When absent (`product_unavailable`,
+   * or a `price_changed` from an older/unpatched backend), fall back to `resync()` as before.
+   */
+  const refreshQuoteSources = async (serverNow?: string) => {
     const code = appliedVoucher?.code ?? null
+    // The clock is a quote input too, and the only one a menu refetch cannot repair: if the initial
+    // sync failed we are pricing the promo window against the device's clock, and re-sending the
+    // same quote would be refused identically, forever. AWAITED, alongside the other two quote
+    // inputs: this function's callers await it and then let the customer retry — an un-awaited
+    // resync/adopt landed the corrected offset a tick after the error toast, so an instant second
+    // tap could eat a second `price_changed` refusal before the clock was actually fixed.
     const [freshProducts, voucher] = await Promise.all([
       lookupProducts(merchant.id).catch(() => null),
       code ? lookupMerchantVoucher(merchant.id, code).catch(() => ({ ok: false as const })) : null,
+      serverNow ? Promise.resolve(adoptClock(serverNow)) : resyncClock(),
     ])
     // `[]` is an ANSWER — the shop really sells nothing, and pruning the whole cart is right.
     // `null` is the absence of one, and prunes nothing.
@@ -419,7 +453,7 @@ export default function Storefront() {
           const verr = voucherError(fresh, {
             subtotal: bd.subtotal + bd.shipping,
             userEmail: voucherEntry,
-            now: new Date(),
+            now,
             fullyUsed: voucherFullyUsed(fresh),
           })
           if (verr) {
@@ -501,7 +535,12 @@ export default function Storefront() {
         // `vouchers.amount` moves the total exactly as an edited price does, and re-quoting from
         // the stale voucher would be refused again on the very next tap — the same refusal loop,
         // forever, until the customer thought to remove and re-apply the code themselves.
-        await refreshQuoteSources()
+        //
+        // `err.now` (I-3, #69): this refusal is itself proof the connection to the backend
+        // works, and it carries the backend's own clock — so recovery adopts THAT instead of
+        // re-fetching `/api/time`, which is exactly the request that can be persistently
+        // unreachable in the scenario this whole mechanism exists to fix.
+        await refreshQuoteSources(err?.now)
         const msg = t(
           'Prices at this shop just changed. Please review your order and place it again.',
           '本店价格刚刚有所调整，请确认订单后重新下单。',
@@ -599,9 +638,16 @@ export default function Storefront() {
             </p>
 
             <div className="max-w-[360px] mx-auto mb-5 text-left px-4 py-3 bg-surface-raised border-[1.5px] border-divider rounded-md">
-              {success.items.map(item => (
-                <div key={item.id} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                  <span className="shrink-0">{item.name} × {item.qty}</span>
+              {success.items.map((item, i) => (
+                <div key={i} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                  <span className="shrink-0 flex items-center gap-1.5 flex-wrap">
+                    {item.name} × {item.qty}
+                    {item.promo && (
+                      <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
+                        {t('Promo', '优惠')}
+                      </span>
+                    )}
+                  </span>
                   <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
                 </div>
               ))}
@@ -728,9 +774,53 @@ export default function Storefront() {
                       {productDescr(p) && (
                         <div className="text-[12px] text-rose-muted mt-0.5 leading-[1.4]">{productDescr(p)}</div>
                       )}
-                      <div className="text-[13px] font-medium text-oxblood mt-[5px]">
-                        {formatMoney(p.price, currency)} / {formatUnit(p.unit_quantity, p.unit || t('unit', '个'))}
-                      </div>
+                      {(() => {
+                        const promo = promoById.get(p.id)
+                        const unit = formatUnit(p.unit_quantity, p.unit || t('unit', '个'))
+                        // `promo.remaining` is the page-load snapshot — it never moves as the
+                        // customer adds units, so with 3 left and 3 already in the cart it kept
+                        // saying "3 left" right up to the tap that priced at base. `bd.lines` is
+                        // the one place that already knows how many promo units THIS cart has
+                        // claimed (the cap binds inside `priceOrder`, per unit), so subtracting it
+                        // here is what makes the count describe the NEXT unit rather than the
+                        // page-load count — and keeps it honest with what the summary shows below.
+                        //
+                        // Hoisted ABOVE the `!promo` fallback (I-1): the card must show the price
+                        // of the NEXT unit the customer would add, not the product's promo status.
+                        // Once `remainingForNextUnit` hits 0 the cap is exhausted for this cart —
+                        // the next tap prices at base — so the card must fall through to the same
+                        // plain base-price display a non-promo product gets, badge and strike-
+                        // through and all, or it advertises a price the backend will refuse.
+                        const claimed = promo ? (bd.lines.find(l => l.id === p.id && l.promo)?.qty ?? 0) : 0
+                        const remainingForNextUnit = promo && Number.isFinite(promo.remaining)
+                          ? promo.remaining - claimed
+                          : Infinity
+                        if (!promo || remainingForNextUnit <= 0) {
+                          return (
+                            <div className="text-[13px] font-medium text-oxblood mt-[5px]">
+                              {formatMoney(p.price, currency)} / {unit}
+                            </div>
+                          )
+                        }
+                        return (
+                          <div className="flex items-center gap-2 mt-[5px] flex-wrap">
+                            <span className="text-[13px] font-medium text-oxblood">
+                              {formatMoney(promo.price, currency)} / {unit}
+                            </span>
+                            <span className="text-[12px] text-rose-muted line-through">
+                              {formatMoney(p.price, currency)}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
+                              {t('Promo', '优惠')}
+                            </span>
+                            {Number.isFinite(remainingForNextUnit) && (
+                              <span className="text-[11px] text-rose-muted">
+                                {t(`${remainingForNextUnit} left at this price`, `此价格剩 ${remainingForNextUnit} 件`)}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -967,12 +1057,19 @@ export default function Storefront() {
               </p>
             ) : (
               <>
-                {cartItems.map(item => {
+                {cartItems.map((item, i) => {
                   const prod = activeProducts.find(p => p.id === item.id)
                   const displayName = (lang === 'zh' && prod?.name_zh) ? prod.name_zh : item.name
                   return (
-                    <div key={item.id} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                      <span className="shrink-0">{displayName} × {item.qty}</span>
+                    <div key={i} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                      <span className="shrink-0 flex items-center gap-1.5 flex-wrap">
+                        {displayName} × {item.qty}
+                        {item.promo && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
+                            {t('Promo', '优惠')}
+                          </span>
+                        )}
+                      </span>
                       <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
                     </div>
                   )

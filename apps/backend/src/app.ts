@@ -35,6 +35,17 @@ app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['POST', 'GET', 
 
 app.get('/health', (c) => c.json({ ok: true }))
 
+/**
+ * The server's clock, published.
+ *
+ * `priceOrder` runs on both sides of the wire and the promo window reads a clock, so the CLOCK is
+ * a price input — and a browser minutes off ours, on the promo's last day, would quote the promo,
+ * be refused (`price_changed`), re-quote with the same skewed clock, and be refused again: a
+ * permanent refusal loop for a legitimate customer. The storefront syncs against this and prices
+ * against the corrected time, so the clock it quotes with is the clock we charge with. See #69.
+ */
+app.get('/api/time', (c) => c.json({ now: new Date().toISOString() }))
+
 // ── Region-resolved platform subscription pricing ─────────────────────────────
 // Country comes from a CDN header (or the `?country=` override for local dev/QA);
 // amounts are read from the region's Stripe Prices and cached briefly per region.
@@ -529,7 +540,15 @@ app.post('/api/orders', async (c) => {
     // carries its code so the storefront can say which, and can offer the right retry. Anything
     // else is a bug, and must not be dressed up as a domain error the customer can "fix".
     if (err instanceof OrderError) {
-      return c.json({ error: err.code }, err.code === 'merchant_not_found' ? 404 : 409)
+      // `price_changed` carries the server's own clock alongside the refusal. This is what
+      // actually closes the recovery loop (see /api/time above and serverClock.ts): a browser
+      // whose sync fetch is persistently unreachable can still recover here, because the SAME
+      // response that refuses the order also timestamps itself — no second endpoint to fail.
+      // Scoped to this one code (not every OrderError) so the exact-body assertions the other
+      // refusals already have in tests/api stay exact.
+      const body: Record<string, unknown> = { error: err.code }
+      if (err.code === 'price_changed') body.now = new Date().toISOString()
+      return c.json(body, err.code === 'merchant_not_found' ? 404 : 409)
     }
     console.error('Order intake failed:', err instanceof Error ? err.message : String(err))
     return c.json({ error: 'order_failed' }, 500)

@@ -258,9 +258,18 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                 <Section title={t('Items', '商品')}>
                   <ul className="flex flex-col gap-1.5">
                     {(selected.items ?? []).map((it: any, i: number) => (
+                      // Index key, deliberately not id: a split promo puts two lines with the
+                      // SAME product id in `items` (base half + promo half), and keying by id
+                      // would collapse them into one row on screen while charging for both.
                       <li key={i} className="flex justify-between gap-3 text-[13px] text-ink">
                         <span className="min-w-0 break-words">
                           <span className="text-rose-muted tabular-nums">{it.qty}×</span> {it.name}
+                          {/* `it.promo` missing (rows written before I-2) reads as false, not a crash. */}
+                          {it.promo && (
+                            <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium align-middle">
+                              {t('Promo', '优惠')}
+                            </span>
+                          )}
                         </span>
                         <span className="tabular-nums text-text-secondary whitespace-nowrap">
                           {formatMoney((it.price ?? 0) * (it.qty ?? 0), orderCurrency)}

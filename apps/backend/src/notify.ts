@@ -47,8 +47,11 @@ export function formatAddress(addr: unknown): string {
 export function buildOrderMessage(order: any, merchantName?: string): string {
   const cur = order.currency ?? 'MYR'
   const items = Array.isArray(order.items) ? order.items : []
+  // `(Promo)` is plain text, not a badge — Telegram's Markdown here is already `*bold*` labels
+  // and this is the one place in the app that can't reach for the storefront's pill styling.
+  // Missing key reads as `false` (older rows never wrote it), never as a crash — see orders.ts.
   const lines = items
-    .map((i: any) => `• ${i.name} × ${i.qty} — ${formatMoney((i.price ?? 0) * (i.qty ?? 0), cur)}`)
+    .map((i: any) => `• ${i.name}${i.promo ? ' (Promo)' : ''} × ${i.qty} — ${formatMoney((i.price ?? 0) * (i.qty ?? 0), cur)}`)
     .join('\n')
   let msg = `🛎️ *New order${merchantName ? ` — ${merchantName}` : ''}*\n\n`
   msg += `*Order No.:* ${order.order_number}\n`
