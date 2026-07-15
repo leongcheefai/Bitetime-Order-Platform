@@ -692,13 +692,14 @@ describe('POST /api/orders', () => {
       expect(await errorOf(res)).toBe('product_unavailable')
     })
 
-    // THE LIVE HOLE THIS TASK CLOSES. Postgres matches `uuid` case-insensitively, so an
-    // UPPERCASE cart key sails past `= any(${ids}::uuid[])` and the "every id came back" check
-    // — but `priceOrder` finds a line by `products.find(p => p.id === id)`, a JS `===` that
-    // never matches an uppercase key against the lowercase id postgres.js returns. The line was
-    // silently DROPPED, pricing the whole cart at zero — and on a pickup (no shipping to save
-    // it), `quotedTotal: 0` sailed through `assertQuoteHolds` too. Proved against a live stack
-    // before the fix: this exact request returned 200 with an order committed at total 0.
+    // A LIVE FREE-ORDER HOLE. Postgres matches `uuid` case-insensitively, so an UPPERCASE cart
+    // key sails past both `= any(${ids}::uuid[])` and the "every id came back" refusal — but
+    // `priceOrder` finds a line by `products.find(p => p.id === id)`, a JS `===` that never
+    // matches an uppercase key against the lowercase id postgres.js hands back. The line was
+    // silently DROPPED, pricing the whole cart at zero; on a pickup there is no shipping fee left
+    // to give it away, so `quotedTotal: 0` agreed with the derived total and committed. Proved
+    // against a running stack before the fix: this exact request returned 200 with an order at
+    // total 0. The fix is the regex's missing `i` — see the UUID const in orders.ts.
     it('refuses an uppercase-uuid cart key instead of silently pricing the order at zero', async () => {
       const res = await post(body(shop, productId, {
         cart: { [productId.toUpperCase()]: 2 },
@@ -707,9 +708,9 @@ describe('POST /api/orders', () => {
 
       expect(res.status).toBe(409)
       expect(await errorOf(res)).toBe('product_unavailable')
-      // Not just the status code — the row itself. A regression that let this line drop and
-      // still refused for some OTHER reason (e.g. a coincidental price mismatch) would leave a
-      // committed order behind if the refusal ever stopped being the real one.
+      // Not just the status code — the stored rows. A regression that dropped the line and then
+      // refused for some OTHER reason would leave a committed order behind the moment that other
+      // reason stopped firing.
       expect(await ordersOf(shop)).toEqual([])
       expect(await counterOf(shop)).toBeNull()
     })
