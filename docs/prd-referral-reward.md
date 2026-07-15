@@ -66,19 +66,34 @@ billing cycle.
       constrained by the read policy.
 - [ ] Migration applied via `db:migrate`; typecheck passes.
 
-### US-002: Index the reverse code→referrer lookup
-**Description:** As the reward handler, I need to resolve a `referred_by_code` back to the
-referring merchant, because the reward has to land on *that* member's Stripe customer.
+### US-002: Enforce one-shop-per-member and resolve the referrer unambiguously
+**Description:** As the reward handler, I need to resolve a `referred_by_code` back to exactly
+one referring member, because the reward has to land on *that* member's Stripe customer — and
+I must never credit the wrong member.
+
+**Background:** the whole app already assumes **one merchant per owner** — every `owner_id`
+lookup uses `.maybeSingle()` (`store.ts:212`, `app.ts:94` *"one merchant per owner"*,
+`app.ts:360`), which *throws* on a second row. But the DB has **no unique constraint** on
+`merchants.owner_id` and `createMerchant` does not guard a second insert, so the invariant is
+latent, not enforced. This story enforces it, which dissolves the "which of several shops"
+question at the source.
 
 **Acceptance Criteria:**
+- [ ] Migration adds a **unique index on `merchants(owner_id)` where `owner_id is not null`**,
+      making one-shop-per-member a DB invariant (matches every existing `.maybeSingle()`).
 - [ ] Migration adds a **stored generated column** `referral_code` on `merchants`,
       `= upper(left(replace(owner_id::text, '-', ''), 8))`, byte-identical to
       `referralCodeOf()` and to what signup stamps.
 - [ ] Index on `merchants(referral_code)`.
-- [ ] A shared helper resolves a code to the referrer merchant that is the reward target —
-      **the referrer's shop with an active/paying `merchant_billing` row** (see Open
-      Questions on multi-shop members). Returns null if none.
-- [ ] Unit test proves `referral_code` matches `referralCodeOf(owner_id)` for sample ids.
+- [ ] A shared helper resolves a code to the referrer merchant. Because a code is only the
+      **first 8 hex** of an owner id, two *distinct* owners can collide on it — so the lookup
+      **selects all matches and grants only when exactly one** referrer with an active paying
+      plan is found. **≠1 candidate → return null (skip the reward) and log**; never credit an
+      ambiguous match. (`listReferredShops` already lists by the same 8-hex code; there the
+      collision only over-lists a display and is tolerable — here it moves money, so it is
+      refused.)
+- [ ] Unit test proves `referral_code` matches `referralCodeOf(owner_id)` for sample ids, and
+      that a two-candidate collision resolves to null (no credit).
 
 ### US-003: Detect the first paid invoice and grant the reward
 **Description:** As the platform, when a referred merchant's first real payment succeeds, I
@@ -156,6 +171,10 @@ gone, because this program is billing-level and that path has no caller and neve
 - **FR-10:** All referrer/reward lookups derive the referrer from a **stored, un-choosable**
   code (`merchants.referral_code`, generated from `owner_id`) — never from a request body —
   preserving the security property that made `listReferredShops` safe across tenants.
+- **FR-11:** One shop per member is a **DB invariant** (unique index on `owner_id`), so a
+  referrer resolves to at most one shop. When the 8-hex code lookup returns **≠1** eligible
+  referrer (nobody, or a cross-owner code collision), the reward is **skipped and logged** —
+  never credited to an ambiguous match.
 
 ## Non-Goals
 
@@ -199,26 +218,34 @@ gone, because this program is billing-level and that path has no caller and neve
 - Zero double-credits across billing cycles (idempotency PK holds).
 - Referrers can see earned free months in the dashboard without contacting support.
 
+## Resolved decisions
+
+- **Multi-shop members (was Open Question 1).** *Resolved: one shop per member, enforced.* The
+  premise "a member can own several shops" is a false alarm — the entire app already treats
+  ownership as one-shop-per-member (every `owner_id` lookup is `.maybeSingle()`, which throws
+  on a second row: `store.ts:212`, `app.ts:94`, `app.ts:360`). It is simply not enforced at
+  the DB. US-002 adds the missing **unique index on `merchants(owner_id)`**, making it an
+  invariant instead of a convention, which removes the "which shop's plan" question entirely —
+  a referrer *has* one shop. The only residual edge is a **cross-owner collision on the 8-hex
+  code**: two distinct owners whose ids share the first 8 hex. That is a money path, so the
+  reward resolver **grants only on exactly one eligible referrer and skips (logs) otherwise**
+  (FR-11) — it never guesses. No "pick the highest-tier shop" logic is needed or wanted.
+
 ## Open Questions
 
-1. **Multi-shop members.** `merchants.owner_id` is nullable and **not unique** — a member can
-   own several shops (`SessionContext` resolves with `limit 1`), and each shop has its own
-   Stripe customer and possibly a different plan. Which shop's customer/plan is "the
-   referrer's current plan"? MVP proposal: the referrer's shop with an **active/paying**
-   `merchant_billing` row; if several, the highest-tier (Pro > Basic). Confirm.
-2. **Forfeit permanence.** FR-6 forfeits when the referrer has no active paid plan at trigger,
+1. **Forfeit permanence.** FR-6 forfeits when the referrer has no active paid plan at trigger,
    and writes no ledger row. Should a forfeited reward be *recoverable* if the referrer later
    subscribes (i.e. hold instead of forfeit)? Locked answer is forfeit; re-confirm we don't
    want a pending state.
-3. **Sybil / self-referral.** With first-paid-invoice + no-clawback, an abuser must actually
+2. **Sybil / self-referral.** With first-paid-invoice + no-clawback, an abuser must actually
    pay a full month on a second account to earn a free month on the first — roughly
    revenue-neutral and rate-limited by real card charges. Is that acceptable, or do we want a
    same-owner / same-card guard (e.g. block reward when referred and referrer share a Stripe
    customer or payment fingerprint)?
-4. **Referrer on a yearly cycle.** "One month free" against a yearly plan — credit one month's
+3. **Referrer on a yearly cycle.** "One month free" against a yearly plan — credit one month's
    worth (annual price ÷ 12) of balance, or one twelfth-of-year handled as a proration note on
    the next annual invoice? Proposal: credit `min(monthly-equivalent, ...)` as a plain balance
    amount; confirm the annual-cycle math.
-5. **Currency of a stacked credit.** If a referrer changes billing region between two earned
+4. **Currency of a stacked credit.** If a referrer changes billing region between two earned
    rewards, balance transactions in two currencies can coexist on one customer. Stripe applies
    credits per-currency against matching-currency invoices — acceptable, or normalise?
