@@ -130,10 +130,10 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
           data-receipt-actions
           className="flex justify-end gap-2 border-t border-clay-border bg-surface-sunken p-4 rounded-b-lg"
         >
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" size="sm" onClick={onClose}>
             {t('Close', '关闭')}
           </Button>
-          <Button onClick={() => window.print()}>
+          <Button size="sm" onClick={() => window.print()}>
             {t('Print', '打印')}
           </Button>
         </div>
