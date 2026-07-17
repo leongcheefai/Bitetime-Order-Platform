@@ -265,8 +265,11 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
     visibility: hidden;
   }
 
-  [data-receipt],
-  [data-receipt] * {
+  /* Gate and show rule must carry the same prefix: if the show rule is later
+     "simplified" to bare `[data-receipt]`, the receipt will silently print blank
+     because the hide rule will outrank it. Keep them coupled. */
+  body:has([data-receipt]) [data-receipt],
+  body:has([data-receipt]) [data-receipt] * {
     visibility: visible;
   }
 
