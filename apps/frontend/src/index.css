@@ -245,13 +245,19 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
    and a visible descendant still paints inside a hidden ancestor, so this works no
    matter where in the tree the portal lands. */
 @media print {
-  /* Base UI's modal scroll-lock writes position/height/overflow INLINE onto <body>
-     while the dialog is open. Inline styles beat any normal stylesheet rule, so
-     without !important the receipt would print inside a body box capped at one
-     viewport with overflow hidden — and a long order would be CLIPPED at page one
-     rather than flowing onto page two. `:has([data-receipt])` scopes this to when
-     the receipt dialog is actually mounted — otherwise every other page's print
-     would be forced into this reset too. */
+  /* This rule fights two different things, on different properties.
+     `position`, `overflow`, `height`, `width`: Base UI's modal scroll-lock writes these
+     INLINE onto <body> while the dialog is open. Inline styles beat any normal stylesheet
+     rule, so without !important the receipt would print inside a body box capped at one
+     viewport with overflow hidden — and a long order would be CLIPPED at page one rather
+     than flowing onto page two.
+     `display`, `min-height`, `padding`: Base UI never touches these — they exist purely to
+     defeat this file's own `body` rule (line 164: `min-height: 100vh; padding: 2rem 1rem
+     4rem; display: flex; ...`). Base UI portals the dialog to <body>, so without
+     `display: block` the portal is a shrink-to-fit FLEX ITEM: the receipt would print as a
+     ~320px centred column, its `width: 100%` below meaning 100% of that 320px, not the page.
+     `:has([data-receipt])` scopes the whole rule to when the receipt dialog is actually
+     mounted — otherwise every other page's print would be forced into this reset too. */
   body:has([data-receipt]) {
     position: static !important;
     overflow: visible !important;
@@ -262,12 +268,14 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
     padding: 0 !important;
   }
 
-  /* Printing must not race an animation. The dialog enters with `animate-in`/`zoom-in-95`,
-     and a CSS animation's keyframes outrank author declarations in the cascade — so while
-     `enter` is live it re-applies the `translate` that `[data-receipt]` below is trying to
-     clear, and the receipt prints shifted off the page. Killing animation and transition
-     for the print makes the output deterministic instead of dependent on when the user
-     clicked Print. */
+  /* Printing must not race an animation. The dialog opens with `data-open:animate-in
+     data-open:fade-in-0 data-open:zoom-in-95` (dialog.tsx), which drives tw-animate-css's
+     `enter` keyframes from `opacity: 0` and 95% scale up to full. A print fired while that
+     animation is still live captures the receipt mid-transition — near-transparent and
+     slightly shrunken — depending on exactly when the user clicked Print. Killing animation
+     and transition for the print makes the output deterministic instead. (`enter` animates
+     `transform`/`opacity`/`filter`, never the standalone `translate` property, so it does not
+     fight the `translate: none` below — that is a separate, unrelated centring fix.) */
   body:has([data-receipt]) *,
   body:has([data-receipt]) *::before,
   body:has([data-receipt]) *::after {

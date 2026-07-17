@@ -111,8 +111,8 @@ hoists the dialog to the page origin: black on white, no shadow, no backdrop, no
 and the Print and Close buttons themselves hidden. The customer's browser handles print-to-PDF;
 nothing is rendered or stored server-side.
 
-Three details this section originally got wrong, corrected during implementation and recorded
-here because each one is a trap the obvious approach walks into:
+Six details this section originally got wrong or omitted, corrected during implementation and
+recorded here because each one is a trap the obvious approach walks into:
 
 - **Not `body > * { display: none }`.** The dialog is *portaled to `<body>`* by the Base UI
   primitive, so it IS a `body > *` — that rule would hide the receipt itself. The shipped rules
@@ -120,17 +120,34 @@ here because each one is a trap the obvious approach walks into:
   `[data-receipt], [data-receipt] * { visibility: visible }`), which is portal-agnostic because
   `visibility` inherits and a visible descendant still paints inside a hidden ancestor.
 - **The rules are gated on `body:has([data-receipt])`.** Ungated, they hide every page in the
-  app at print time, and printing any other screen yields a blank sheet.
-- **Not "static full-page flow".** The rule sets `position: absolute` at the page origin, and
-  must clear BOTH `transform` and `translate` — Tailwind v4 centres with the standalone
-  `translate` property, which `transform: none` does not touch.
-
-Two further things the print rules must do, neither obvious from this design:
-
-- **Reset `<body>` with `!important`.** Base UI's modal scroll-lock writes `position`, `height`,
-  `overflow` and `width` *inline* on `<body>` while the dialog is open. Inline styles beat any
-  normal stylesheet rule, so without the reset a long receipt prints clipped at page one instead
-  of paginating.
+  app at print time, and printing any other screen yields a blank sheet. The show rule must
+  carry the *same* `body:has([data-receipt])` prefix as the hide rule — a bare
+  `[data-receipt], [data-receipt] * { visibility: visible }` is (0,1,0) against the gated hide
+  rule's (0,1,1), loses that specificity fight, and the receipt prints blank.
+- **`visibility: hidden` on the hide rule is not enough by itself.** It stops the paint but
+  preserves layout, so the order-history screen sitting behind the portal would still fragment
+  the print into page boxes and emit blank trailing sheets. A further
+  `body:has([data-receipt]) #root { display: none }` removes it from the flow entirely — #root
+  never contains the receipt (it's portaled to `<body>`), so removing it cannot remove the
+  document.
+- **`[data-receipt]` is `position: static`, not absolute.** With `#root` gone and the dialog's
+  fixed-overlay geometry cleared, static flow drops the receipt at the page origin and lets the
+  print engine paginate it normally, generating its own page boxes. Out-of-flow abspos content
+  generates none and relies on other boxes to paginate — not reliable across print engines. It
+  must still clear BOTH `transform` and `translate` — Tailwind v4 centres this dialog with the
+  standalone `translate` property, which `transform: none` does not touch.
+- **Reset `<body>` with `!important`, and the reset fights two different origins.** Base UI's
+  modal scroll-lock writes `position`, `height`, `overflow` and `width` *inline* on `<body>`
+  while the dialog is open — inline styles beat any normal stylesheet rule, so without the
+  reset a long receipt prints clipped at page one instead of paginating. `display: block`,
+  `min-height: 0` and `padding: 0` fight something else entirely: this app's own `body` rule
+  (`flex`, `min-height: 100vh`, `padding: 2rem 1rem 4rem`). Base UI portals the dialog to
+  `<body>`, so left as a flex item the receipt prints as a ~320px shrink-to-fit column — its
+  `width: 100%` meaning 100% of that column, not the page.
+- **Kill animation and transition for print.** The dialog opens with
+  `data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95`, animating from
+  `opacity: 0` and 95% scale. A print fired mid-animation captures a near-transparent,
+  slightly shrunken receipt depending on exactly when the user clicked Print.
 - **Restyle the promo badge.** It is `bg-oxblood` + `text-white`; printers drop backgrounds, so
   it would print white-on-white — silently deleting the word "Promo" from a line while keeping
   its discounted price. It prints as a bordered dark chip.

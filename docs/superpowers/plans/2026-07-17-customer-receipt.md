@@ -28,6 +28,8 @@ Three things surfaced while mapping the files. The plan below implements the cor
 1. **The spec's print rule `body > * { display: none }` would hide the receipt, and an ungated `body * { visibility: hidden }` would blank every other page's print job too.** `DialogContent` renders through `DialogPortal` (`src/components/ui/dialog.tsx:19-21`), which mounts the dialog as a **direct child of `body`** — `body > * { display: none }` would match the receipt itself. What shipped scopes every rule to `body:has([data-receipt])`: the hide rule, and the show rule (`[data-receipt], [data-receipt] * { visibility: visible }` must carry the same `body:has([data-receipt])` prefix, or it loses the specificity fight to the gated hide rule and the receipt prints blank). A further `body:has([data-receipt]) #root { display: none }` rule removes the order-history screen from the print flow entirely — `visibility: hidden` alone preserves layout, which would still fragment a long history into blank trailing page boxes. The receipt itself (`[data-receipt]`) prints in normal `position: static` flow rather than `absolute`, so it generates its own page boxes and paginates a multi-page order reliably.
 2. **The promo badge would print as invisible text.** It is `bg-oxblood` with `text-white` (`OrderHistory.tsx:184`); browsers drop backgrounds when printing, leaving white on white. Task 5 restyles it for print as a bordered chip with dark text.
 3. **`formatOrderDate` is date-only and is shared with the guest `/track` screen** (`src/orderDate.ts`), so it cannot simply grow a time. Task 2 adds a sibling `formatOrderDateTime` in the same module, which is that module's stated purpose — one rule per order-date question, so the screens cannot drift.
+4. **The `<body>` reset needs more than the four inline-style properties Base UI writes.** `position`, `overflow`, `height`, `width` fight Base UI's inline scroll-lock, as above. But this app's own `body` rule (`index.css:164`) also sets `display: flex`, `min-height: 100vh` and `padding: 2rem 1rem 4rem` — Base UI never touches those three. Since the dialog is portaled to `<body>`, leaving them alone makes the portal a shrink-to-fit flex item: the receipt prints as a ~320px centred column, its `width: 100%` meaning 100% of that column, not the page. Task 5 also resets `display: block`, `min-height: 0` and `padding: 0`, `!important`, alongside the four Base UI properties.
+5. **Printing can race the dialog's open animation.** `DialogContent` opens with `data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95`, so tw-animate-css's `enter` keyframes animate it from `opacity: 0` and 95% scale. A print fired while that animation is still live captures a near-transparent, slightly shrunken receipt, depending on exactly when the user clicked Print. Task 5 adds a rule killing `animation` and `transition` on every descendant under `@media print`, so the printed output is deterministic.
 
 ## File Structure
 
@@ -613,23 +615,43 @@ The document exists; now only it may reach the paper.
 Add to the end of `apps/frontend/src/index.css`:
 
 ```css
-/* ─── Printing a receipt ──────────────────────────────────────────────────────
-   The receipt dialog is the only thing in this app that is meant to reach paper.
-   These rules exist so that when a customer prints one, they get the document and
-   not the shop's order history with a modal on top of it.
-
-   `visibility`, not `display: none`: the dialog is PORTALED to <body> by the Base UI
-   primitive, so a `body > *` rule would hide the receipt itself. Visibility inherits
-   and a visible descendant still paints inside a hidden ancestor, so this works no
-   matter where in the tree the portal lands. */
 @media print {
-  /* `:has([data-receipt])` scopes this to when the receipt dialog is actually mounted —
-     otherwise every other page's print would be forced into this reset too. */
+  /* This rule fights two different things, on different properties.
+     `position`, `overflow`, `height`, `width`: Base UI's modal scroll-lock writes these
+     INLINE onto <body> while the dialog is open. Inline styles beat any normal stylesheet
+     rule, so without !important the receipt would print inside a body box capped at one
+     viewport with overflow hidden — and a long order would be CLIPPED at page one rather
+     than flowing onto page two.
+     `display`, `min-height`, `padding`: Base UI never touches these — they exist purely to
+     defeat this file's own `body` rule (line 164: `min-height: 100vh; padding: 2rem 1rem
+     4rem; display: flex; ...`). Base UI portals the dialog to <body>, so without
+     `display: block` the portal is a shrink-to-fit FLEX ITEM: the receipt would print as a
+     ~320px centred column, its `width: 100%` below meaning 100% of that 320px, not the page.
+     `:has([data-receipt])` scopes the whole rule to when the receipt dialog is actually
+     mounted — otherwise every other page's print would be forced into this reset too. */
   body:has([data-receipt]) {
     position: static !important;
     overflow: visible !important;
     height: auto !important;
     width: auto !important;
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Printing must not race an animation. The dialog opens with `data-open:animate-in
+     data-open:fade-in-0 data-open:zoom-in-95` (dialog.tsx), which drives tw-animate-css's
+     `enter` keyframes from `opacity: 0` and 95% scale up to full. A print fired while that
+     animation is still live captures the receipt mid-transition — near-transparent and
+     slightly shrunken — depending on exactly when the user clicked Print. Killing animation
+     and transition for the print makes the output deterministic instead. (`enter` animates
+     `transform`/`opacity`/`filter`, never the standalone `translate` property, so it does not
+     fight the `translate: none` below — that is a separate, unrelated centring fix.) */
+  body:has([data-receipt]) *,
+  body:has([data-receipt]) *::before,
+  body:has([data-receipt]) *::after {
+    animation: none !important;
+    transition: none !important;
   }
 
   /* Scoped the same way: without `:has([data-receipt])`, printing ANY page with no
@@ -638,25 +660,33 @@ Add to the end of `apps/frontend/src/index.css`:
     visibility: hidden;
   }
 
-  /* Gate and show rule must carry the same prefix: an un-prefixed show rule loses the
-     specificity fight to the gated hide rule and the receipt prints blank. */
+  /* Gate and show rule must carry the same prefix: if the show rule is later
+     "simplified" to bare `[data-receipt]`, the receipt will silently print blank
+     because the hide rule will outrank it. Keep them coupled. */
   body:has([data-receipt]) [data-receipt],
   body:has([data-receipt]) [data-receipt] * {
     visibility: visible;
   }
 
-  /* Not just hidden — REMOVED from the flow. `visibility: hidden` stops the paint but keeps
-     the layout, so the order-history screen behind the receipt would still fragment the print
-     into page boxes and emit blank trailing sheets. */
+  /* Not just hidden — REMOVED from the flow. `visibility: hidden` stops the paint but keeps the
+     layout, so the order-history screen behind the receipt would still fragment the print into
+     page boxes and emit blank trailing sheets. #root never contains the receipt (Base UI portals
+     the dialog to <body>, which is the whole reason these rules key off `visibility` and not
+     `body > *`), so removing it cannot remove the receipt. */
   body:has([data-receipt]) #root {
     display: none;
   }
 
-  /* Static flow, not absolute: with #root gone and the fixed-overlay geometry cleared, static
-     flow drops the receipt at the page origin and lets the print engine paginate it normally —
-     generating its own page boxes instead of relying on out-of-flow abspos fragmentation. */
+  /* The dialog is portaled to <body>, so with #root gone and its fixed-overlay geometry cleared,
+     static flow drops it at the page origin and lets the print engine paginate it normally —
+     generating its own page boxes instead of relying on out-of-flow abspos fragmentation, which
+     is not well standardised across print engines. */
   [data-receipt] {
     position: static;
+    /* Both properties, not just one: Tailwind v4 centres this dialog with the standalone
+       `translate` property (`-translate-x-1/2`/`-translate-y-1/2`), which `transform: none`
+       does not clear. Without `translate: none` the receipt prints shifted half off the
+       top-left of the page and every line-item label falls outside the left margin. */
     transform: none;
     translate: none;
     width: 100%;
@@ -674,6 +704,11 @@ Add to the end of `apps/frontend/src/index.css`:
     display: none;
   }
 
+  /* The on-screen palette is brand rose/oxblood — every text node inside the receipt
+     carries its own Tailwind colour class (text-ink, text-rose-muted, text-oxblood),
+     so a `color` set once on [data-receipt] alone never inherits down to them. A
+     printed financial document should be plain black regardless, so state it on
+     every descendant directly. */
   [data-receipt],
   [data-receipt] * {
     color: #000;
@@ -682,8 +717,9 @@ Add to the end of `apps/frontend/src/index.css`:
   /* The badge is bg-oxblood + text-white on screen; browsers drop backgrounds when
      printing, which would leave white text on white paper — a promo line that silently
      loses the word "Promo" and keeps its discounted price. A bordered chip survives a
-     printer that honours no colour at all. Its text is already #000 via the rule above
-     at equal specificity, so a separate `color: #000` here would be redundant. */
+     printer that honours no colour at all. (Its text colour is already #000 via the
+     `[data-receipt] *` rule above, at equal specificity and later in source, so it
+     wins ties anyway — no need to restate it here.) */
   [data-receipt-promo] {
     background: transparent !important;
     border: 1px solid #000;
