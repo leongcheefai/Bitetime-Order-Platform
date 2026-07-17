@@ -1,0 +1,46 @@
+import { describe, it, expect } from 'vitest'
+import { receiptSubtotal } from './receipt'
+import type { OrderItem } from './types'
+
+const item = (over: Partial<OrderItem>): OrderItem => ({ id: 'p1', qty: 1, price: 0, ...over })
+
+describe('receiptSubtotal', () => {
+  it('is 0 for an order with no items', () => {
+    expect(receiptSubtotal([])).toBe(0)
+    expect(receiptSubtotal(null)).toBe(0)
+    expect(receiptSubtotal(undefined)).toBe(0)
+  })
+
+  it('multiplies price by qty on a single line', () => {
+    expect(receiptSubtotal([item({ price: 12.5, qty: 2 })])).toBe(25)
+  })
+
+  it('sums every line', () => {
+    expect(receiptSubtotal([
+      item({ id: 'a', price: 10, qty: 1 }),
+      item({ id: 'b', price: 4.25, qty: 2 }),
+    ])).toBe(18.5)
+  })
+
+  // A split promo writes TWO lines sharing one product id — 3 units at the promo
+  // price plus 7 at the base price. Deduping by id here would undercharge the
+  // printed subtotal against the stored total.
+  it('counts both halves of a split promo separately', () => {
+    expect(receiptSubtotal([
+      item({ id: 'same', price: 5, qty: 3, promo: true }),
+      item({ id: 'same', price: 8, qty: 7, promo: false }),
+    ])).toBe(71)
+  })
+
+  it('treats a missing price or qty as zero rather than NaN', () => {
+    expect(receiptSubtotal([item({ price: undefined, qty: 2 })])).toBe(0)
+    expect(receiptSubtotal([{ id: 'p1' } as unknown as OrderItem])).toBe(0)
+  })
+
+  it('rounds to cents so the sum never shows float dust', () => {
+    expect(receiptSubtotal([
+      item({ id: 'a', price: 0.1, qty: 1 }),
+      item({ id: 'b', price: 0.2, qty: 1 }),
+    ])).toBe(0.3)
+  })
+})
