@@ -271,7 +271,12 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
     position: absolute;
     top: 0;
     left: 0;
+    /* Both properties, not just one: Tailwind v4 centres this dialog with the standalone
+       `translate` property (`-translate-x-1/2`/`-translate-y-1/2`), which `transform: none`
+       does not clear. Without `translate: none` the receipt prints shifted half off the
+       top-left of the page and every line-item label falls outside the left margin. */
     transform: none;
+    translate: none;
     width: 100%;
     max-width: 100%;
     max-height: none;
