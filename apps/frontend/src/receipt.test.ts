@@ -43,4 +43,17 @@ describe('receiptSubtotal', () => {
       item({ id: 'b', price: 0.2, qty: 1 }),
     ])).toBe(0.3)
   })
+
+  it('rounds each line before summing, not just the final result', () => {
+    // A split promo with prices that round down individually but up when summed:
+    // 0.333 × 1 = 0.333, rounds to 0.33 per line
+    // 0.334 × 1 = 0.334, rounds to 0.33 per line
+    // Sum of rounded per line: 0.33 + 0.33 = 0.66
+    // Sum of unrounded:       0.333 + 0.334 = 0.667, which rounds to 0.67
+    // This mirrors pricing.ts:153+159, which rounds each lineTotal then sums.
+    expect(receiptSubtotal([
+      item({ id: 'split', price: 0.333, qty: 1, promo: true }),
+      item({ id: 'split', price: 0.334, qty: 1, promo: false }),
+    ])).toBe(0.66)
+  })
 })

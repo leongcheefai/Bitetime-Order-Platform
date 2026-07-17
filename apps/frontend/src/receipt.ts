@@ -19,8 +19,15 @@ const round2 = (n: number) => parseFloat(n.toFixed(2))
  * shows up on the receipt instead of hiding inside it.
  *
  * Every entry counts: a split promo writes two lines under one product id.
+ *
+ * Each line is rounded to cents before summing (not just the final result) for two reasons:
+ * 1. `pricing.ts` rounds each lineTotal before summing, so this must too — "by construction"
+ *    is the entire point, and summing unrounded products would silently diverge from it.
+ * 2. The receipt prints each line rounded to cents. A subtotal that summed unrounded products
+ *    could disagree with the very column printed above it; per-line rounding means the printed
+ *    numbers add up exactly.
  */
 export function receiptSubtotal(items: OrderItem[] | null | undefined): number {
   if (!items) return 0
-  return round2(items.reduce((sum, it) => sum + (it.price ?? 0) * (it.qty ?? 0), 0))
+  return round2(items.reduce((sum, it) => sum + round2((it.price ?? 0) * (it.qty ?? 0)), 0))
 }
