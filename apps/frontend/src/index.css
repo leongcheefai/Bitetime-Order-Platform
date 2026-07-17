@@ -237,7 +237,8 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 /* ─── Printing a receipt ──────────────────────────────────────────────────────
    The receipt dialog is the only thing in this app that is meant to reach paper.
    These rules exist so that when a customer prints one, they get the document and
-   not the shop's order history with a modal on top of it.
+   not the shop's order history with a modal on top of it — gated on the receipt
+   actually being open, so printing any OTHER page is unaffected.
 
    `visibility`, not `display: none`: the dialog is PORTALED to <body> by the Base UI
    primitive, so a `body > *` rule would hide the receipt itself. Visibility inherits
@@ -248,15 +249,19 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
      while the dialog is open. Inline styles beat any normal stylesheet rule, so
      without !important the receipt would print inside a body box capped at one
      viewport with overflow hidden — and a long order would be CLIPPED at page one
-     rather than flowing onto page two. */
-  body {
+     rather than flowing onto page two. `:has([data-receipt])` scopes this to when
+     the receipt dialog is actually mounted — otherwise every other page's print
+     would be forced into this reset too. */
+  body:has([data-receipt]) {
     position: static !important;
     overflow: visible !important;
     height: auto !important;
     width: auto !important;
   }
 
-  body * {
+  /* Scoped the same way: without `:has([data-receipt])`, printing ANY page with no
+     receipt open would hide everything on it and yield blank paper. */
+  body:has([data-receipt]) * {
     visibility: hidden;
   }
 
@@ -265,8 +270,8 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
     visibility: visible;
   }
 
-  /* Out of the modal's centred-overlay geometry and into normal page flow, or the
-     receipt prints as a floating card cropped to one viewport. */
+  /* Hoists the popup out of the fixed overlay's centring and to the page origin —
+     without this it prints as a floating card cropped to one viewport. */
   [data-receipt] {
     position: absolute;
     top: 0;
@@ -285,12 +290,22 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
     border-radius: 0;
     box-shadow: none;
     background: #fff;
-    color: #000;
   }
 
   /* Paper does not need a Print button. */
   [data-receipt-actions] {
     display: none;
+  }
+
+  /* The on-screen palette is brand rose/oxblood — every text node inside the receipt
+     carries its own Tailwind colour class (text-ink, text-rose-muted, text-oxblood),
+     so a `color` set once on [data-receipt] alone never inherits down to them. A
+     printed financial document should be plain black regardless, so state it on
+     every descendant directly. This is also what makes the `[data-receipt-promo]`
+     `color: #000 !important` below genuinely load-bearing rather than redundant. */
+  [data-receipt],
+  [data-receipt] * {
+    color: #000;
   }
 
   /* The badge is bg-oxblood + text-white on screen; browsers drop backgrounds when

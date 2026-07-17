@@ -1,5 +1,5 @@
 import { useSession } from '../SessionContext'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { formatMoney } from '../currency'
 import { formatAddress } from '../address'
@@ -52,6 +52,7 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
         showCloseButton={false}
         className="sm:max-w-md max-h-[85vh] overflow-y-auto gap-0 p-0"
       >
+        <DialogTitle className="sr-only">{t('Receipt', '收据')} {order.order_number}</DialogTitle>
         <div className="p-5">
           {/* Shop name alone: `merchants` carries no address or phone, and inventing a
               header out of the payment fields — written to instruct payment BEFORE an
