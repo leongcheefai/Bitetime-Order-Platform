@@ -273,12 +273,21 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
     visibility: visible;
   }
 
-  /* Hoists the popup out of the fixed overlay's centring and to the page origin —
-     without this it prints as a floating card cropped to one viewport. */
+  /* Not just hidden — REMOVED from the flow. `visibility: hidden` stops the paint but keeps the
+     layout, so the order-history screen behind the receipt would still fragment the print into
+     page boxes and emit blank trailing sheets. #root never contains the receipt (Base UI portals
+     the dialog to <body>, which is the whole reason these rules key off `visibility` and not
+     `body > *`), so removing it cannot remove the receipt. */
+  body:has([data-receipt]) #root {
+    display: none;
+  }
+
+  /* The dialog is portaled to <body>, so with #root gone and its fixed-overlay geometry cleared,
+     static flow drops it at the page origin and lets the print engine paginate it normally —
+     generating its own page boxes instead of relying on out-of-flow abspos fragmentation, which
+     is not well standardised across print engines. */
   [data-receipt] {
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: static;
     /* Both properties, not just one: Tailwind v4 centres this dialog with the standalone
        `translate` property (`-translate-x-1/2`/`-translate-y-1/2`), which `transform: none`
        does not clear. Without `translate: none` the receipt prints shifted half off the
@@ -304,8 +313,7 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
      carries its own Tailwind colour class (text-ink, text-rose-muted, text-oxblood),
      so a `color` set once on [data-receipt] alone never inherits down to them. A
      printed financial document should be plain black regardless, so state it on
-     every descendant directly. This is also what makes the `[data-receipt-promo]`
-     `color: #000 !important` below genuinely load-bearing rather than redundant. */
+     every descendant directly. */
   [data-receipt],
   [data-receipt] * {
     color: #000;
@@ -314,10 +322,11 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   /* The badge is bg-oxblood + text-white on screen; browsers drop backgrounds when
      printing, which would leave white text on white paper — a promo line that silently
      loses the word "Promo" and keeps its discounted price. A bordered chip survives a
-     printer that honours no colour at all. */
+     printer that honours no colour at all. (Its text colour is already #000 via the
+     `[data-receipt] *` rule above, at equal specificity and later in source, so it
+     wins ties anyway — no need to restate it here.) */
   [data-receipt-promo] {
     background: transparent !important;
-    color: #000 !important;
     border: 1px solid #000;
   }
 }

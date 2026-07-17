@@ -25,7 +25,7 @@
 
 Three things surfaced while mapping the files. The plan below implements the corrected version; the spec's wording is superseded on these points.
 
-1. **The spec's print rule `body > * { display: none }` would hide the receipt.** `DialogContent` renders through `DialogPortal` (`src/components/ui/dialog.tsx:19-21`), which mounts the dialog as a **direct child of `body`** — the selector would match the receipt itself. Task 5 uses the visibility technique instead (`body * { visibility: hidden }` + `[data-receipt], [data-receipt] * { visibility: visible }`), which is portal-agnostic because `visibility` inherits and a visible descendant still paints inside a hidden ancestor.
+1. **The spec's print rule `body > * { display: none }` would hide the receipt, and an ungated `body * { visibility: hidden }` would blank every other page's print job too.** `DialogContent` renders through `DialogPortal` (`src/components/ui/dialog.tsx:19-21`), which mounts the dialog as a **direct child of `body`** — `body > * { display: none }` would match the receipt itself. What shipped scopes every rule to `body:has([data-receipt])`: the hide rule, and the show rule (`[data-receipt], [data-receipt] * { visibility: visible }` must carry the same `body:has([data-receipt])` prefix, or it loses the specificity fight to the gated hide rule and the receipt prints blank). A further `body:has([data-receipt]) #root { display: none }` rule removes the order-history screen from the print flow entirely — `visibility: hidden` alone preserves layout, which would still fragment a long history into blank trailing page boxes. The receipt itself (`[data-receipt]`) prints in normal `position: static` flow rather than `absolute`, so it generates its own page boxes and paginates a multi-page order reliably.
 2. **The promo badge would print as invisible text.** It is `bg-oxblood` with `text-white` (`OrderHistory.tsx:184`); browsers drop backgrounds when printing, leaving white on white. Task 5 restyles it for print as a bordered chip with dark text.
 3. **`formatOrderDate` is date-only and is shared with the guest `/track` screen** (`src/orderDate.ts`), so it cannot simply grow a time. Task 2 adds a sibling `formatOrderDateTime` in the same module, which is that module's stated purpose — one rule per order-date question, so the screens cannot drift.
 
@@ -603,7 +603,7 @@ git commit -m "feat(receipt): a per-order receipt document in customer order his
 
 The document exists; now only it may reach the paper.
 
-**Why `visibility` and not `display`:** `DialogContent` renders through `DialogPortal` (`src/components/ui/dialog.tsx:19-21`), which mounts it as a **direct child of `body`**. So `body > * { display: none }` would hide the receipt along with everything else. `visibility` inherits and a visible descendant still paints inside a hidden ancestor — which makes it portal-agnostic: it does not matter where in the tree the dialog lands.
+**Why `visibility` and not `display`, and why gated on `:has([data-receipt])`:** `DialogContent` renders through `DialogPortal` (`src/components/ui/dialog.tsx:19-21`), which mounts it as a **direct child of `body`**. So `body > * { display: none }` would hide the receipt along with everything else. `visibility` inherits and a visible descendant still paints inside a hidden ancestor — which makes it portal-agnostic: it does not matter where in the tree the dialog lands. But an ungated `body * { visibility: hidden }` would blank the print output of every OTHER page in the app too, so every rule below is scoped to `body:has([data-receipt])` — including the show rule, which must repeat the same prefix or it loses the specificity fight to the gated hide rule and the receipt prints blank. `#root` (the order-history screen sitting behind the portal) is separately removed from the flow with `display: none`, not just hidden: `visibility: hidden` preserves layout and would still fragment a long order history into blank trailing page boxes. And the receipt itself is `position: static`, not `absolute`, so it generates its own page boxes and paginates a multi-page order correctly instead of relying on out-of-flow fragmentation.
 
 **Files:**
 - Modify: `apps/frontend/src/index.css` (append; the file ends at line 235 with the `.dark` block)
@@ -623,22 +623,42 @@ Add to the end of `apps/frontend/src/index.css`:
    and a visible descendant still paints inside a hidden ancestor, so this works no
    matter where in the tree the portal lands. */
 @media print {
-  body * {
+  /* `:has([data-receipt])` scopes this to when the receipt dialog is actually mounted —
+     otherwise every other page's print would be forced into this reset too. */
+  body:has([data-receipt]) {
+    position: static !important;
+    overflow: visible !important;
+    height: auto !important;
+    width: auto !important;
+  }
+
+  /* Scoped the same way: without `:has([data-receipt])`, printing ANY page with no
+     receipt open would hide everything on it and yield blank paper. */
+  body:has([data-receipt]) * {
     visibility: hidden;
   }
 
-  [data-receipt],
-  [data-receipt] * {
+  /* Gate and show rule must carry the same prefix: an un-prefixed show rule loses the
+     specificity fight to the gated hide rule and the receipt prints blank. */
+  body:has([data-receipt]) [data-receipt],
+  body:has([data-receipt]) [data-receipt] * {
     visibility: visible;
   }
 
-  /* Out of the modal's centred-overlay geometry and into normal page flow, or the
-     receipt prints as a floating card cropped to one viewport. */
+  /* Not just hidden — REMOVED from the flow. `visibility: hidden` stops the paint but keeps
+     the layout, so the order-history screen behind the receipt would still fragment the print
+     into page boxes and emit blank trailing sheets. */
+  body:has([data-receipt]) #root {
+    display: none;
+  }
+
+  /* Static flow, not absolute: with #root gone and the fixed-overlay geometry cleared, static
+     flow drops the receipt at the page origin and lets the print engine paginate it normally —
+     generating its own page boxes instead of relying on out-of-flow abspos fragmentation. */
   [data-receipt] {
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: static;
     transform: none;
+    translate: none;
     width: 100%;
     max-width: 100%;
     max-height: none;
@@ -647,7 +667,6 @@ Add to the end of `apps/frontend/src/index.css`:
     border-radius: 0;
     box-shadow: none;
     background: #fff;
-    color: #000;
   }
 
   /* Paper does not need a Print button. */
@@ -655,13 +674,18 @@ Add to the end of `apps/frontend/src/index.css`:
     display: none;
   }
 
+  [data-receipt],
+  [data-receipt] * {
+    color: #000;
+  }
+
   /* The badge is bg-oxblood + text-white on screen; browsers drop backgrounds when
      printing, which would leave white text on white paper — a promo line that silently
      loses the word "Promo" and keeps its discounted price. A bordered chip survives a
-     printer that honours no colour at all. */
+     printer that honours no colour at all. Its text is already #000 via the rule above
+     at equal specificity, so a separate `color: #000` here would be redundant. */
   [data-receipt-promo] {
     background: transparent !important;
-    color: #000 !important;
     border: 1px solid #000;
   }
 }
