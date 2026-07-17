@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
@@ -9,6 +9,8 @@ import { formatMoney } from '../currency'
 import { formatOrderDate } from '../orderDate'
 import { cn } from '@/lib/utils'
 import AuthPanel from './AuthPanel'
+import MoneyLine from './MoneyLine'
+import ReceiptDialog from './ReceiptDialog'
 import LanguageSelect from '../components/LanguageSelect'
 import type { Order, OrderItem, Product, Translate } from '../types'
 
@@ -37,6 +39,7 @@ export default function OrderHistory() {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [receiptId, setReceiptId] = useState<string | null>(null)
 
   const merchantId = merchant?.id
   const userId = account?.id
@@ -62,7 +65,7 @@ export default function OrderHistory() {
 
   const itemName = (item: OrderItem) => {
     const p = products.find(p => p.id === item.id)
-    return lang === 'zh' && p?.name_zh ? p.name_zh : item.name
+    return (lang === 'zh' && p?.name_zh ? p.name_zh : item.name) ?? ''
   }
 
   return (
@@ -174,7 +177,7 @@ export default function OrderHistory() {
                         // sharing the same product id (base half + promo half), and an id-only
                         // key would collapse them into one row while the total still charges
                         // for both.
-                        <Line
+                        <MoneyLine
                           key={`${item.id ?? item.name}-${n}`}
                           label={
                             <span className="inline-flex items-center gap-1.5 min-w-0">
@@ -194,10 +197,10 @@ export default function OrderHistory() {
                           up to the total below them — a receipt that doesn't reconcile is worse
                           than one that shows only a total. */}
                       {shipping > 0 && (
-                        <Line label={t('Delivery fee', '送货费')} value={formatMoney(shipping, currency)} />
+                        <MoneyLine label={t('Delivery fee', '送货费')} value={formatMoney(shipping, currency)} />
                       )}
                       {discount > 0 && (
-                        <Line
+                        <MoneyLine
                           label={`${t('Voucher', '优惠券')}${o.voucher_code ? ` (${o.voucher_code})` : ''}`}
                           value={`−${formatMoney(discount, currency)}`}
                         />
@@ -208,8 +211,24 @@ export default function OrderHistory() {
                         </span>
                         <span className="text-right">{formatMoney(o.total, currency)}</span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => setReceiptId(id)}
+                        className="text-[13px] text-oxblood underline underline-offset-2 cursor-pointer mt-2"
+                      >
+                        {t('View receipt', '查看收据')}
+                      </button>
                       <Tracking order={o} t={t} />
                     </div>
+                  )}
+
+                  {receiptId === id && (
+                    <ReceiptDialog
+                      order={o}
+                      merchant={merchant}
+                      itemName={itemName}
+                      onClose={() => setReceiptId(null)}
+                    />
                   )}
                 </div>
               )
@@ -226,15 +245,6 @@ export default function OrderHistory() {
           </p>
         </>
       )}
-    </div>
-  )
-}
-
-function Line({ label, value }: { label: ReactNode; value: string }) {
-  return (
-    <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-      <span className="shrink-0">{label}</span>
-      <span className="text-right">{value}</span>
     </div>
   )
 }
