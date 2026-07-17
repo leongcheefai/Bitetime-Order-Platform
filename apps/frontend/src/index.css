@@ -233,3 +233,56 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 }
 
 .dark { --background: oklch(0.145 0 0); --foreground: oklch(0.985 0 0); --card: oklch(0.205 0 0); --card-foreground: oklch(0.985 0 0); --popover: oklch(0.205 0 0); --popover-foreground: oklch(0.985 0 0); --primary: oklch(0.922 0 0); --primary-foreground: oklch(0.205 0 0); --secondary: oklch(0.269 0 0); --secondary-foreground: oklch(0.985 0 0); --muted: oklch(0.269 0 0); --muted-foreground: oklch(0.708 0 0); --accent: oklch(0.269 0 0); --accent-foreground: oklch(0.985 0 0); --destructive: oklch(0.704 0.191 22.216); --border: oklch(1 0 0 / 10%); --input: oklch(1 0 0 / 15%); --ring: oklch(0.556 0 0); --chart-1: oklch(0.87 0 0); --chart-2: oklch(0.556 0 0); --chart-3: oklch(0.439 0 0); --chart-4: oklch(0.371 0 0); --chart-5: oklch(0.269 0 0); --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0); --sidebar-primary: oklch(0.488 0.243 264.376); --sidebar-primary-foreground: oklch(0.985 0 0); --sidebar-accent: oklch(0.269 0 0); --sidebar-accent-foreground: oklch(0.985 0 0); --sidebar-border: oklch(1 0 0 / 10%); --sidebar-ring: oklch(0.556 0 0); }
+
+/* ─── Printing a receipt ──────────────────────────────────────────────────────
+   The receipt dialog is the only thing in this app that is meant to reach paper.
+   These rules exist so that when a customer prints one, they get the document and
+   not the shop's order history with a modal on top of it.
+
+   `visibility`, not `display: none`: the dialog is PORTALED to <body> by the Base UI
+   primitive, so a `body > *` rule would hide the receipt itself. Visibility inherits
+   and a visible descendant still paints inside a hidden ancestor, so this works no
+   matter where in the tree the portal lands. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  [data-receipt],
+  [data-receipt] * {
+    visibility: visible;
+  }
+
+  /* Out of the modal's centred-overlay geometry and into normal page flow, or the
+     receipt prints as a floating card cropped to one viewport. */
+  [data-receipt] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #fff;
+    color: #000;
+  }
+
+  /* Paper does not need a Print button. */
+  [data-receipt-actions] {
+    display: none;
+  }
+
+  /* The badge is bg-oxblood + text-white on screen; browsers drop backgrounds when
+     printing, which would leave white text on white paper — a promo line that silently
+     loses the word "Promo" and keeps its discounted price. A bordered chip survives a
+     printer that honours no colour at all. */
+  [data-receipt-promo] {
+    background: transparent !important;
+    color: #000 !important;
+    border: 1px solid #000;
+  }
+}
