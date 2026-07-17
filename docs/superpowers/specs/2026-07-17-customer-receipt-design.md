@@ -1,7 +1,12 @@
 # Printable customer receipt in order history
 
 **Date:** 2026-07-17
-**Status:** Approved, not yet implemented
+**Status:** Implemented on `feat/customer-receipt`.
+
+> **Superseded in part.** Implementation corrected three things this document got wrong. See
+> "Corrections to the spec" in `docs/superpowers/plans/2026-07-17-customer-receipt.md`, and the
+> Print section below, which has been rewritten to match what shipped. Read the plan alongside
+> this file, not this file alone.
 
 ## Problem
 
@@ -101,11 +106,34 @@ voucher = total`, every term on the page.
 
 ### Print
 
-The `Print` button calls `window.print()`. A `@media print` block hides the rest of the page
-(`body > * { display: none }`) and promotes the dialog out of its overlay into static full-page
-flow: black on white, no shadow, no backdrop, no overlay chrome, and the Print and Close buttons
-themselves hidden. The customer's browser handles print-to-PDF; nothing is rendered or stored
-server-side.
+The `Print` button calls `window.print()`. A `@media print` block hides the rest of the page and
+hoists the dialog to the page origin: black on white, no shadow, no backdrop, no overlay chrome,
+and the Print and Close buttons themselves hidden. The customer's browser handles print-to-PDF;
+nothing is rendered or stored server-side.
+
+Three details this section originally got wrong, corrected during implementation and recorded
+here because each one is a trap the obvious approach walks into:
+
+- **Not `body > * { display: none }`.** The dialog is *portaled to `<body>`* by the Base UI
+  primitive, so it IS a `body > *` — that rule would hide the receipt itself. The shipped rules
+  use `visibility` (`body:has([data-receipt]) * { visibility: hidden }`, then
+  `[data-receipt], [data-receipt] * { visibility: visible }`), which is portal-agnostic because
+  `visibility` inherits and a visible descendant still paints inside a hidden ancestor.
+- **The rules are gated on `body:has([data-receipt])`.** Ungated, they hide every page in the
+  app at print time, and printing any other screen yields a blank sheet.
+- **Not "static full-page flow".** The rule sets `position: absolute` at the page origin, and
+  must clear BOTH `transform` and `translate` — Tailwind v4 centres with the standalone
+  `translate` property, which `transform: none` does not touch.
+
+Two further things the print rules must do, neither obvious from this design:
+
+- **Reset `<body>` with `!important`.** Base UI's modal scroll-lock writes `position`, `height`,
+  `overflow` and `width` *inline* on `<body>` while the dialog is open. Inline styles beat any
+  normal stylesheet rule, so without the reset a long receipt prints clipped at page one instead
+  of paginating.
+- **Restyle the promo badge.** It is `bg-oxblood` + `text-white`; printers drop backgrounds, so
+  it would print white-on-white — silently deleting the word "Promo" from a line while keeping
+  its discounted price. It prints as a bordered dark chip.
 
 ### Guest orders
 
