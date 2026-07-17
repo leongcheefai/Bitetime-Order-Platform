@@ -173,7 +173,7 @@ The list row shows a date (`formatOrderDate`). A receipt states when the order w
 
 **Files:**
 - Modify: `apps/frontend/src/orderDate.ts`
-- Test: `apps/frontend/src/orderDate.test.ts` (create — the module has no tests today)
+- Test: `apps/frontend/src/orderDate.test.ts` (**modify — this file already exists** and covers `formatOrderDate`'s locale branching and its bad-input guard. Add to it; do not overwrite it. Both existing cases must still pass untouched.)
 
 **Interfaces:**
 - Consumes: `Lang` from `src/types.ts` (`'en' | 'zh'`)
@@ -181,7 +181,7 @@ The list row shows a date (`formatOrderDate`). A receipt states when the order w
 
 - [ ] **Step 1: Write the failing test**
 
-Create `apps/frontend/src/orderDate.test.ts`.
+Add a `describe('formatOrderDateTime', ...)` block to the existing `apps/frontend/src/orderDate.test.ts`, below the `describe('formatOrderDate', ...)` block already there. Leave that block alone — it covers the date-only twin's locale branching (`en` says `Jul`, `zh` says 7月) and its bad-input guard, and that twin is live on two customer screens.
 
 Note the assertions deliberately avoid pinning an exact string: `toLocaleString` renders in the machine's timezone, and a test that hard-codes `14:30` passes in Kuala Lumpur and fails in CI. What matters — that a time is present at all, and that bad input yields nothing rather than "Invalid Date" — is timezone-independent.
 
