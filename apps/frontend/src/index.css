@@ -257,6 +257,22 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
     overflow: visible !important;
     height: auto !important;
     width: auto !important;
+    display: block !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Printing must not race an animation. The dialog enters with `animate-in`/`zoom-in-95`,
+     and a CSS animation's keyframes outrank author declarations in the cascade — so while
+     `enter` is live it re-applies the `translate` that `[data-receipt]` below is trying to
+     clear, and the receipt prints shifted off the page. Killing animation and transition
+     for the print makes the output deterministic instead of dependent on when the user
+     clicked Print. */
+  body:has([data-receipt]) *,
+  body:has([data-receipt]) *::before,
+  body:has([data-receipt]) *::after {
+    animation: none !important;
+    transition: none !important;
   }
 
   /* Scoped the same way: without `:has([data-receipt])`, printing ANY page with no
