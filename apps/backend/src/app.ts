@@ -23,8 +23,9 @@ import { notifyOrderPlaced, telegramSend } from './notify.js'
 import { signUpCustomer, isDuplicateEmailError } from './customerSignup.js'
 import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
-import { detectRegion, isValidRegion, DEFAULT_REGION } from './region.js'
-import { fetchRegionPricing, createPricingCache, type PricingPayload } from './pricing.js'
+import { detectCountry } from './region.js'
+import { fetchBasePricing, createPricingCache, type PricingPayload } from './pricing.js'
+import { estimateFor } from './fx.js'
 import { listReferredShops, listEarnedRewards } from './referrals.js'
 import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
@@ -52,19 +53,22 @@ app.get('/health', (c) => c.json({ ok: true }))
  */
 app.get('/api/time', (c) => c.json({ now: new Date().toISOString() }))
 
-// ── Region-resolved platform subscription pricing ─────────────────────────────
-// Country comes from a CDN header (or the `?country=` override for local dev/QA);
-// amounts are read from the region's Stripe Prices and cached briefly per region.
+// ── Platform subscription pricing ───────────────────────────────────────────────
+// Everyone is charged MYR — the base prices are the same for every visitor, cached
+// under one key. Country comes from a CDN header (or the `?country=` override for
+// local dev/QA) and only picks the approximate local-currency estimate (fx.ts).
 const pricingCache = createPricingCache<PricingPayload>({ ttlMs: 5 * 60_000, now: () => Date.now() })
 
 app.get('/api/pricing', async (c) => {
-  const region = detectRegion({
+  const country = detectCountry({
     explicitCountry: c.req.query('country') || undefined,
     getHeader: (name) => c.req.header(name),
   })
   try {
-    const payload = await pricingCache.get(region, () =>
-      fetchRegionPricing(region, {
+    // Base MYR prices are the same for everyone → cached under one key; the estimate
+    // is a cheap pure lookup that varies by country, so it is not cached.
+    const base = await pricingCache.get('base', () =>
+      fetchBasePricing({
         prices: env.prices,
         retrievePrice: (id) =>
           stripe.prices
@@ -72,7 +76,7 @@ app.get('/api/pricing', async (c) => {
             .then((p) => ({ unit_amount: p.unit_amount, currency: p.currency })),
       }),
     )
-    return c.json(payload)
+    return c.json({ ...base, estimate: estimateFor(country) })
   } catch (err) {
     console.error('Pricing resolution failed:', err instanceof Error ? err.message : String(err))
     return c.json({ error: 'Pricing unavailable' }, 502)
@@ -95,10 +99,10 @@ app.get('/api/billing', requireSuperadmin, async (c) => {
 
 // ── Merchant creation (any authenticated user creates their own shop) ──────────
 // The insert goes through `admin` (service_role), which bypasses guard_merchant_status —
-// so `status: 'pending'` and `owner_id: user.id` are forced here, never read from the body.
-// Only name/plan/billing/region/referredByCode are accepted from the client (Global
-// Constraint 1). Slug uniqueness resolution moved server-side now that the browser can no
-// longer SELECT merchants.slug directly.
+// so `status: 'pending'`, `owner_id: user.id` and `billing_region: 'MY'` are forced here,
+// never read from the body. Only name/plan/billing/referredByCode are accepted from the
+// client (Global Constraint 1). Slug uniqueness resolution moved server-side now that the
+// browser can no longer SELECT merchants.slug directly.
 app.post('/api/merchants', requireUser, async (c) => {
   const user = c.get('user')
   const body = await c.req.json().catch(() => ({} as any))
@@ -118,7 +122,7 @@ app.post('/api/merchants', requireUser, async (c) => {
       status: 'pending',
       plan: body?.plan ?? 'basic',
       billing_cycle: body?.billing ?? 'monthly',
-      billing_region: body?.region ?? 'US',
+      billing_region: 'MY', // everyone is charged MYR
       referred_by_code: resolveReferredByCode(body?.referredByCode, referralCodeOf(user.id)),
     })
     .select()
@@ -398,9 +402,6 @@ app.post('/api/checkout', async (c) => {
   if (!isValidPlan(plan) || !isValidCycle(billing)) {
     return c.json({ error: 'Invalid plan or billing cycle' }, 400)
   }
-  // Bill the region the frontend displayed; unknown/absent falls back to default.
-  const region = isValidRegion(body.region) ? body.region : DEFAULT_REGION
-
   // Authenticate the caller via their Supabase JWT.
   const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
   const user = await getUserFromToken(token)
@@ -440,11 +441,11 @@ app.post('/api/checkout', async (c) => {
     await upsertBilling(merchant.id, { stripe_customer_id: customerId })
   }
 
-  const metadata = { merchant_id: merchant.id, plan, billing, region }
+  const metadata = { merchant_id: merchant.id, plan, billing, region: 'MY' }
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     customer: customerId,
-    line_items: [{ price: priceFor(plan, billing, region), quantity: 1 }],
+    line_items: [{ price: priceFor(plan, billing), quantity: 1 }],
     client_reference_id: merchant.id,
     metadata,
     // No trial here: trials are granted only by superadmin approval (cardless).
@@ -514,7 +515,6 @@ app.post('/api/admin/approve-merchant', requireSuperadmin, async (c) => {
 
   const plan = merchant.plan || 'basic'
   const cycle = merchant.billing_cycle || 'monthly'
-  const region = isValidRegion(merchant.billing_region) ? merchant.billing_region : DEFAULT_REGION
 
   // Revert the pending→active claim; never throw from a failure path.
   const revertClaim = async () => {
@@ -538,10 +538,10 @@ app.post('/api/admin/approve-merchant', requireSuperadmin, async (c) => {
     }
     sub = await stripe.subscriptions.create({
       customer: customerId,
-      items: [{ price: priceFor(plan, cycle, region) }],
+      items: [{ price: priceFor(plan, cycle) }],
       trial_period_days: 7,
       trial_settings: { end_behavior: { missing_payment_method: 'cancel' } },
-      metadata: { merchant_id: merchant.id, plan, billing: cycle, region },
+      metadata: { merchant_id: merchant.id, plan, billing: cycle, region: 'MY' },
     })
   } catch (err) {
     console.error('Trial subscription creation failed:', err instanceof Error ? err.message : String(err))
