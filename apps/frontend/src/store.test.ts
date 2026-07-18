@@ -608,21 +608,30 @@ describe('fetchMerchantSecret', () => {
 // ── upsertMerchantSecret (Task 4.1) ───────────────────────────────────────────
 
 describe('upsertMerchantSecret', () => {
-  it('upserts merchant_id + secret fields into merchant_secrets', async () => {
-    __mocks.upsert.mockResolvedValueOnce({ error: null })
+  afterEach(() => vi.unstubAllGlobals())
 
-    await upsertMerchantSecret('m1', { tg_token: 'tok', tg_chat_id: '123' })
-
-    expect(__mocks.from).toHaveBeenCalledWith('merchant_secrets')
-    expect(__mocks.upsert).toHaveBeenCalledWith({
-      merchant_id: 'm1',
-      tg_token: 'tok',
-      tg_chat_id: '123',
+  it('PUTs /api/merchants/:id/secret with the secret fields and a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const secret = { tg_token: 'tok', tg_chat_id: '123' }
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }),
     })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await upsertMerchantSecret('m1', secret)
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/secret$/)
+    expect(init.method).toBe('PUT')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual(secret)
   })
 
-  it('throws on DB error', async () => {
-    __mocks.upsert.mockResolvedValueOnce({ error: new Error('upsert failed') })
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'upsert failed' }),
+    }))
     await expect(
       upsertMerchantSecret('m1', { tg_token: 'x', tg_chat_id: 'y' })
     ).rejects.toThrow('upsert failed')

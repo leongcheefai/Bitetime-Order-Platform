@@ -819,7 +819,5 @@ export async function fetchMerchantSecret(merchantId: string) {
 }
 
 export async function upsertMerchantSecret(merchantId: string, secret: any) {
-  const { error } = await supabase
-    .from('merchant_secrets').upsert({ merchant_id: merchantId, ...secret })
-  if (error) throw error
+  await apiSend(`/api/merchants/${merchantId}/secret`, 'PUT', secret, { auth: true })
 }

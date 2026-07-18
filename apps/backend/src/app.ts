@@ -193,6 +193,24 @@ app.get('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
   return c.json(data ?? null)
 })
 
+// Secret upsert. The write goes through `admin` (service_role), which bypasses RLS and the
+// restricted grants on merchant_secrets — so picking only tg_token/tg_chat_id off the body is
+// the ONLY guard (Global Constraint 1). merchant_id is FORCED from :id, never read from the
+// body, AND is the upsert's conflict target (merchant_secrets.merchant_id is the primary key —
+// see 20260627120150_secure_merchant_secrets.sql), so the product-PUT hijack class (Global
+// Constraint 2) does not apply here: there is no client-supplied child id to nest a foreign
+// row under. No separate tenancy check is needed.
+app.put('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({}) as any)
+  const row: Record<string, unknown> = { merchant_id: id }
+  if (b?.tg_token !== undefined) row.tg_token = b.tg_token
+  if (b?.tg_chat_id !== undefined) row.tg_chat_id = b.tg_chat_id
+  const { error } = await admin.from('merchant_secrets').upsert(row)
+  if (error) return c.json({ error: 'Upsert failed' }, 500)
+  return c.json({ ok: true })
+})
+
 // ── User-scoped reads ─────────────────────────────────────────────────────────
 app.get('/api/me/profile', requireUser, async (c) => {
   const user = c.get('user')
