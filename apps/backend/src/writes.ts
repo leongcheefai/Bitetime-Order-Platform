@@ -20,3 +20,21 @@ export function pickMerchantConfig(body: any): Record<string, unknown> {
   for (const k of MERCHANT_CONFIG_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
   return out
 }
+
+// Caller's GLOBAL profile (merchant_id IS NULL). EXACT union of the two writers,
+// verified 2026-07-18:
+//   ensureGlobalProfile (store.ts:31, :370) sets: name, email, email_confirmed, referral_code
+//   saveCustomerDetails (store.ts:123, via SavedDetails) sets: whatsapp, delivery_address (jsonb)
+// user_id is FORCED to the caller server-side; app_role / merchant_id / id / created_at are
+// never accepted — service_role bypasses guard_profile_privileges, so this allowlist is the
+// only thing stopping a caller from granting themselves superadmin or attaching to another
+// merchant via a crafted body (Global Constraint 1).
+const PROFILE_FIELDS = [
+  'name', 'email', 'email_confirmed', 'referral_code', 'whatsapp', 'delivery_address',
+] as const
+
+export function pickProfileFields(body: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const k of PROFILE_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
+  return out
+}

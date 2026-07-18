@@ -69,40 +69,29 @@ export async function signUpCustomer(email: string, password: string) {
   }
 }
 
-// The profiles restructure made `id` a surrogate PK and moved auth identity to
-// `user_id`; the only unique index on user_id alone is partial (merchant_id IS
-// NULL), so ON CONFLICT-based upsert can't target it. Do an explicit
-// select-then-insert/update on the user's global (merchant_id null) profile.
-// Returns any write error (null on success); RLS blocks the write until the
-// user has a session, which is expected during pending email confirmation.
-// The one place that knows how to find a user's global profile row. Both writers go through it,
-// so the identity rule ("global" means merchant_id IS NULL) is stated once, not once per caller.
-async function globalProfileId(userId: string): Promise<string | null> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('user_id', userId)
-    .is('merchant_id', null)
-    .maybeSingle();
-  return data?.id ?? null;
-}
-
+// Upserts the caller's GLOBAL profile (merchant_id null) via the backend, which forces
+// user_id/merchant_id server-side and allowlists the rest (pickProfileFields in
+// apps/backend/src/writes.ts) — see Global Constraint 1. Best-effort: returns any error
+// instead of throwing (never null on failure, never throws), because both callers below treat
+// a failure as "try again later", not as a hard stop. In particular, during merchant signup
+// there is no session yet (email confirmation is on project-wide) — the fetch 401s exactly as
+// RLS used to block the equivalent browser write, and it's retried from onAuthChange once a
+// session exists.
 async function ensureGlobalProfile(fields: {
   user_id: string
   name: string
   email?: string | null
   email_confirmed: boolean
   referral_code?: string
-}) {
-  const existingId = await globalProfileId(fields.user_id);
-  if (existingId) {
-    const { error } = await supabase.from('profiles').update(fields).eq('id', existingId);
-    return error;
+}): Promise<Error | null> {
+  try {
+    // user_id is forced to the caller server-side; send everything else.
+    const { user_id: _user_id, ...rest } = fields
+    await apiSend('/api/me/profile', 'PUT', rest, { auth: true })
+    return null
+  } catch (e) {
+    return e as Error
   }
-  const { error } = await supabase
-    .from('profiles')
-    .insert({ ...fields, created_at: new Date().toISOString() });
-  return error;
 }
 
 export async function fetchProfileByUserId(_userId: string) {
@@ -117,21 +106,18 @@ export async function fetchProfileByUserId(_userId: string) {
  * Best-effort by design. It runs after an order is already placed, so a failure here must cost
  * the customer nothing but a retype next time; it must never surface as a failed order.
  *
- * Writes the GLOBAL profile (merchant_id null) — the same row `ensureGlobalProfile` maintains, and
- * found the same way, via `globalProfileId`. An address belongs to the customer, not to a shop.
+ * Writes the GLOBAL profile (merchant_id null) — the same row `ensureGlobalProfile` maintains,
+ * via the same `PUT /api/me/profile` upsert. An address belongs to the customer, not to a shop.
  */
 export async function saveCustomerDetails(fields: SavedDetails): Promise<void> {
   if (Object.keys(fields).length === 0) return
   const user = await getCurrentUser()
   if (!user) return // a guest saves nothing, ever — that is what makes the gate's warning true
-  const existingId = await globalProfileId(user.id)
-  if (existingId) {
-    await supabase.from('profiles').update(fields).eq('id', existingId)
-    return
+  try {
+    await apiSend('/api/me/profile', 'PUT', fields, { auth: true })
+  } catch {
+    // best-effort: a failure here must never surface as a failed order
   }
-  await supabase
-    .from('profiles')
-    .insert({ ...fields, user_id: user.id, email: user.email, created_at: new Date().toISOString() })
 }
 
 const MERCHANT_STATUSES = ['pending', 'active', 'suspended']

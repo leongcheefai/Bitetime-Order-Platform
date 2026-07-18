@@ -30,8 +30,10 @@ vi.mock('./supabase', () => {
   // For terminal-await use (no .select()), mock with .mockResolvedValueOnce({error}).
   const upsert = vi.fn(() => ({ select: upsertSelect }))
 
-  // is() → { maybeSingle, single, is } — for .eq().is('merchant_id', null) chains
-  // (fetchProfileByUserId, ensureGlobalProfile). Terminal via maybeSingle.
+  // is() → { maybeSingle, single, is } — for .eq().is('merchant_id', null) chains.
+  // Profile reads/writes moved behind the backend API (apiTry/apiSend); kept for any
+  // remaining direct-supabase chain that still filters on a nullable column. Terminal via
+  // maybeSingle.
   const is = vi.fn(() => ({ maybeSingle, single, is }))
 
   // eq() → { eq, single, maybeSingle, select: updateEqSelect, order, is }
@@ -144,32 +146,52 @@ describe('fetchProfileByUserId', () => {
 })
 
 describe('signUp profile write', () => {
-  it('inserts a new profile keyed on user_id, never id', async () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('PUTs /api/me/profile with name/email/email_confirmed, a bearer token, and no user_id', async () => {
     __mocks.signUp.mockResolvedValueOnce({
       data: { user: { id: 'u1', email_confirmed_at: null } }, error: null,
     })
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null }) // no existing row
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+
     await signUp('Fai', 'f@x.co', 'pw')
-    expect(__mocks.eq).toHaveBeenCalledWith('user_id', 'u1')
-    expect(__mocks.is).toHaveBeenCalledWith('merchant_id', null)
-    const inserted = __mocks.insert.mock.calls[0][0]
-    expect(inserted).toMatchObject({
-      user_id: 'u1', name: 'Fai', email: 'f@x.co', email_confirmed: false,
-    })
-    expect(inserted).not.toHaveProperty('id')
-    expect(__mocks.update).not.toHaveBeenCalled()
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/me\/profile$/)
+    expect(init.method).toBe('PUT')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    const body = JSON.parse(init.body)
+    expect(body).toEqual({ name: 'Fai', email: 'f@x.co', email_confirmed: false })
+    expect(body).not.toHaveProperty('user_id')
   })
 
-  it('updates the existing global profile in place, not insert', async () => {
+  it('sends email_confirmed: true when the auth user is already confirmed', async () => {
     __mocks.signUp.mockResolvedValueOnce({
       data: { user: { id: 'u1', email_confirmed_at: '2026-07-02T00:00:00Z' } }, error: null,
     })
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: { id: 'p1' }, error: null })
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+
     await signUp('Fai', 'f@x.co', 'pw')
-    const updated = __mocks.update.mock.calls[0][0]
-    expect(updated).toMatchObject({ user_id: 'u1', email_confirmed: true })
-    expect(__mocks.eq).toHaveBeenCalledWith('id', 'p1')
-    expect(__mocks.insert).not.toHaveBeenCalled()
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body).toMatchObject({ email_confirmed: true })
+  })
+
+  it('does not throw when there is no session yet (pending email confirmation)', async () => {
+    // No session at signup time (email confirmation is on project-wide) → the PUT 401s, same
+    // shape as RLS blocking the old browser write; ensureGlobalProfile swallows it and signUp
+    // still resolves with the new user. It's retried from onAuthChange once a session exists.
+    __mocks.signUp.mockResolvedValueOnce({
+      data: { user: { id: 'u1', email_confirmed_at: null } }, error: null,
+    })
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: null } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Unauthorized' }) }))
+
+    await expect(signUp('Fai', 'f@x.co', 'pw')).resolves.toMatchObject({ id: 'u1' })
   })
 })
 
@@ -785,44 +807,49 @@ describe('fetchMyOrdersAtShop', () => {
 
 describe('saveCustomerDetails', () => {
   const user = { id: 'u1', email: 'ah.meng@example.com' }
+  afterEach(() => vi.unstubAllGlobals())
 
-  it('updates the customer’s GLOBAL profile row, not a per-shop one', async () => {
+  it('PUTs /api/me/profile — the same GLOBAL row ensureGlobalProfile maintains', async () => {
     // An address is an address: it belongs to the customer, not to a shop. Saving it per-shop
     // would make them retype it at the next storefront — the exact tax this removes.
     __mocks.getUser.mockResolvedValueOnce({ data: { user } })
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: { id: 'p1' }, error: null })
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
 
     await saveCustomerDetails({ whatsapp: '60123456789' })
 
-    expect(__mocks.eq).toHaveBeenCalledWith('user_id', 'u1')
-    expect(__mocks.is).toHaveBeenCalledWith('merchant_id', null)
-    expect(__mocks.update).toHaveBeenCalledWith({ whatsapp: '60123456789' })
-    expect(__mocks.eq).toHaveBeenCalledWith('id', 'p1')
-  })
-
-  it('creates the profile row when the customer has none yet', async () => {
-    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
-
-    await saveCustomerDetails({ whatsapp: '60123456789' })
-
-    expect(__mocks.insert).toHaveBeenCalledWith(
-      expect.objectContaining({ whatsapp: '60123456789', user_id: 'u1', email: user.email }),
-    )
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/me\/profile$/)
+    expect(init.method).toBe('PUT')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual({ whatsapp: '60123456789' })
   })
 
   it('saves nothing for a guest — not even a stray write attempt', async () => {
     // A guest order is orphaned permanently. Writing their number to a profile they don't have
     // is not merely useless; it is the retroactive claim the guest warning promises never happens.
     __mocks.getUser.mockResolvedValueOnce({ data: { user: null } })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     await saveCustomerDetails({ whatsapp: '60123456789' })
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('does not touch the profile when there is nothing to save', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     await saveCustomerDetails({})
     expect(__mocks.getUser).not.toHaveBeenCalled()
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('swallows a rejected fetch — best-effort, never throws', async () => {
+    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new Error('network down')))
+
+    await expect(saveCustomerDetails({ whatsapp: '60123456789' })).resolves.toBeUndefined()
   })
 })
 

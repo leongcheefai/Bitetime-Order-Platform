@@ -31,7 +31,7 @@ import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
 import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode, RESERVED_SLUGS } from './slug.js'
-import { pickMerchantConfig } from './writes.js'
+import { pickMerchantConfig, pickProfileFields } from './writes.js'
 
 export const app = new Hono<AppEnv>()
 
@@ -201,6 +201,32 @@ app.get('/api/me/profile', requireUser, async (c) => {
     .select('id, name, email, app_role, merchant_id, whatsapp, delivery_address')
     .eq('user_id', user.id).is('merchant_id', null).maybeSingle()
   return c.json(data ?? null)
+})
+
+// Upsert the caller's GLOBAL profile (merchant_id IS NULL). The partial unique index
+// (user_id WHERE merchant_id IS NULL) can't be an ON CONFLICT target, so this mirrors the old
+// browser-side select-then-insert/update. Goes through `admin` (service_role), which BYPASSES
+// guard_profile_privileges — so pickProfileFields + forcing user_id/merchant_id here is the
+// ONLY guard against a caller granting themselves app_role or attaching to another merchant
+// (Global Constraint 1). Never read user_id/merchant_id from the body.
+app.put('/api/me/profile', requireUser, async (c) => {
+  const user = c.get('user')
+  const fields = pickProfileFields(await c.req.json().catch(() => ({})))
+  const { data: existing } = await admin
+    .from('profiles').select('id').eq('user_id', user.id).is('merchant_id', null).maybeSingle()
+  if (existing) {
+    const { error } = await admin.from('profiles').update(fields).eq('id', existing.id)
+    if (error) return c.json({ error: 'Update failed' }, 500)
+  } else {
+    const { error } = await admin.from('profiles').insert({
+      ...fields,
+      user_id: user.id,
+      email: fields.email ?? user.email,
+      created_at: new Date().toISOString(),
+    })
+    if (error) return c.json({ error: 'Insert failed' }, 500)
+  }
+  return c.json({ ok: true })
 })
 
 app.get('/api/me/merchant', requireUser, async (c) => {
