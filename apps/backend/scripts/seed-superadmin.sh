@@ -46,12 +46,19 @@ begin
     insert into auth.users
       (instance_id, id, aud, role, email, encrypted_password,
        email_confirmed_at, created_at, updated_at,
-       raw_app_meta_data, raw_user_meta_data)
+       raw_app_meta_data, raw_user_meta_data,
+       -- GoTrue scans these token columns into non-nullable Go strings, so a NULL
+       -- (the column default when omitted) makes every login 500 with "Database
+       -- error querying schema". They must be '' — never left to default.
+       confirmation_token, recovery_token, email_change,
+       email_change_token_new, email_change_token_current,
+       phone_change, phone_change_token, reauthentication_token)
     values
       ('00000000-0000-0000-0000-000000000000', v_uid, 'authenticated', 'authenticated',
        v_email, crypt(v_pass, gen_salt('bf')),
        now(), now(), now(),
-       '{"provider":"email","providers":["email"]}', '{}');
+       '{"provider":"email","providers":["email"]}', '{}',
+       '', '', '', '', '', '', '', '');
     insert into auth.identities
       (id, user_id, provider_id, identity_data, provider,
        last_sign_in_at, created_at, updated_at)
