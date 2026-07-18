@@ -263,24 +263,15 @@ app.post('/api/checkout', async (c) => {
 // cancels itself at trial end (missing_payment_method: 'cancel'), which drives
 // the existing subscription.deleted → suspended webhook path. Trials are granted
 // here and only here — Checkout never grants one.
-app.post('/api/admin/approve-merchant', async (c) => {
-  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+app.post('/api/admin/approve-merchant', requireSuperadmin, async (c) => {
   const { merchantId } = await c.req.json().catch(() => ({}))
   if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
 
-  // These reads are independent — the caller's identity (auth → profile) gates the
-  // mutation, while the target merchant + its billing load in parallel. merchant_billing
-  // keys on the merchants PK, so both use merchantId directly. Run them concurrently to
-  // save cross-network round-trips (Railway → Supabase); nothing is mutated until authz passes.
-  const authPromise = getUserFromToken(token).then(async (user) => {
-    if (!user) return { user: null, profile: null }
-    // profiles identity lives in user_id (id is a surrogate PK since the P0 restructure).
-    const { data: profile } = await admin
-      .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
-    return { user, profile }
-  })
-  const [{ user, profile }, merchantRes, billingRes] = await Promise.all([
-    authPromise,
+  // These reads are independent — the target merchant + its billing load in parallel.
+  // merchant_billing keys on the merchants PK, so both use merchantId directly. Run them
+  // concurrently to save cross-network round-trips (Railway → Supabase); requireSuperadmin
+  // has already gated the caller before this handler runs.
+  const [merchantRes, billingRes] = await Promise.all([
     admin
       .from('merchants')
       .select('id, name, status, plan, billing_cycle, billing_region, owner_id')
@@ -288,11 +279,6 @@ app.post('/api/admin/approve-merchant', async (c) => {
       .maybeSingle(),
     admin.from('merchant_billing').select('*').eq('merchant_id', merchantId).maybeSingle(),
   ])
-
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors SessionContext).
-  const isSuper = profile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
-  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
 
   const { data: merchant, error } = merchantRes
   if (error) return c.json({ error: 'Lookup failed' }, 500)
@@ -386,16 +372,7 @@ app.post('/api/admin/approve-merchant', async (c) => {
 // so the admin console can no longer flip it through PostgREST — these writes must
 // come through here. Covers Reject (pending→suspended), Suspend (active→suspended),
 // and Reactivate (suspended→active). Trial-granting stays in approve-merchant.
-app.post('/api/admin/set-merchant-status', async (c) => {
-  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
-  const user = await getUserFromToken(token)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-  const { data: callerProfile } = await admin
-    .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
-  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors approve-merchant).
-  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
-  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
-
+app.post('/api/admin/set-merchant-status', requireSuperadmin, async (c) => {
   const { merchantId, status } = await c.req.json().catch(() => ({}))
   if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
   // 'pending' is never a manual target — it is reached only by revert paths.
@@ -425,16 +402,7 @@ app.post('/api/admin/set-merchant-status', async (c) => {
 // console (set-merchant-status → suspended). If the merchant already carries a
 // real Stripe subscription this overwrites its local status to active — don't comp
 // a paying shop.
-app.post('/api/admin/comp-merchant', async (c) => {
-  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
-  const user = await getUserFromToken(token)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-  const { data: callerProfile } = await admin
-    .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
-  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors approve-merchant).
-  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
-  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
-
+app.post('/api/admin/comp-merchant', requireSuperadmin, async (c) => {
   const { merchantId } = await c.req.json().catch(() => ({}))
   if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
 

@@ -60,4 +60,20 @@ describe('superadmin reads', () => {
     expect(res.status).toBe(200)
     expect(Array.isArray(await res.json())).toBe(true)
   })
+
+  it('gates set-merchant-status: 401 anon, 403 non-super', async () => {
+    const anon = await app.request('/api/admin/set-merchant-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ merchantId: 'x', status: 'active' }),
+    })
+    expect(anon.status).toBe(401)
+
+    const plain = await app.request('/api/admin/set-merchant-status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${plainToken}` },
+      body: JSON.stringify({ merchantId: 'x', status: 'active' }),
+    })
+    expect(plain.status).toBe(403)
+  })
 })
