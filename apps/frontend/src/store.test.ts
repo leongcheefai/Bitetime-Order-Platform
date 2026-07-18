@@ -259,38 +259,35 @@ describe('fetchMyMerchant', () => {
 // ── createMerchant (Task 2.2) ─────────────────────────────────────────────────
 
 describe('createMerchant', () => {
-  it('inserts with owner_id, status:pending, slug derived from name, and order_prefix', async () => {
-    const user = { id: 'user-abc' }
-    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
-    // listTakenSlugs call: select('slug') returns empty list
-    __mocks.select.mockResolvedValueOnce({ data: [], error: null })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('POSTs /api/merchants with name/plan/billing/region/referredByCode and a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const merchantRow = {
       id: 'm1', name: 'My Shop', slug: 'my-shop',
       order_prefix: 'MY', owner_id: 'user-abc', status: 'pending',
     }
-    __mocks.single.mockResolvedValueOnce({ data: merchantRow, error: null })
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => merchantRow, text: async () => JSON.stringify(merchantRow),
+    })
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await createMerchant({ name: 'My Shop' })
 
-    expect(__mocks.from).toHaveBeenCalledWith('merchants')
-    expect(__mocks.insert).toHaveBeenCalledWith({
-      name: 'My Shop',
-      slug: 'my-shop',
-      order_prefix: 'MY',
-      owner_id: 'user-abc',
-      status: 'pending',
-      plan: 'basic',
-      billing_cycle: 'monthly',
-      billing_region: 'US',
-      referred_by_code: null,
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants$/)
+    expect(init.method).toBe('POST')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual({
+      name: 'My Shop', plan: 'basic', billing: 'monthly', region: 'US',
     })
     expect(result).toEqual(merchantRow)
   })
 
-  it('throws "Not signed in" when no user session exists', async () => {
-    __mocks.getUser.mockResolvedValueOnce({ data: { user: null } })
-    await expect(createMerchant({ name: 'My Shop' })).rejects.toThrow('Not signed in')
-    expect(__mocks.insert).not.toHaveBeenCalled()
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'Missing name' }) }))
+    await expect(createMerchant({ name: '' })).rejects.toThrow('Missing name')
   })
 })
 

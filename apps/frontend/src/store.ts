@@ -1,15 +1,13 @@
 import type { User } from '@supabase/supabase-js';
 import { voucherFromRow } from '@bitetime/shared';
 import { supabase } from './supabase';
-import { resolveSlug, RESERVED_SLUGS } from './slug';
-import { orderPrefix } from './orderPrefix';
-import { resolveReferredByCode } from './referralCode'
+import { RESERVED_SLUGS } from './slug';
 import { SignupError, signupErrorCode } from './signupError'
 import type { EarnedReward, Order, ReferredShop, Voucher } from './types';
 import type { SavedDetails } from './savedDetails';
 import { resetRedirectUrl } from './resetPassword';
 import type { AddressParts } from './types'
-import { API_URL, apiGet, apiTry } from './api'
+import { API_URL, apiGet, apiTry, apiSend } from './api'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -200,20 +198,7 @@ export async function fetchMyMerchant(userId: string) {
 }
 
 export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US', referredByCode }: { name: string; plan?: string; billing?: string; region?: string; referredByCode?: string }) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error('Not signed in')
-  const taken = await listTakenSlugs()
-  const slug = await resolveSlug(name, { taken, id: user.id })
-  const { data, error } = await supabase
-    .from('merchants')
-    .insert({
-      name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending',
-      plan, billing_cycle: billing, billing_region: region,
-      referred_by_code: resolveReferredByCode(referredByCode, referralCodeOf(user.id)),
-    })
-    .select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>('/api/merchants', 'POST', { name, plan, billing, region, referredByCode }, { auth: true })
 }
 
 // ── Billing (Stripe via the Hono backend) ──────────────────────────────────────

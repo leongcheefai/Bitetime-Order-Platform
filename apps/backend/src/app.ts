@@ -30,6 +30,7 @@ import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
+import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode } from './slug.js'
 
 export const app = new Hono<AppEnv>()
 
@@ -89,6 +90,40 @@ app.get('/api/billing', requireSuperadmin, async (c) => {
   const { data, error } = await admin.from('merchant_billing').select('*')
   if (error) return c.json({ error: 'Lookup failed' }, 500)
   return c.json(data ?? [])
+})
+
+// ── Merchant creation (any authenticated user creates their own shop) ──────────
+// The insert goes through `admin` (service_role), which bypasses guard_merchant_status —
+// so `status: 'pending'` and `owner_id: user.id` are forced here, never read from the body.
+// Only name/plan/billing/region/referredByCode are accepted from the client (Global
+// Constraint 1). Slug uniqueness resolution moved server-side now that the browser can no
+// longer SELECT merchants.slug directly.
+app.post('/api/merchants', requireUser, async (c) => {
+  const user = c.get('user')
+  const body = await c.req.json().catch(() => ({} as any))
+  const name = String(body?.name ?? '').trim()
+  if (!name) return c.json({ error: 'Missing name' }, 400)
+
+  const { data: rows } = await admin.from('merchants').select('slug')
+  const slug = await resolveSlug(name, { taken: (rows ?? []).map((r) => r.slug), id: user.id })
+
+  const { data, error } = await admin
+    .from('merchants')
+    .insert({
+      name,
+      slug,
+      order_prefix: orderPrefix(slug),
+      owner_id: user.id,
+      status: 'pending',
+      plan: body?.plan ?? 'basic',
+      billing_cycle: body?.billing ?? 'monthly',
+      billing_region: body?.region ?? 'US',
+      referred_by_code: resolveReferredByCode(body?.referredByCode, referralCodeOf(user.id)),
+    })
+    .select()
+    .single()
+  if (error) return c.json({ error: 'Create failed' }, 500)
+  return c.json(data)
 })
 
 // ── Owner-scoped reads (tenant enforced by requireMerchantOwns) ────────────────
