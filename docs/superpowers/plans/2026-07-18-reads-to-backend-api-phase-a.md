@@ -881,15 +881,21 @@ export async function fetchMerchantSecret(merchantId: string) {
 }
 ```
 
-- [ ] **Step 5: Typecheck + existing unit tests**
+- [ ] **Step 5: Migrate the affected unit tests in `store.test.ts`**
+
+CORRECTION to this plan's earlier premise: `apps/frontend/src/store.test.ts` DOES have unit tests for these functions — they mock `./supabase`'s `from(...)` chain. Rewriting the functions to `fetch` breaks those `describe` blocks (and, via the shared mock harness, causes collateral failures in unrelated tests). This step migrates them.
+
+The test file mocks global `fetch` already for the POST-endpoint tests (`placeOrder`, `setMerchantStatus`) — follow that same pattern for the migrated reads. For each migrated function's `describe` block, rewrite the DB-mock cases to drive a mocked `fetch` (or a mocked `./api`) and assert BOTH: (a) the correct endpoint path + whether a bearer is sent (`auth: true`), and (b) the preserved return contract — `apiGet`-backed functions throw on a non-ok response; `apiTry`-backed functions fall back to `null`/`[]`/`false`. KEEP the pure-guard cases unchanged (reserved slug, null `userId`, missing `merchantId`, guest/no-shop early returns — these never hit the network).
+
+Blocks to migrate in this task: `fetchProfileByUserId`, `fetchMerchantBySlug`, `fetchMyMerchant`, `fetchAllMerchants`, `fetchMerchantSecret`, `fetchMerchantOrders`, `fetchMyOrdersAtShop`, `fetchMerchantVouchers`, and `fetchMerchantCustomers` (it calls `fetchMerchantOrders` internally, so its mock must now feed the orders endpoint response, not the `supabase` order chain). Do NOT touch `fetchProducts`/`listTakenSlugs`/write-function blocks — those stay on `supabase` until Task 7 / Phase B.
 
 Run: `pnpm --filter @bitetime/frontend typecheck && pnpm --filter @bitetime/frontend test`
-Expected: no type errors; existing unit tests pass (these functions had no network unit tests; any pure tests are unaffected).
+Expected: no type errors; full `store.test.ts` green (migrated blocks assert the new contract, pure-guard cases unchanged, no collateral failures).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add apps/frontend/src/store.ts
+git add apps/frontend/src/store.ts apps/frontend/src/store.test.ts
 git commit -m "refactor(frontend): route simple reads through backend API"
 ```
 
@@ -936,10 +942,12 @@ export async function lookupMerchantVoucher(merchantId: string, code: string): P
 
 (`fetchMerchantVoucher` is unchanged — it already maps a `{ ok:false }` to `null`.)
 
-- [ ] **Step 3: Typecheck**
+- [ ] **Step 3: Migrate the affected unit tests + typecheck**
 
-Run: `pnpm --filter @bitetime/frontend typecheck`
-Expected: no errors.
+`store.test.ts`'s `fetchProducts` block mocks `./supabase`'s products query — but `fetchProducts` now wraps the rewritten `lookupProducts`, so that block breaks. Migrate the `fetchProducts` `describe` to the fetch-mock pattern used in Task 6, and ADD cases for the null-vs-"could-not-ask" contract: a 200 with `[]` → `lookupProducts` returns `[]` (real "shop has none"); a failed request (`apiTry` → `{ok:false}`) → `lookupProducts` returns `null`; and for `lookupMerchantVoucher`, a 200 voucher → `{ok:true,voucher}`, a 200 `null` → `{ok:true,voucher:null}`, a failed request → `{ok:false}`. Keep `fetchProducts`'s falsy-`merchantId` guard case unchanged. (`lookupMerchantVoucher` had no prior block — add one.)
+
+Run: `pnpm --filter @bitetime/frontend typecheck && pnpm --filter @bitetime/frontend test`
+Expected: no type errors; full `store.test.ts` green.
 
 - [ ] **Step 4: Verify no direct `supabase.from` reads remain**
 
