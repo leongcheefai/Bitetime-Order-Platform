@@ -10,7 +10,6 @@ import { formatOrderDate } from '../orderDate'
 import { cn } from '@/lib/utils'
 import AuthPanel from './AuthPanel'
 import MoneyLine from './MoneyLine'
-import ReceiptDialog from './ReceiptDialog'
 import LanguageSelect from '../components/LanguageSelect'
 import type { Order, OrderItem, Product, Translate } from '../types'
 
@@ -39,7 +38,6 @@ export default function OrderHistory() {
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [products, setProducts] = useState<Product[]>([])
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [receiptId, setReceiptId] = useState<string | null>(null)
 
   const merchantId = merchant?.id
   const userId = account?.id
@@ -211,25 +209,10 @@ export default function OrderHistory() {
                         </span>
                         <span className="text-right">{formatMoney(o.total, currency)}</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setReceiptId(id)}
-                        className="text-[13px] text-oxblood underline underline-offset-2 cursor-pointer mt-2"
-                      >
-                        {t('View receipt', '查看收据')}
-                      </button>
                       <Tracking order={o} t={t} />
                     </div>
                   )}
 
-                  {receiptId === id && (
-                    <ReceiptDialog
-                      order={o}
-                      merchant={merchant}
-                      itemName={itemName}
-                      onClose={() => setReceiptId(null)}
-                    />
-                  )}
                 </div>
               )
             })}
