@@ -35,6 +35,8 @@ export const app = new Hono<AppEnv>()
 
 app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['POST', 'GET', 'OPTIONS'] }))
 
+const ORDER_HISTORY_LIMIT = 20
+
 app.get('/health', (c) => c.json({ ok: true }))
 
 /**
@@ -127,6 +129,35 @@ app.get('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
     .from('merchant_secrets').select('tg_token, tg_chat_id').eq('merchant_id', m.id).maybeSingle()
   if (error) return c.json({ error: 'Lookup failed' }, 500)
   return c.json(data ?? null)
+})
+
+// ── User-scoped reads ─────────────────────────────────────────────────────────
+app.get('/api/me/profile', requireUser, async (c) => {
+  const user = c.get('user')
+  const { data } = await admin
+    .from('profiles')
+    .select('id, name, email, app_role, merchant_id, whatsapp, delivery_address')
+    .eq('user_id', user.id).is('merchant_id', null).maybeSingle()
+  return c.json(data ?? null)
+})
+
+app.get('/api/me/merchant', requireUser, async (c) => {
+  const user = c.get('user')
+  const { data } = await admin.from('merchants').select('*').eq('owner_id', user.id).maybeSingle()
+  return c.json(data ?? null)
+})
+
+// Any signed-in customer's own history at a shop. NOT requireMerchantOwns — the uid filter,
+// not merchant ownership, is what scopes it. A guest (no token) is 401 and has no history.
+app.get('/api/merchants/:id/my-orders', requireUser, async (c) => {
+  const user = c.get('user')
+  const id = c.req.param('id')
+  const { data, error } = await admin
+    .from('orders').select('*')
+    .eq('merchant_id', id).eq('user_id', user.id)
+    .order('created_at', { ascending: false }).limit(ORDER_HISTORY_LIMIT)
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
 })
 
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────
