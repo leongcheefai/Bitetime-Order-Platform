@@ -35,7 +35,7 @@ import { pickMerchantConfig, pickProfileFields, pickProductFields, pickOrderFiel
 
 export const app = new Hono<AppEnv>()
 
-app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['POST', 'GET', 'OPTIONS'] }))
+app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'] }))
 
 const ORDER_HISTORY_LIMIT = 20
 
