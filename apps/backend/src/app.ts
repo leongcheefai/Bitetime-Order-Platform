@@ -290,8 +290,7 @@ app.get('/api/merchants/:id/products', async (c) => {
 // Product upsert. The write goes through `admin` (service_role), so pickProductFields is the
 // ONLY guard against a crafted body writing merchant_id (forced to :id here, never read from
 // the body) or promo_sold (see writes.ts — the trigger that pins it for other roles does not
-// run for service_role). requireMerchantOwns only proves the caller owns :id; there is no
-// separate tenancy check to make here because the row's merchant_id is FORCED, not read.
+// run for service_role).
 // requireMerchantOwns only proves the caller owns :id — it says nothing about productId, so an
 // owner of shop A could otherwise take over shop B's product by nesting it under :id = A: .upsert()
 // conflict-resolves on the primary key, so if a row with that id already exists it gets UPDATEd
