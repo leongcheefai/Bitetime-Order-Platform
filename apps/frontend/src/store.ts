@@ -185,12 +185,6 @@ export async function fetchMerchantBySlug(slug: string | undefined) {
   return r.ok ? r.data : null
 }
 
-export async function listTakenSlugs() {
-  const { data, error } = await supabase.from('merchants').select('slug')
-  if (error) return []
-  return (data ?? []).map(r => r.slug)
-}
-
 export async function fetchMyMerchant(userId: string) {
   if (!userId) return null
   const r = await apiTry<any>('/api/me/merchant', { auth: true })
@@ -319,12 +313,7 @@ export async function openBillingPortal(): Promise<string> {
 export async function updateMerchantSlug(id: string, slug: string) {
   const s = (slug || '').trim().toLowerCase()
   if (!s || RESERVED_SLUGS.includes(s)) throw new Error('Reserved or empty slug')
-  const taken = await listTakenSlugs()
-  if (taken.includes(s)) throw new Error('Slug already taken')
-  const { data, error } = await supabase
-    .from('merchants').update({ slug: s }).eq('id', id).select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>(`/api/merchants/${id}/slug`, 'PATCH', { slug: s }, { auth: true })
 }
 
 /**
@@ -846,9 +835,7 @@ export async function deleteProductImages(paths: string[]): Promise<void> {
 // ── Merchant config & secrets ─────────────────────────────────────────────────
 
 export async function updateMerchantConfig(id: string, patch: any) {
-  const { data, error } = await supabase.from('merchants').update(patch).eq('id', id).select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>(`/api/merchants/${id}`, 'PATCH', patch, { auth: true })
 }
 
 export async function fetchMerchantSecret(merchantId: string) {

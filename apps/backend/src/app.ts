@@ -30,7 +30,8 @@ import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
-import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode } from './slug.js'
+import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode, RESERVED_SLUGS } from './slug.js'
+import { pickMerchantConfig } from './writes.js'
 
 export const app = new Hono<AppEnv>()
 
@@ -123,6 +124,32 @@ app.post('/api/merchants', requireUser, async (c) => {
     .select()
     .single()
   if (error) return c.json({ error: 'Create failed' }, 500)
+  return c.json(data)
+})
+
+// Owner-editable shop config. The update goes through `admin` (service_role), which bypasses
+// guard_merchant_status — so `pickMerchantConfig` is the ONLY thing stopping an owner from
+// self-activating a suspended shop (or reassigning owner_id) via a crafted body. See
+// writes.ts and Global Constraint 1.
+app.patch('/api/merchants/:id', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const patch = pickMerchantConfig(await c.req.json().catch(() => ({})))
+  if (Object.keys(patch).length === 0) return c.json({ error: 'No updatable fields' }, 400)
+  const { data, error } = await admin.from('merchants').update(patch).eq('id', id).select().single()
+  if (error) return c.json({ error: 'Update failed' }, 500)
+  return c.json(data)
+})
+
+// Slug rename. Uniqueness resolution moves here now that the browser can no longer SELECT
+// merchants.slug directly — the last browser read of merchants.
+app.patch('/api/merchants/:id/slug', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const s = String((await c.req.json().catch(() => ({}))).slug ?? '').trim().toLowerCase()
+  if (!s || RESERVED_SLUGS.includes(s)) return c.json({ error: 'Reserved or empty slug' }, 400)
+  const { data: existing } = await admin.from('merchants').select('id').eq('slug', s).maybeSingle()
+  if (existing && existing.id !== id) return c.json({ error: 'Slug already taken' }, 409)
+  const { data, error } = await admin.from('merchants').update({ slug: s }).eq('id', id).select().single()
+  if (error) return c.json({ error: 'Update failed' }, 500)
   return c.json(data)
 })
 

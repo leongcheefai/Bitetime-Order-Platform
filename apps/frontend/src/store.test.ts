@@ -84,7 +84,6 @@ import {
   fetchMerchantBySlug,
   fetchProfileByUserId,
   signUp,
-  listTakenSlugs,
   fetchMyMerchant,
   createMerchant,
   updateMerchantSlug,
@@ -203,26 +202,6 @@ describe('fetchMerchantBySlug', () => {
   })
 })
 
-// ── listTakenSlugs (Task 2.2) ─────────────────────────────────────────────────
-
-describe('listTakenSlugs', () => {
-  it('queries merchants.slug and returns array of slug strings', async () => {
-    __mocks.select.mockResolvedValueOnce({
-      data: [{ slug: 'shop-a' }, { slug: 'shop-b' }],
-      error: null,
-    })
-    const result = await listTakenSlugs()
-    expect(__mocks.from).toHaveBeenCalledWith('merchants')
-    expect(__mocks.select).toHaveBeenCalledWith('slug')
-    expect(result).toEqual(['shop-a', 'shop-b'])
-  })
-
-  it('returns empty array on DB error', async () => {
-    __mocks.select.mockResolvedValueOnce({ data: null, error: { message: 'connection failed' } })
-    expect(await listTakenSlugs()).toEqual([])
-  })
-})
-
 // ── fetchMyMerchant (Task 2.2) ────────────────────────────────────────────────
 
 describe('fetchMyMerchant', () => {
@@ -291,38 +270,49 @@ describe('createMerchant', () => {
   })
 })
 
-// ── updateMerchantSlug (Task 2.2) ─────────────────────────────────────────────
+// ── updateMerchantSlug (Task 3.3) ─────────────────────────────────────────────
 
 describe('updateMerchantSlug', () => {
-  it('throws for a reserved slug without hitting the DB', async () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('throws for a reserved slug without hitting the network', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     await expect(updateMerchantSlug('m1', 'admin')).rejects.toThrow('Reserved or empty slug')
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('throws for an empty slug without hitting the DB', async () => {
+  it('throws for an empty slug without hitting the network', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     await expect(updateMerchantSlug('m1', '')).rejects.toThrow('Reserved or empty slug')
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('throws when the slug is already taken by another merchant', async () => {
-    __mocks.select.mockResolvedValueOnce({
-      data: [{ slug: 'taken-slug' }], error: null,
-    })
-    await expect(updateMerchantSlug('m1', 'taken-slug')).rejects.toThrow('Slug already taken')
-    expect(__mocks.update).not.toHaveBeenCalled()
-  })
-
-  it('updates slug field on merchants table when slug is valid and available', async () => {
-    __mocks.select.mockResolvedValueOnce({ data: [], error: null }) // listTakenSlugs
+  it('PATCHes /api/merchants/:id/slug with a bearer token and returns the updated row', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const updated = { id: 'm1', slug: 'new-shop' }
-    __mocks.single.mockResolvedValueOnce({ data: updated, error: null })
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => updated, text: async () => JSON.stringify(updated),
+    })
+    vi.stubGlobal('fetch', fetchMock)
 
-    const result = await updateMerchantSlug('m1', 'new-shop')
+    const result = await updateMerchantSlug('m1', 'New-Shop')
 
-    expect(__mocks.from).toHaveBeenCalledWith('merchants')
-    expect(__mocks.update).toHaveBeenCalledWith({ slug: 'new-shop' })
-    expect(__mocks.eq).toHaveBeenCalledWith('id', 'm1')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/slug$/)
+    expect(init.method).toBe('PATCH')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual({ slug: 'new-shop' })
     expect(result).toEqual(updated)
+  })
+
+  it('throws when the backend reports the slug is taken', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'Slug already taken' }),
+    }))
+    await expect(updateMerchantSlug('m1', 'taken-slug')).rejects.toThrow('Slug already taken')
   })
 })
 
@@ -506,25 +496,36 @@ describe('deleteProduct', () => {
   })
 })
 
-// ── updateMerchantConfig (Task 4.1) ───────────────────────────────────────────
+// ── updateMerchantConfig (Task 3.3) ───────────────────────────────────────────
 
 describe('updateMerchantConfig', () => {
-  it('updates the merchants row with the given patch and returns it', async () => {
-    const patch = { name: 'New Name', shipping: { WM: 10 } }
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('PATCHes /api/merchants/:id with the patch and a bearer token, returns the updated row', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const patch = { payment_note: 'Pay on pickup', shipping: { WM: 10 } }
     const row = { id: 'm1', ...patch }
-    __mocks.single.mockResolvedValueOnce({ data: row, error: null })
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => row, text: async () => JSON.stringify(row),
+    })
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await updateMerchantConfig('m1', patch)
 
-    expect(__mocks.from).toHaveBeenCalledWith('merchants')
-    expect(__mocks.update).toHaveBeenCalledWith(patch)
-    expect(__mocks.eq).toHaveBeenCalledWith('id', 'm1')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1$/)
+    expect(init.method).toBe('PATCH')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual(patch)
     expect(result).toEqual(row)
   })
 
-  it('throws on DB error', async () => {
-    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('update failed') })
-    await expect(updateMerchantConfig('m1', { name: 'x' })).rejects.toThrow('update failed')
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'update failed' }),
+    }))
+    await expect(updateMerchantConfig('m1', { payment_note: 'x' })).rejects.toThrow('update failed')
   })
 })
 
