@@ -32,13 +32,3 @@ export const RESERVED_SLUGS = [
   's', 'admin', 'api', 'merchant', 'app', 'www', 'auth',
   'login', 'signup', 'account', 'static', 'assets',
 ]
-
-export async function resolveSlug(name: string, { taken = [], id = '' }: { taken?: string[]; id?: string } = {}) {
-  const base = (await toSlugBase(name)) || `shop-${id.replace(/-/g, '').slice(0, 6)}`
-  const used = new Set(taken)
-  const blocked = (s: string) => used.has(s) || RESERVED_SLUGS.includes(s)
-  if (!blocked(base)) return base
-  let n = 2
-  while (blocked(`${base}-${n}`)) n++
-  return `${base}-${n}`
-}
