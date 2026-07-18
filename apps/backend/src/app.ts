@@ -31,7 +31,7 @@ import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
 import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode, RESERVED_SLUGS } from './slug.js'
-import { pickMerchantConfig, pickProfileFields, pickProductFields } from './writes.js'
+import { pickMerchantConfig, pickProfileFields, pickProductFields, pickOrderFields, ORDER_STATUSES } from './writes.js'
 
 export const app = new Hono<AppEnv>()
 
@@ -349,6 +349,29 @@ app.delete('/api/merchants/:id/vouchers/:voucherId', requireMerchantOwns, async 
   const { error } = await admin.from('vouchers').delete().eq('id', voucherId)
   if (error) return c.json({ error: 'Delete failed' }, 500)
   return c.json({ ok: true })
+})
+
+// Order patch (status/note/tracking). The update goes through `admin` (service_role), so
+// pickOrderFields is the ONLY guard against a crafted body writing e.g. total/user_id/
+// order_number (Global Constraint 1) — status is additionally re-validated against
+// ORDER_STATUSES here since the client-side check in store.ts is not a security boundary.
+// requireMerchantOwns only proves the caller owns :id — it says nothing about orderId, so an
+// owner of shop A could otherwise patch shop B's order by nesting it under :id = A. Loading the
+// order and checking merchant_id === :id before updating is what closes that hole (Global
+// Constraint 2), mirroring the product/voucher handlers above.
+app.patch('/api/merchants/:id/orders/:orderId', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const orderId = c.req.param('orderId')
+  const patch = pickOrderFields(await c.req.json().catch(() => ({})))
+  if ('status' in patch && !ORDER_STATUSES.includes(patch.status as string)) {
+    return c.json({ error: 'Invalid status' }, 400)
+  }
+  if (Object.keys(patch).length === 0) return c.json({ error: 'No updatable fields' }, 400)
+  const { data: existing } = await admin.from('orders').select('merchant_id').eq('id', orderId).maybeSingle()
+  if (!existing || existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
+  const { data, error } = await admin.from('orders').update(patch).eq('id', orderId).select().single()
+  if (error) return c.json({ error: 'Update failed' }, 500)
+  return c.json(data)
 })
 
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────

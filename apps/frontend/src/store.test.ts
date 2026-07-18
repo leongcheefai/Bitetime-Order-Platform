@@ -106,6 +106,8 @@ import {
   requestPasswordReset,
   ORDER_HISTORY_LIMIT,
   setOrderStatus,
+  setOrderNote,
+  setOrderTracking,
   fetchMerchantCustomers,
   voucherFromRow,
   fetchMerchantVouchers,
@@ -900,38 +902,119 @@ describe('requestPasswordReset', () => {
   })
 })
 
-// ── setOrderStatus (Task 5.2) ─────────────────────────────────────────────────
+// ── setOrderStatus / setOrderNote / setOrderTracking (Task 7) ──────────────────
+// All three now PATCH /api/merchants/:merchantId/orders/:orderId instead of writing to
+// `orders` directly — the browser has no UPDATE grant on the table anymore. The client-side
+// ORDER_STATUSES guard in setOrderStatus stays (fails fast without a round trip), but is not a
+// security boundary — the backend re-validates (writes-orders.test.ts).
 
 describe('setOrderStatus', () => {
-  it('throws "Invalid status" for unknown status without calling update', async () => {
-    await expect(setOrderStatus('ord-1', 'shipped')).rejects.toThrow('Invalid status')
-    expect(__mocks.update).not.toHaveBeenCalled()
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('throws "Invalid status" for unknown status without calling fetch', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    await expect(setOrderStatus('ord-1', 'shipped', 'm1')).rejects.toThrow('Invalid status')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('updates status on orders table and returns the updated row', async () => {
+  it('PATCHes /api/merchants/:merchantId/orders/:orderId with { status } and a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const row = { id: 'ord-1', status: 'preparing' }
-    __mocks.single.mockResolvedValueOnce({ data: row, error: null })
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => row, text: async () => JSON.stringify(row),
+    })
+    vi.stubGlobal('fetch', fetchMock)
 
-    const result = await setOrderStatus('ord-1', 'preparing')
+    const result = await setOrderStatus('ord-1', 'preparing', 'm1')
 
-    expect(__mocks.from).toHaveBeenCalledWith('orders')
-    expect(__mocks.update).toHaveBeenCalledWith({ status: 'preparing' })
-    expect(__mocks.eq).toHaveBeenCalledWith('id', 'ord-1')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/orders\/ord-1$/)
+    expect(init.method).toBe('PATCH')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual({ status: 'preparing' })
     expect(result).toEqual(row)
   })
 
   it('accepts all five valid statuses: new, preparing, ready, completed, cancelled', async () => {
     for (const status of ['new', 'preparing', 'ready', 'completed', 'cancelled']) {
-      vi.clearAllMocks()
-      __mocks.single.mockResolvedValueOnce({ data: { id: 'ord-1', status }, error: null })
-      const result = await setOrderStatus('ord-1', status)
+      __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+      const row = { id: 'ord-1', status }
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+        ok: true, json: async () => row, text: async () => JSON.stringify(row),
+      }))
+      const result = await setOrderStatus('ord-1', status, 'm1')
       expect(result.status).toBe(status)
+      vi.unstubAllGlobals()
     }
   })
 
-  it('throws on DB error after a valid status', async () => {
-    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('write failed') })
-    await expect(setOrderStatus('ord-1', 'ready')).rejects.toThrow('write failed')
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'Update failed' }),
+    }))
+    await expect(setOrderStatus('ord-1', 'ready', 'm1')).rejects.toThrow('Update failed')
+  })
+})
+
+describe('setOrderNote', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('PATCHes /api/merchants/:merchantId/orders/:orderId with { note } and a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const row = { id: 'ord-1', note: 'leave at the door' }
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => row, text: async () => JSON.stringify(row),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await setOrderNote('ord-1', 'leave at the door', 'm1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/orders\/ord-1$/)
+    expect(init.method).toBe('PATCH')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual({ note: 'leave at the door' })
+    expect(result).toEqual(row)
+  })
+
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'Update failed' }),
+    }))
+    await expect(setOrderNote('ord-1', 'x', 'm1')).rejects.toThrow('Update failed')
+  })
+})
+
+describe('setOrderTracking', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('PATCHes /api/merchants/:merchantId/orders/:orderId with { courier, awb } and a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const row = { id: 'ord-1', courier: 'jnt', awb: 'AWB123' }
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => row, text: async () => JSON.stringify(row),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await setOrderTracking('ord-1', 'jnt', 'AWB123', 'm1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/orders\/ord-1$/)
+    expect(init.method).toBe('PATCH')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual({ courier: 'jnt', awb: 'AWB123' })
+    expect(result).toEqual(row)
+  })
+
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'Update failed' }),
+    }))
+    await expect(setOrderTracking('ord-1', null, 'x', 'm1')).rejects.toThrow('Update failed')
   })
 })
 

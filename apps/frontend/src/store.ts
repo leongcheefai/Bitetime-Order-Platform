@@ -659,30 +659,17 @@ export async function merchantHasOrders(merchantId: string) {
   return r.ok ? r.data.count > 0 : false
 }
 
-export async function setOrderStatus(orderId: string, status: string) {
+export async function setOrderStatus(orderId: string, status: string, merchantId: string) {
   if (!ORDER_STATUSES.includes(status)) throw new Error('Invalid status')
-  const { data, error } = await supabase
-    .from('orders').update({ status }).eq('id', orderId).select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', { status }, { auth: true })
 }
 
-export async function setOrderNote(orderId: string, note: string) {
-  const trimmed = note.trim()
-  const { data, error } = await supabase
-    .from('orders').update({ note: trimmed || null }).eq('id', orderId).select().single()
-  if (error) throw error
-  return data
+export async function setOrderNote(orderId: string, note: string, merchantId: string) {
+  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', { note }, { auth: true })
 }
 
-export async function setOrderTracking(orderId: string, courier: string | null, awb: string) {
-  const trimmed = awb.trim()
-  const { data, error } = await supabase
-    .from('orders')
-    .update({ courier: courier || null, awb: trimmed || null })
-    .eq('id', orderId).select().single()
-  if (error) throw error
-  return data
+export async function setOrderTracking(orderId: string, courier: string | null, awb: string, merchantId: string) {
+  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', { courier, awb }, { auth: true })
 }
 
 /**

@@ -73,3 +73,22 @@ export function pickProductFields(body: any): Record<string, unknown> {
   for (const k of PRODUCT_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
   return out
 }
+
+// Order patch. EXACT union of the three writers in OrdersView.tsx (via store.ts), verified
+// 2026-07-18:
+//   setOrderStatus (store.ts:662) writes { status } — checked against ORDER_STATUSES
+//     client-side already, but that is not a security boundary, so the handler re-validates.
+//   setOrderNote (store.ts:670) writes { note: trimmed || null }.
+//   setOrderTracking (store.ts:678) writes { courier: courier || null, awb: trimmed || null }.
+// Nothing else is accepted — in particular `total`, `user_id`, `order_number`, `merchant_id`
+// stay out: the update goes through `admin` (service_role) with no RLS or trigger backstop,
+// so this allowlist plus the handler's forced `merchant_id === :id` check (Global Constraint 2)
+// are the only things stopping a crafted body from rewriting an order's price or attribution.
+export function pickOrderFields(body: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (body?.status !== undefined) out.status = body.status
+  if (body?.note !== undefined) out.note = String(body.note ?? '').trim() || null
+  if (body?.courier !== undefined) out.courier = body.courier || null
+  if (body?.awb !== undefined) out.awb = String(body.awb ?? '').trim() || null
+  return out
+}
