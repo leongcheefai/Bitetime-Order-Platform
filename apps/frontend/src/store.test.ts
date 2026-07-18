@@ -119,19 +119,25 @@ beforeEach(() => { vi.clearAllMocks() })
 // The profiles restructure made `id` a surrogate PK and moved auth identity to
 // `user_id`; client writes/reads must key on user_id or RLS rejects them.
 describe('fetchProfileByUserId', () => {
-  it('queries the global profile by user_id, not id', async () => {
-    __mocks.maybeSingle.mockResolvedValueOnce({
-      data: { id: 'p1', name: 'Fai', email: 'f@x.co', app_role: null, merchant_id: null },
-      error: null,
-    })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('GETs /api/me/profile with a bearer token and returns the profile', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const profile = { id: 'p1', name: 'Fai', email: 'f@x.co', app_role: null, merchant_id: null }
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => profile })
+    vi.stubGlobal('fetch', fetchMock)
+
     const result = await fetchProfileByUserId('u1')
-    expect(__mocks.eq).toHaveBeenCalledWith('user_id', 'u1')
-    expect(__mocks.is).toHaveBeenCalledWith('merchant_id', null)
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/me\/profile$/)
+    expect(init.headers.Authorization).toBe('Bearer tok')
     expect(result).toMatchObject({ id: 'p1', name: 'Fai' })
   })
 
-  it('returns null when the query errors', async () => {
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: new Error('rls') })
+  it('returns null when the request fails', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
     expect(await fetchProfileByUserId('u1')).toBeNull()
   })
 })
@@ -169,16 +175,28 @@ describe('signUp profile write', () => {
 // ── fetchMerchantBySlug (Task 1.2) ────────────────────────────────────────────
 
 describe('fetchMerchantBySlug', () => {
-  it('returns null for a reserved slug without hitting the DB', async () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns null for a reserved slug without hitting the network', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     expect(await fetchMerchantBySlug('admin')).toBeNull()
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
-  it('returns the merchant row when found', async () => {
-    __mocks.single.mockResolvedValueOnce({ data: { id: 'm1', slug: 'shop-a' }, error: null })
-    expect(await fetchMerchantBySlug('shop-a')).toEqual({ id: 'm1', slug: 'shop-a' })
+  it('GETs /api/merchants/:slug with no auth header and returns the merchant row when found', async () => {
+    const row = { id: 'm1', slug: 'shop-a' }
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => row })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await fetchMerchantBySlug('shop-a')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/shop-a$/)
+    expect(init.headers).toEqual({})
+    expect(result).toEqual(row)
   })
   it('returns null when not found', async () => {
-    __mocks.single.mockResolvedValueOnce({ data: null, error: { code: 'PGRST116' } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
     expect(await fetchMerchantBySlug('missing')).toBeNull()
   })
 })
@@ -206,23 +224,33 @@ describe('listTakenSlugs', () => {
 // ── fetchMyMerchant (Task 2.2) ────────────────────────────────────────────────
 
 describe('fetchMyMerchant', () => {
-  it('queries merchants by owner_id and returns the row', async () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('GETs /api/me/merchant with a bearer token and returns the row', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const row = { id: 'm1', owner_id: 'u1', slug: 'shop-a' }
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: row, error: null })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => row })
+    vi.stubGlobal('fetch', fetchMock)
+
     const result = await fetchMyMerchant('u1')
-    expect(__mocks.from).toHaveBeenCalledWith('merchants')
-    expect(__mocks.eq).toHaveBeenCalledWith('owner_id', 'u1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/me\/merchant$/)
+    expect(init.headers.Authorization).toBe('Bearer tok')
     expect(result).toEqual(row)
   })
 
-  it('returns null on DB error', async () => {
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: { message: 'fail' } })
+  it('returns null on a failed request', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
     expect(await fetchMyMerchant('u1')).toBeNull()
   })
 
-  it('returns null immediately for null userId without hitting the DB', async () => {
+  it('returns null immediately for null userId without hitting the network', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     expect(await fetchMyMerchant(null as any)).toBeNull()
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
@@ -302,23 +330,31 @@ describe('updateMerchantSlug', () => {
 // ── fetchAllMerchants (Task 3.2) ──────────────────────────────────────────────
 
 describe('fetchAllMerchants', () => {
-  it('queries merchants table with select(*) + order and returns list', async () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('GETs /api/merchants with a bearer token and returns the list', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const rows = [{ id: 'm2', created_at: '2025-02-01' }, { id: 'm1', created_at: '2025-01-01' }]
-    __mocks.order.mockResolvedValueOnce({ data: rows, error: null })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => rows })
+    vi.stubGlobal('fetch', fetchMock)
+
     const result = await fetchAllMerchants()
-    expect(__mocks.from).toHaveBeenCalledWith('merchants')
-    expect(__mocks.select).toHaveBeenCalledWith('*')
-    expect(__mocks.order).toHaveBeenCalledWith('created_at', { ascending: false })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants$/)
+    expect(init.headers.Authorization).toBe('Bearer tok')
     expect(result).toEqual(rows)
   })
 
-  it('returns empty array when data is null', async () => {
-    __mocks.order.mockResolvedValueOnce({ data: null, error: null })
+  it('returns an empty array when the backend has none — a 200 returning []', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => [] }))
     expect(await fetchAllMerchants()).toEqual([])
   })
 
-  it('throws on DB error', async () => {
-    __mocks.order.mockResolvedValueOnce({ data: null, error: new Error('DB fail') })
+  it('throws on a non-ok response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'DB fail' }) }))
     await expect(fetchAllMerchants()).rejects.toThrow('DB fail')
   })
 })
@@ -474,26 +510,33 @@ describe('updateMerchantConfig', () => {
 // ── fetchMerchantSecret (Task 4.1) ────────────────────────────────────────────
 
 describe('fetchMerchantSecret', () => {
-  it('selects tg_token and tg_chat_id from merchant_secrets by merchant_id', async () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('GETs /api/merchants/:id/secret with a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const secret = { tg_token: 'tok123', tg_chat_id: '456' }
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: secret, error: null })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => secret })
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await fetchMerchantSecret('m1')
 
-    expect(__mocks.from).toHaveBeenCalledWith('merchant_secrets')
-    expect(__mocks.select).toHaveBeenCalledWith('tg_token, tg_chat_id')
-    expect(__mocks.eq).toHaveBeenCalledWith('merchant_id', 'm1')
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/secret$/)
+    expect(init.headers.Authorization).toBe('Bearer tok')
     expect(result).toEqual(secret)
   })
 
-  it('returns null when no row exists', async () => {
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
+  it('returns null when no row exists (backend responds not-ok)', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
     expect(await fetchMerchantSecret('m1')).toBeNull()
   })
 
-  it('returns null on DB error', async () => {
-    __mocks.maybeSingle.mockResolvedValueOnce({ data: null, error: { message: 'fail' } })
-    expect(await fetchMerchantSecret('m1')).toBeNull()
+  it('returns null immediately for a missing merchantId without hitting the network', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await fetchMerchantSecret('')).toBeNull()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })
 
@@ -630,32 +673,33 @@ describe('placeOrder', () => {
 // ── fetchMerchantOrders (Task 5.2) ────────────────────────────────────────────
 
 describe('fetchMerchantOrders', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   it('returns empty array immediately for falsy merchantId', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     expect(await fetchMerchantOrders(null as any)).toEqual([])
     expect(await fetchMerchantOrders('')).toEqual([])
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('queries orders filtered by merchant_id ordered desc', async () => {
+  it('GETs /api/merchants/:id/orders with a bearer token and returns the list', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const rows = [{ id: 'o2', merchant_id: 'm1' }, { id: 'o1', merchant_id: 'm1' }]
-    __mocks.order.mockResolvedValueOnce({ data: rows, error: null })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => rows })
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await fetchMerchantOrders('m1')
 
-    expect(__mocks.from).toHaveBeenCalledWith('orders')
-    expect(__mocks.select).toHaveBeenCalledWith('*')
-    expect(__mocks.eq).toHaveBeenCalledWith('merchant_id', 'm1')
-    expect(__mocks.order).toHaveBeenCalledWith('created_at', { ascending: false })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/orders$/)
+    expect(init.headers.Authorization).toBe('Bearer tok')
     expect(result).toEqual(rows)
   })
 
-  it('returns empty array on DB error', async () => {
-    __mocks.order.mockResolvedValueOnce({ data: null, error: { message: 'fail' } })
-    expect(await fetchMerchantOrders('m1')).toEqual([])
-  })
-
-  it('returns empty array when data is null with no error', async () => {
-    __mocks.order.mockResolvedValueOnce({ data: null, error: null })
+  it('returns empty array on a failed request', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
     expect(await fetchMerchantOrders('m1')).toEqual([])
   })
 })
@@ -665,52 +709,53 @@ describe('fetchMerchantOrders', () => {
 describe('fetchMyOrdersAtShop', () => {
   const user = { id: 'u1' }
 
-  it('filters by the signed-in user as well as the shop', async () => {
-    // The `user_id` filter is load-bearing, not belt-and-braces. RLS lets a shop OWNER read
-    // every order at their own shop, so a merchant opening their own storefront's history
-    // would otherwise be shown their customers' orders as though they were their own.
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('GETs /api/merchants/:id/my-orders with a bearer token for a signed-in customer', async () => {
+    // The backend derives the signed-in user from the bearer token and scopes the history to
+    // BOTH that user and the shop — the browser no longer states the filter itself, it just
+    // proves it is signed in.
     __mocks.getUser.mockResolvedValueOnce({ data: { user } })
-    __mocks.limit.mockResolvedValueOnce({ data: [{ id: 'o1' }], error: null })
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const rows = [{ id: 'o1' }]
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => rows })
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await fetchMyOrdersAtShop('m1')
 
-    expect(__mocks.from).toHaveBeenCalledWith('orders')
-    expect(__mocks.eq).toHaveBeenCalledWith('merchant_id', 'm1')
-    expect(__mocks.eq).toHaveBeenCalledWith('user_id', 'u1')
-    expect(result).toEqual([{ id: 'o1' }])
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/my-orders$/)
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(result).toEqual(rows)
   })
 
-  it('lists newest first, capped at the stated limit', async () => {
-    // The cap is shown to the customer on screen ("your last 20 orders"), so the number the
-    // query uses and the number the copy quotes must be the same one.
-    __mocks.getUser.mockResolvedValueOnce({ data: { user } })
-    __mocks.limit.mockResolvedValueOnce({ data: [], error: null })
-
-    await fetchMyOrdersAtShop('m1')
-
-    expect(__mocks.order).toHaveBeenCalledWith('created_at', { ascending: false })
-    expect(__mocks.limit).toHaveBeenCalledWith(ORDER_HISTORY_LIMIT)
+  it('states the history cap shown on screen ("your last 20 orders")', () => {
     expect(ORDER_HISTORY_LIMIT).toBe(20)
   })
 
   it('queries nothing when signed out — a guest has no history to read', async () => {
     __mocks.getUser.mockResolvedValueOnce({ data: { user: null } })
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     expect(await fetchMyOrdersAtShop('m1')).toEqual([])
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('queries nothing without a shop', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     expect(await fetchMyOrdersAtShop('')).toEqual([])
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('throws on DB error instead of passing an empty list off as "no orders"', async () => {
+  it('throws on a non-ok response instead of passing an empty list off as "no orders"', async () => {
     // The screen renders an empty list as "You haven't ordered from this shop yet." Swallowing the
     // error here would tell a customer with a year of history that they have none — and they would
     // believe it. An empty history and a broken query must not look alike.
     __mocks.getUser.mockResolvedValueOnce({ data: { user } })
-    __mocks.limit.mockResolvedValueOnce({ data: null, error: { message: 'rls' } })
-    await expect(fetchMyOrdersAtShop('m1')).rejects.toMatchObject({ message: 'rls' })
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'rls' }) }))
+    await expect(fetchMyOrdersAtShop('m1')).rejects.toThrow('rls')
   })
 })
 
@@ -825,13 +870,18 @@ describe('setOrderStatus', () => {
 // ── fetchMerchantCustomers (Task 5.2) ─────────────────────────────────────────
 
 describe('fetchMerchantCustomers', () => {
+  // fetchMerchantCustomers derives its grouping entirely from fetchMerchantOrders, so the mock
+  // here feeds the /api/merchants/:id/orders response — not a supabase order chain.
+  afterEach(() => vi.unstubAllGlobals())
+
   it('groups orders by customer_wa with correct orderCount and lastOrder', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const orders = [
       { id: 'o1', customer_name: 'Alice', customer_wa: '601', created_at: '2025-01-01' },
       { id: 'o2', customer_name: 'Bob',   customer_wa: '602', created_at: '2025-01-02' },
       { id: 'o3', customer_name: 'Alice', customer_wa: '601', created_at: '2025-01-03' },
     ]
-    __mocks.order.mockResolvedValueOnce({ data: orders, error: null })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => orders }))
 
     const result = await fetchMerchantCustomers('m1')
 
@@ -844,16 +894,18 @@ describe('fetchMerchantCustomers', () => {
   })
 
   it('returns empty array when merchant has no orders', async () => {
-    __mocks.order.mockResolvedValueOnce({ data: [], error: null })
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => [] }))
     expect(await fetchMerchantCustomers('m1')).toEqual([])
   })
 
   it('falls back to customer_name as key when customer_wa is missing', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const orders = [
       { id: 'o1', customer_name: 'Charlie', customer_wa: null, created_at: '2025-01-01' },
       { id: 'o2', customer_name: 'Charlie', customer_wa: null, created_at: '2025-01-02' },
     ]
-    __mocks.order.mockResolvedValueOnce({ data: orders, error: null })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => orders }))
 
     const result = await fetchMerchantCustomers('m1')
 
@@ -883,17 +935,30 @@ describe('voucherFromRow', () => {
 })
 
 describe('fetchMerchantVouchers', () => {
-  it('returns [] for a missing merchantId without hitting the DB', async () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns [] for a missing merchantId without hitting the network', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     expect(await fetchMerchantVouchers('')).toEqual([])
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
-  it('maps rows scoped to the merchant', async () => {
-    __mocks.eq.mockResolvedValueOnce({ data: [{ id: 'v1', code: 'A', kind: 'fixed', amount: 5, used_by: [] }], error: null })
+  it('GETs /api/merchants/:id/vouchers with a bearer token and maps rows scoped to the merchant', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const rows = [{ id: 'v1', code: 'A', kind: 'fixed', amount: 5, used_by: [] }]
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => rows })
+    vi.stubGlobal('fetch', fetchMock)
+
     const result = await fetchMerchantVouchers('m1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/vouchers$/)
+    expect(init.headers.Authorization).toBe('Bearer tok')
     expect(result).toEqual([{ id: 'v1', code: 'A', type: 'fixed', value: 5, maxUses: null, usedBy: [] }])
   })
-  it('returns [] on error', async () => {
-    __mocks.eq.mockResolvedValueOnce({ data: null, error: { message: 'boom' } })
+  it('returns [] on a failed request', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
     expect(await fetchMerchantVouchers('m1')).toEqual([])
   })
 })

@@ -9,6 +9,7 @@ import type { EarnedReward, Order, ReferredShop, Voucher } from './types';
 import type { SavedDetails } from './savedDetails';
 import { resetRedirectUrl } from './resetPassword';
 import type { AddressParts } from './types'
+import { API_URL, apiGet, apiTry } from './api'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -107,14 +108,8 @@ async function ensureGlobalProfile(fields: {
 }
 
 export async function fetchProfileByUserId(userId: string) {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, name, email, app_role, merchant_id, whatsapp, delivery_address')
-    .eq('user_id', userId)
-    .is('merchant_id', null)
-    .maybeSingle();
-  if (error) return null;
-  return data;
+  const r = await apiTry<any>('/api/me/profile', { auth: true })
+  return r.ok ? r.data : null
 }
 
 /**
@@ -144,10 +139,7 @@ export async function saveCustomerDetails(fields: SavedDetails): Promise<void> {
 const MERCHANT_STATUSES = ['pending', 'active', 'suspended']
 
 export async function fetchAllMerchants() {
-  const { data, error } = await supabase
-    .from('merchants').select('*').order('created_at', { ascending: false })
-  if (error) throw error
-  return data ?? []
+  return apiGet<any[]>('/api/merchants', { auth: true })
 }
 
 // Status is the billing enforcement boundary and is service_role-only at the DB
@@ -191,13 +183,8 @@ export async function compMerchant(id: string) {
 export async function fetchMerchantBySlug(slug: string | undefined) {
   const s = (slug || '').trim().toLowerCase()
   if (!s || RESERVED_SLUGS.includes(s)) return null
-  const { data, error } = await supabase
-    .from('merchants')
-    .select('*')
-    .eq('slug', s)
-    .single()
-  if (error) return null
-  return data
+  const r = await apiTry<any>(`/api/merchants/${encodeURIComponent(s)}`)
+  return r.ok ? r.data : null
 }
 
 export async function listTakenSlugs() {
@@ -208,10 +195,8 @@ export async function listTakenSlugs() {
 
 export async function fetchMyMerchant(userId: string) {
   if (!userId) return null
-  const { data, error } = await supabase
-    .from('merchants').select('*').eq('owner_id', userId).maybeSingle()
-  if (error) return null
-  return data ?? null
+  const r = await apiTry<any>('/api/me/merchant', { auth: true })
+  return r.ok ? r.data : null
 }
 
 export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US', referredByCode }: { name: string; plan?: string; billing?: string; region?: string; referredByCode?: string }) {
@@ -232,8 +217,6 @@ export async function createMerchant({ name, plan = 'basic', billing = 'monthly'
 }
 
 // ── Billing (Stripe via the Hono backend) ──────────────────────────────────────
-
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8787'
 
 // Create a Stripe Checkout Session for the current merchant and return its URL.
 // `region` bills the region the pricing page displayed (defaults server-side).
@@ -303,18 +286,14 @@ export interface MerchantBilling {
 
 // Superadmin: read every merchant's billing row (RLS grants superadmins read on all).
 export async function fetchAllBilling(): Promise<MerchantBilling[]> {
-  const { data, error } = await supabase.from('merchant_billing').select('*')
-  if (error) throw error
-  return data ?? []
+  return apiGet<MerchantBilling[]>('/api/billing', { auth: true })
 }
 
 // Read the merchant's authoritative billing row (owner-readable via RLS).
 export async function fetchMyBilling(merchantId: string) {
   if (!merchantId) return null
-  const { data, error } = await supabase
-    .from('merchant_billing').select('*').eq('merchant_id', merchantId).maybeSingle()
-  if (error) return null
-  return data ?? null
+  const r = await apiTry<any>(`/api/merchants/${merchantId}/billing`, { auth: true })
+  return r.ok ? r.data : null
 }
 
 // Superadmin approval goes through the backend: it creates the Stripe customer
@@ -456,11 +435,9 @@ export function voucherFullyUsed(v: Voucher) {
 export { voucherFromRow } from '@bitetime/shared'
 
 export async function fetchMerchantVouchers(merchantId: string): Promise<Voucher[]> {
-  if (!merchantId) return [];
-  const { data, error } = await supabase
-    .from('vouchers').select('*').eq('merchant_id', merchantId);
-  if (error) return [];
-  return (data ?? []).map(voucherFromRow);
+  if (!merchantId) return []
+  const r = await apiTry<any[]>(`/api/merchants/${merchantId}/vouchers`, { auth: true })
+  return r.ok ? r.data.map(voucherFromRow) : []
 }
 
 /**
@@ -710,36 +687,21 @@ export async function fetchMyOrdersAtShop(merchantId: string): Promise<Order[]> 
   if (!merchantId) return []
   const user = await getCurrentUser()
   if (!user) return [] // a guest has no history — by design, and permanently
-  const { data, error } = await supabase
-    .from('orders').select('*')
-    .eq('merchant_id', merchantId)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(ORDER_HISTORY_LIMIT)
-  // Throws rather than returning [] — this screen renders an empty list as "you haven't ordered
-  // from this shop yet", so swallowing an error here would tell a customer with a year of orders
-  // that they have none. An empty history and a broken query must not look alike.
-  if (error) throw error
-  return (data ?? []) as Order[]
+  return apiGet<Order[]>(`/api/merchants/${merchantId}/my-orders`, { auth: true })
 }
 
 export async function fetchMerchantOrders(merchantId: string) {
   if (!merchantId) return []
-  const { data, error } = await supabase
-    .from('orders').select('*').eq('merchant_id', merchantId)
-    .order('created_at', { ascending: false })
-  if (error) return []
-  return data ?? []
+  const r = await apiTry<any[]>(`/api/merchants/${merchantId}/orders`, { auth: true })
+  return r.ok ? r.data : []
 }
 
 // True once the merchant has ≥1 order — used to lock the currency selector so
 // past orders and dashboard aggregates never silently re-denominate.
 export async function merchantHasOrders(merchantId: string) {
   if (!merchantId) return false
-  const { count, error } = await supabase
-    .from('orders').select('id', { count: 'exact', head: true }).eq('merchant_id', merchantId)
-  if (error) return false
-  return (count ?? 0) > 0
+  const r = await apiTry<{ count: number }>(`/api/merchants/${merchantId}/orders/count`, { auth: true })
+  return r.ok ? r.data.count > 0 : false
 }
 
 export async function setOrderStatus(orderId: string, status: string) {
@@ -908,10 +870,10 @@ export async function updateMerchantConfig(id: string, patch: any) {
 }
 
 export async function fetchMerchantSecret(merchantId: string) {
-  const { data, error } = await supabase
-    .from('merchant_secrets').select('tg_token, tg_chat_id').eq('merchant_id', merchantId).maybeSingle()
-  if (error) return null
-  return data ?? null
+  if (!merchantId) return null
+  const r = await apiTry<{ tg_token: string | null; tg_chat_id: string | null }>(
+    `/api/merchants/${merchantId}/secret`, { auth: true })
+  return r.ok ? r.data : null
 }
 
 export async function upsertMerchantSecret(merchantId: string, secret: any) {
