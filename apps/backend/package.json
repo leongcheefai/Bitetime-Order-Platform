@@ -13,7 +13,8 @@
     "test": "vitest run tests/unit",
     "test:db": "vitest run --config vitest.db.config.ts",
     "db:migrate": "supabase migration up",
-    "db:push": "supabase db push"
+    "db:push": "supabase db push",
+    "db:seed:superadmin": "./scripts/seed-superadmin.sh"
   },
   "dependencies": {
     "@bitetime/shared": "workspace:*",

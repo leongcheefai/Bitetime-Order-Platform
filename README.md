@@ -1,4 +1,4 @@
-# BiteTime
+# TinyOrder
 
 Multi-merchant food-ordering SaaS. Many independent shops each run their own
 storefront, products, orders, vouchers and customers on one platform — fully
