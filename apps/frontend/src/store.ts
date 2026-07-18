@@ -1,15 +1,13 @@
 import type { User } from '@supabase/supabase-js';
 import { voucherFromRow } from '@bitetime/shared';
 import { supabase } from './supabase';
-import { resolveSlug, RESERVED_SLUGS } from './slug';
-import { orderPrefix } from './orderPrefix';
-import { resolveReferredByCode } from './referralCode'
+import { RESERVED_SLUGS } from './slug';
 import { SignupError, signupErrorCode } from './signupError'
 import type { EarnedReward, Order, ReferredShop, Voucher } from './types';
 import type { SavedDetails } from './savedDetails';
 import { resetRedirectUrl } from './resetPassword';
 import type { AddressParts } from './types'
-import { API_URL, apiGet, apiTry } from './api'
+import { API_URL, apiGet, apiTry, apiSend } from './api'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -71,40 +69,29 @@ export async function signUpCustomer(email: string, password: string) {
   }
 }
 
-// The profiles restructure made `id` a surrogate PK and moved auth identity to
-// `user_id`; the only unique index on user_id alone is partial (merchant_id IS
-// NULL), so ON CONFLICT-based upsert can't target it. Do an explicit
-// select-then-insert/update on the user's global (merchant_id null) profile.
-// Returns any write error (null on success); RLS blocks the write until the
-// user has a session, which is expected during pending email confirmation.
-// The one place that knows how to find a user's global profile row. Both writers go through it,
-// so the identity rule ("global" means merchant_id IS NULL) is stated once, not once per caller.
-async function globalProfileId(userId: string): Promise<string | null> {
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('user_id', userId)
-    .is('merchant_id', null)
-    .maybeSingle();
-  return data?.id ?? null;
-}
-
+// Upserts the caller's GLOBAL profile (merchant_id null) via the backend, which forces
+// user_id/merchant_id server-side and allowlists the rest (pickProfileFields in
+// apps/backend/src/writes.ts) — see Global Constraint 1. Best-effort: returns any error
+// instead of throwing (never null on failure, never throws), because both callers below treat
+// a failure as "try again later", not as a hard stop. In particular, during merchant signup
+// there is no session yet (email confirmation is on project-wide) — the fetch 401s exactly as
+// RLS used to block the equivalent browser write, and it's retried from onAuthChange once a
+// session exists.
 async function ensureGlobalProfile(fields: {
   user_id: string
   name: string
   email?: string | null
   email_confirmed: boolean
   referral_code?: string
-}) {
-  const existingId = await globalProfileId(fields.user_id);
-  if (existingId) {
-    const { error } = await supabase.from('profiles').update(fields).eq('id', existingId);
-    return error;
+}): Promise<Error | null> {
+  try {
+    // user_id is forced to the caller server-side; send everything else.
+    const { user_id: _user_id, ...rest } = fields
+    await apiSend('/api/me/profile', 'PUT', rest, { auth: true })
+    return null
+  } catch (e) {
+    return e as Error
   }
-  const { error } = await supabase
-    .from('profiles')
-    .insert({ ...fields, created_at: new Date().toISOString() });
-  return error;
 }
 
 export async function fetchProfileByUserId(_userId: string) {
@@ -119,21 +106,18 @@ export async function fetchProfileByUserId(_userId: string) {
  * Best-effort by design. It runs after an order is already placed, so a failure here must cost
  * the customer nothing but a retype next time; it must never surface as a failed order.
  *
- * Writes the GLOBAL profile (merchant_id null) — the same row `ensureGlobalProfile` maintains, and
- * found the same way, via `globalProfileId`. An address belongs to the customer, not to a shop.
+ * Writes the GLOBAL profile (merchant_id null) — the same row `ensureGlobalProfile` maintains,
+ * via the same `PUT /api/me/profile` upsert. An address belongs to the customer, not to a shop.
  */
 export async function saveCustomerDetails(fields: SavedDetails): Promise<void> {
   if (Object.keys(fields).length === 0) return
   const user = await getCurrentUser()
   if (!user) return // a guest saves nothing, ever — that is what makes the gate's warning true
-  const existingId = await globalProfileId(user.id)
-  if (existingId) {
-    await supabase.from('profiles').update(fields).eq('id', existingId)
-    return
+  try {
+    await apiSend('/api/me/profile', 'PUT', fields, { auth: true })
+  } catch {
+    // best-effort: a failure here must never surface as a failed order
   }
-  await supabase
-    .from('profiles')
-    .insert({ ...fields, user_id: user.id, email: user.email, created_at: new Date().toISOString() })
 }
 
 const MERCHANT_STATUSES = ['pending', 'active', 'suspended']
@@ -187,12 +171,6 @@ export async function fetchMerchantBySlug(slug: string | undefined) {
   return r.ok ? r.data : null
 }
 
-export async function listTakenSlugs() {
-  const { data, error } = await supabase.from('merchants').select('slug')
-  if (error) return []
-  return (data ?? []).map(r => r.slug)
-}
-
 export async function fetchMyMerchant(userId: string) {
   if (!userId) return null
   const r = await apiTry<any>('/api/me/merchant', { auth: true })
@@ -200,20 +178,7 @@ export async function fetchMyMerchant(userId: string) {
 }
 
 export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US', referredByCode }: { name: string; plan?: string; billing?: string; region?: string; referredByCode?: string }) {
-  const user = await getCurrentUser()
-  if (!user) throw new Error('Not signed in')
-  const taken = await listTakenSlugs()
-  const slug = await resolveSlug(name, { taken, id: user.id })
-  const { data, error } = await supabase
-    .from('merchants')
-    .insert({
-      name, slug, order_prefix: orderPrefix(slug), owner_id: user.id, status: 'pending',
-      plan, billing_cycle: billing, billing_region: region,
-      referred_by_code: resolveReferredByCode(referredByCode, referralCodeOf(user.id)),
-    })
-    .select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>('/api/merchants', 'POST', { name, plan, billing, region, referredByCode }, { auth: true })
 }
 
 // ── Billing (Stripe via the Hono backend) ──────────────────────────────────────
@@ -334,12 +299,7 @@ export async function openBillingPortal(): Promise<string> {
 export async function updateMerchantSlug(id: string, slug: string) {
   const s = (slug || '').trim().toLowerCase()
   if (!s || RESERVED_SLUGS.includes(s)) throw new Error('Reserved or empty slug')
-  const taken = await listTakenSlugs()
-  if (taken.includes(s)) throw new Error('Slug already taken')
-  const { data, error } = await supabase
-    .from('merchants').update({ slug: s }).eq('id', id).select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>(`/api/merchants/${id}/slug`, 'PATCH', { slug: s }, { auth: true })
 }
 
 /**
@@ -484,20 +444,17 @@ export async function fetchMerchantVoucher(merchantId: string, code: string): Pr
 export async function createMerchantVoucher(input: {
   merchantId: string; code: string; kind: string; amount: number; maxUses?: number | null;
 }): Promise<Voucher> {
-  const { data, error } = await supabase.from('vouchers').insert({
-    merchant_id: input.merchantId,
-    code: input.code.trim().toUpperCase(),
+  const data = await apiSend<any>(`/api/merchants/${input.merchantId}/vouchers`, 'POST', {
+    code: input.code,
     kind: input.kind,
     amount: input.amount,
-    max_uses: input.maxUses ?? null,
-  }).select().single();
-  if (error) throw error;
+    maxUses: input.maxUses ?? null,
+  }, { auth: true });
   return voucherFromRow(data);
 }
 
-export async function deleteMerchantVoucher(id: string) {
-  const { error } = await supabase.from('vouchers').delete().eq('id', id);
-  if (error) throw error;
+export async function deleteMerchantVoucher(id: string, merchantId: string) {
+  await apiSend(`/api/merchants/${merchantId}/vouchers/${id}`, 'DELETE', undefined, { auth: true });
 }
 
 // ── Referral program ─────────────────────────────────────────────────────────
@@ -702,30 +659,17 @@ export async function merchantHasOrders(merchantId: string) {
   return r.ok ? r.data.count > 0 : false
 }
 
-export async function setOrderStatus(orderId: string, status: string) {
+export async function setOrderStatus(orderId: string, status: string, merchantId: string) {
   if (!ORDER_STATUSES.includes(status)) throw new Error('Invalid status')
-  const { data, error } = await supabase
-    .from('orders').update({ status }).eq('id', orderId).select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', { status }, { auth: true })
 }
 
-export async function setOrderNote(orderId: string, note: string) {
-  const trimmed = note.trim()
-  const { data, error } = await supabase
-    .from('orders').update({ note: trimmed || null }).eq('id', orderId).select().single()
-  if (error) throw error
-  return data
+export async function setOrderNote(orderId: string, note: string, merchantId: string) {
+  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', { note }, { auth: true })
 }
 
-export async function setOrderTracking(orderId: string, courier: string | null, awb: string) {
-  const trimmed = awb.trim()
-  const { data, error } = await supabase
-    .from('orders')
-    .update({ courier: courier || null, awb: trimmed || null })
-    .eq('id', orderId).select().single()
-  if (error) throw error
-  return data
+export async function setOrderTracking(orderId: string, courier: string | null, awb: string, merchantId: string) {
+  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', { courier, awb }, { auth: true })
 }
 
 /**
@@ -804,15 +748,18 @@ export async function fetchProducts(merchantId: string) {
   return (await lookupProducts(merchantId)) ?? []
 }
 
+// merchant_id and id are both threaded from `product` — ProductsManager's callers always set
+// both (merchant_id from `merchant!.id`, id from the row or a client-generated draftId) — so
+// the URL carries the same tenant/row identity the backend then forces server-side anyway.
 export async function upsertProduct(product: any) {
-  const { data, error } = await supabase.from('products').upsert(product).select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>(`/api/merchants/${product.merchant_id}/products/${product.id}`, 'PUT', product, { auth: true })
 }
 
-export async function deleteProduct(id: string) {
-  const { error } = await supabase.from('products').delete().eq('id', id)
-  if (error) throw error
+// Signature change: `merchantId` now threads the URL's tenant segment — the backend nests
+// product deletes under /api/merchants/:id/products/:productId (see writes.ts /
+// requireMerchantOwns) so it can verify tenancy before deleting. Callers must pass it.
+export async function deleteProduct(id: string, merchantId: string) {
+  await apiSend(`/api/merchants/${merchantId}/products/${id}`, 'DELETE', undefined, { auth: true })
 }
 
 // ── Product images (Supabase Storage: public `product-images` bucket) ──────────
@@ -861,9 +808,7 @@ export async function deleteProductImages(paths: string[]): Promise<void> {
 // ── Merchant config & secrets ─────────────────────────────────────────────────
 
 export async function updateMerchantConfig(id: string, patch: any) {
-  const { data, error } = await supabase.from('merchants').update(patch).eq('id', id).select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>(`/api/merchants/${id}`, 'PATCH', patch, { auth: true })
 }
 
 export async function fetchMerchantSecret(merchantId: string) {
@@ -874,7 +819,5 @@ export async function fetchMerchantSecret(merchantId: string) {
 }
 
 export async function upsertMerchantSecret(merchantId: string, secret: any) {
-  const { error } = await supabase
-    .from('merchant_secrets').upsert({ merchant_id: merchantId, ...secret })
-  if (error) throw error
+  await apiSend(`/api/merchants/${merchantId}/secret`, 'PUT', secret, { auth: true })
 }

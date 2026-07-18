@@ -30,10 +30,12 @@ import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
+import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode, RESERVED_SLUGS } from './slug.js'
+import { pickMerchantConfig, pickProfileFields, pickProductFields, pickOrderFields, ORDER_STATUSES } from './writes.js'
 
 export const app = new Hono<AppEnv>()
 
-app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['POST', 'GET', 'OPTIONS'] }))
+app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'] }))
 
 const ORDER_HISTORY_LIMIT = 20
 
@@ -91,6 +93,66 @@ app.get('/api/billing', requireSuperadmin, async (c) => {
   return c.json(data ?? [])
 })
 
+// ── Merchant creation (any authenticated user creates their own shop) ──────────
+// The insert goes through `admin` (service_role), which bypasses guard_merchant_status —
+// so `status: 'pending'` and `owner_id: user.id` are forced here, never read from the body.
+// Only name/plan/billing/region/referredByCode are accepted from the client (Global
+// Constraint 1). Slug uniqueness resolution moved server-side now that the browser can no
+// longer SELECT merchants.slug directly.
+app.post('/api/merchants', requireUser, async (c) => {
+  const user = c.get('user')
+  const body = await c.req.json().catch(() => ({} as any))
+  const name = String(body?.name ?? '').trim()
+  if (!name) return c.json({ error: 'Missing name' }, 400)
+
+  const { data: rows } = await admin.from('merchants').select('slug')
+  const slug = await resolveSlug(name, { taken: (rows ?? []).map((r) => r.slug), id: user.id })
+
+  const { data, error } = await admin
+    .from('merchants')
+    .insert({
+      name,
+      slug,
+      order_prefix: orderPrefix(slug),
+      owner_id: user.id,
+      status: 'pending',
+      plan: body?.plan ?? 'basic',
+      billing_cycle: body?.billing ?? 'monthly',
+      billing_region: body?.region ?? 'US',
+      referred_by_code: resolveReferredByCode(body?.referredByCode, referralCodeOf(user.id)),
+    })
+    .select()
+    .single()
+  if (error) return c.json({ error: 'Create failed' }, 500)
+  return c.json(data)
+})
+
+// Owner-editable shop config. The update goes through `admin` (service_role), which bypasses
+// guard_merchant_status — so `pickMerchantConfig` is the ONLY thing stopping an owner from
+// self-activating a suspended shop (or reassigning owner_id) via a crafted body. See
+// writes.ts and Global Constraint 1.
+app.patch('/api/merchants/:id', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const patch = pickMerchantConfig(await c.req.json().catch(() => ({})))
+  if (Object.keys(patch).length === 0) return c.json({ error: 'No updatable fields' }, 400)
+  const { data, error } = await admin.from('merchants').update(patch).eq('id', id).select().single()
+  if (error) return c.json({ error: 'Update failed' }, 500)
+  return c.json(data)
+})
+
+// Slug rename. Uniqueness resolution moves here now that the browser can no longer SELECT
+// merchants.slug directly — the last browser read of merchants.
+app.patch('/api/merchants/:id/slug', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const s = String((await c.req.json().catch(() => ({}))).slug ?? '').trim().toLowerCase()
+  if (!s || RESERVED_SLUGS.includes(s)) return c.json({ error: 'Reserved or empty slug' }, 400)
+  const { data: existing } = await admin.from('merchants').select('id').eq('slug', s).maybeSingle()
+  if (existing && existing.id !== id) return c.json({ error: 'Slug already taken' }, 409)
+  const { data, error } = await admin.from('merchants').update({ slug: s }).eq('id', id).select().single()
+  if (error) return c.json({ error: 'Update failed' }, 500)
+  return c.json(data)
+})
+
 // ── Owner-scoped reads (tenant enforced by requireMerchantOwns) ────────────────
 app.get('/api/merchants/:id/orders', requireMerchantOwns, async (c) => {
   const m = c.get('merchant')
@@ -131,6 +193,24 @@ app.get('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
   return c.json(data ?? null)
 })
 
+// Secret upsert. The write goes through `admin` (service_role), which bypasses RLS and the
+// restricted grants on merchant_secrets — so picking only tg_token/tg_chat_id off the body is
+// the ONLY guard (Global Constraint 1). merchant_id is FORCED from :id, never read from the
+// body, AND is the upsert's conflict target (merchant_secrets.merchant_id is the primary key —
+// see 20260627120150_secure_merchant_secrets.sql), so the product-PUT hijack class (Global
+// Constraint 2) does not apply here: there is no client-supplied child id to nest a foreign
+// row under. No separate tenancy check is needed.
+app.put('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({}) as any)
+  const row: Record<string, unknown> = { merchant_id: id }
+  if (b?.tg_token !== undefined) row.tg_token = b.tg_token
+  if (b?.tg_chat_id !== undefined) row.tg_chat_id = b.tg_chat_id
+  const { error } = await admin.from('merchant_secrets').upsert(row)
+  if (error) return c.json({ error: 'Upsert failed' }, 500)
+  return c.json({ ok: true })
+})
+
 // ── User-scoped reads ─────────────────────────────────────────────────────────
 app.get('/api/me/profile', requireUser, async (c) => {
   const user = c.get('user')
@@ -139,6 +219,32 @@ app.get('/api/me/profile', requireUser, async (c) => {
     .select('id, name, email, app_role, merchant_id, whatsapp, delivery_address')
     .eq('user_id', user.id).is('merchant_id', null).maybeSingle()
   return c.json(data ?? null)
+})
+
+// Upsert the caller's GLOBAL profile (merchant_id IS NULL). The partial unique index
+// (user_id WHERE merchant_id IS NULL) can't be an ON CONFLICT target, so this mirrors the old
+// browser-side select-then-insert/update. Goes through `admin` (service_role), which BYPASSES
+// guard_profile_privileges — so pickProfileFields + forcing user_id/merchant_id here is the
+// ONLY guard against a caller granting themselves app_role or attaching to another merchant
+// (Global Constraint 1). Never read user_id/merchant_id from the body.
+app.put('/api/me/profile', requireUser, async (c) => {
+  const user = c.get('user')
+  const fields = pickProfileFields(await c.req.json().catch(() => ({})))
+  const { data: existing } = await admin
+    .from('profiles').select('id').eq('user_id', user.id).is('merchant_id', null).maybeSingle()
+  if (existing) {
+    const { error } = await admin.from('profiles').update(fields).eq('id', existing.id)
+    if (error) return c.json({ error: 'Update failed' }, 500)
+  } else {
+    const { error } = await admin.from('profiles').insert({
+      ...fields,
+      user_id: user.id,
+      email: fields.email ?? user.email,
+      created_at: new Date().toISOString(),
+    })
+    if (error) return c.json({ error: 'Insert failed' }, 500)
+  }
+  return c.json({ ok: true })
 })
 
 app.get('/api/me/merchant', requireUser, async (c) => {
@@ -181,6 +287,41 @@ app.get('/api/merchants/:id/products', async (c) => {
   return c.json(data ?? [])
 })
 
+// Product upsert. The write goes through `admin` (service_role), so pickProductFields is the
+// ONLY guard against a crafted body writing merchant_id (forced to :id here, never read from
+// the body) or promo_sold (see writes.ts — the trigger that pins it for other roles does not
+// run for service_role).
+// requireMerchantOwns only proves the caller owns :id — it says nothing about productId, so an
+// owner of shop A could otherwise take over shop B's product by nesting it under :id = A: .upsert()
+// conflict-resolves on the primary key, so if a row with that id already exists it gets UPDATEd
+// in place (including merchant_id reassigned to A) instead of a new row being inserted. Loading
+// the product and checking merchant_id === :id before upserting is what closes that hole
+// (Global Constraint 2), mirroring the DELETE handler below.
+app.put('/api/merchants/:id/products/:productId', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const productId = c.req.param('productId')
+  const { data: existing } = await admin.from('products').select('merchant_id').eq('id', productId).maybeSingle()
+  if (existing && existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
+  const row = { ...pickProductFields(await c.req.json().catch(() => ({}))), id: productId, merchant_id: id }
+  const { data, error } = await admin.from('products').upsert(row).select().single()
+  if (error) return c.json({ error: 'Upsert failed' }, 500)
+  return c.json(data)
+})
+
+// Product delete. requireMerchantOwns only proves the caller owns :id — it says nothing about
+// productId, so an owner of shop A could otherwise delete shop B's product by nesting it under
+// :id = A. Loading the product and checking merchant_id === :id before deleting is what closes
+// that hole (Global Constraint 2).
+app.delete('/api/merchants/:id/products/:productId', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const productId = c.req.param('productId')
+  const { data: existing } = await admin.from('products').select('merchant_id').eq('id', productId).maybeSingle()
+  if (!existing || existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
+  const { error } = await admin.from('products').delete().eq('id', productId)
+  if (error) return c.json({ error: 'Delete failed' }, 500)
+  return c.json({ ok: true })
+})
+
 app.get('/api/merchants/:id/vouchers/:code', async (c) => {
   const id = c.req.param('id')
   const code = c.req.param('code')
@@ -189,6 +330,65 @@ app.get('/api/merchants/:id/vouchers/:code', async (c) => {
   // Same contract: 5xx = could-not-ask; 200 null = shop has no such voucher.
   if (error) return c.json({ error: 'Lookup failed' }, 500)
   return c.json(data ?? null)
+})
+
+// Voucher create. The insert goes through `admin` (service_role), so forcing merchant_id
+// from :id (never read from the body) is what stops a crafted body from creating a voucher
+// under someone else's shop. This is an INSERT, not an upsert, so the product-PUT hijack
+// class (conflict-resolving onto a stranger's row) does not apply here — there is no
+// client-supplied id to collide on. `code` is uppercased/trimmed server-side, matching the
+// old client-side `input.code.trim().toUpperCase()`.
+app.post('/api/merchants/:id/vouchers', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const code = String(b?.code ?? '').trim().toUpperCase()
+  if (!code) return c.json({ error: 'Missing code' }, 400)
+  const { data, error } = await admin.from('vouchers').insert({
+    merchant_id: id,
+    code,
+    kind: b?.kind,
+    amount: b?.amount,
+    max_uses: b?.maxUses ?? null,
+  }).select().single()
+  if (error) return c.json({ error: 'Create failed' }, 500)
+  return c.json(data)
+})
+
+// Voucher delete. requireMerchantOwns only proves the caller owns :id — it says nothing
+// about voucherId, so an owner of shop A could otherwise delete shop B's voucher by nesting
+// it under :id = A. Loading the voucher and checking merchant_id === :id before deleting is
+// what closes that hole (Global Constraint 2), mirroring the product DELETE handler above.
+app.delete('/api/merchants/:id/vouchers/:voucherId', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const voucherId = c.req.param('voucherId')
+  const { data: existing } = await admin.from('vouchers').select('merchant_id').eq('id', voucherId).maybeSingle()
+  if (!existing || existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
+  const { error } = await admin.from('vouchers').delete().eq('id', voucherId)
+  if (error) return c.json({ error: 'Delete failed' }, 500)
+  return c.json({ ok: true })
+})
+
+// Order patch (status/note/tracking). The update goes through `admin` (service_role), so
+// pickOrderFields is the ONLY guard against a crafted body writing e.g. total/user_id/
+// order_number (Global Constraint 1) — status is additionally re-validated against
+// ORDER_STATUSES here since the client-side check in store.ts is not a security boundary.
+// requireMerchantOwns only proves the caller owns :id — it says nothing about orderId, so an
+// owner of shop A could otherwise patch shop B's order by nesting it under :id = A. Loading the
+// order and checking merchant_id === :id before updating is what closes that hole (Global
+// Constraint 2), mirroring the product/voucher handlers above.
+app.patch('/api/merchants/:id/orders/:orderId', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const orderId = c.req.param('orderId')
+  const patch = pickOrderFields(await c.req.json().catch(() => ({})))
+  if ('status' in patch && !ORDER_STATUSES.includes(patch.status as string)) {
+    return c.json({ error: 'Invalid status' }, 400)
+  }
+  if (Object.keys(patch).length === 0) return c.json({ error: 'No updatable fields' }, 400)
+  const { data: existing } = await admin.from('orders').select('merchant_id').eq('id', orderId).maybeSingle()
+  if (!existing || existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
+  const { data, error } = await admin.from('orders').update(patch).eq('id', orderId).select().single()
+  if (error) return c.json({ error: 'Update failed' }, 500)
+  return c.json(data)
 })
 
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────

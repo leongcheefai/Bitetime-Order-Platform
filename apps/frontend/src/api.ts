@@ -41,3 +41,21 @@ export async function apiTry<T>(
     return { ok: false }
   }
 }
+
+type Method = 'POST' | 'PATCH' | 'PUT' | 'DELETE'
+
+// Throwing mutation helper — mirrors apiGet's contract for writes. Callers that must
+// stay best-effort (saveCustomerDetails) wrap this in their own try/catch.
+export async function apiSend<T>(path: string, method: Method, body?: unknown, opts?: Opts): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(await headers(opts)) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const b = (await res.json().catch(() => ({}))) as { error?: string }
+    throw new Error(b.error || `Request failed: ${res.status}`)
+  }
+  const text = await res.text()
+  return (text ? JSON.parse(text) : null) as T
+}

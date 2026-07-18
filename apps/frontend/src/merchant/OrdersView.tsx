@@ -171,7 +171,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
   }
 
   function handleStatusChange(order: any, status: string) {
-    setOrderStatus(order.id, status).then(patchOrder).catch(() => {
+    setOrderStatus(order.id, status, merchant!.id).then(patchOrder).catch(() => {
       toast.error(t('Could not update order status.', '无法更新订单状态。'))
     })
   }
@@ -179,7 +179,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
   function handleNoteSave() {
     if (!selected) return
     setSavingNote(true)
-    setOrderNote(selected.id, noteDraft).then(updated => {
+    setOrderNote(selected.id, noteDraft, merchant!.id).then(updated => {
       patchOrder(updated)
       toast.success(t('Note saved', '备注已保存'))
     }).catch(() => {
@@ -190,7 +190,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
   function handleTrackingSave() {
     if (!selected) return
     setSavingTrack(true)
-    setOrderTracking(selected.id, courierDraft || null, awbDraft).then(updated => {
+    setOrderTracking(selected.id, courierDraft || null, awbDraft, merchant!.id).then(updated => {
       patchOrder(updated)
       toast.success(t('Tracking saved', '物流已保存'))
     }).catch(() => {

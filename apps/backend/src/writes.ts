@@ -1,0 +1,94 @@
+// Column allowlists for write endpoints. The service-role `admin` client bypasses RLS and the
+// guard_merchant_status / guard_profile_privileges triggers, so these picks are the ONLY thing
+// stopping privilege escalation. Never spread a raw client body into a DB write — pick from here.
+
+export const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancelled']
+
+// Owner-editable shop config. Deliberately EXCLUDES status, owner_id, slug, plan, billing_*, id.
+// Mirrors what the browser could safely write under the old RLS+trigger regime. This is the
+// EXACT union of the two updateMerchantConfig call sites (ShopSettings.tsx:141 writes
+// { currency?, shipping, pickup_address }; :243 writes { payment_bank, payment_note }) —
+// verified 2026-07-18. `shipping` is a jsonb column (shopRates output); `currency` is dropped
+// client-side once locked, but allowlist it anyway — the lock is a UI concern, and the currency
+// column is not a privilege.
+const MERCHANT_CONFIG_FIELDS = [
+  'currency', 'shipping', 'pickup_address', 'payment_bank', 'payment_note',
+] as const
+
+export function pickMerchantConfig(body: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const k of MERCHANT_CONFIG_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
+  return out
+}
+
+// Caller's GLOBAL profile (merchant_id IS NULL). EXACT union of the two writers,
+// verified 2026-07-18:
+//   ensureGlobalProfile (store.ts:31, :370) sets: name, email, email_confirmed, referral_code
+//   saveCustomerDetails (store.ts:123, via SavedDetails) sets: whatsapp, delivery_address (jsonb)
+// user_id is FORCED to the caller server-side; app_role / merchant_id / id / created_at are
+// never accepted — service_role bypasses guard_profile_privileges, so this allowlist is the
+// only thing stopping a caller from granting themselves superadmin or attaching to another
+// merchant via a crafted body (Global Constraint 1).
+const PROFILE_FIELDS = [
+  'name', 'email', 'email_confirmed', 'referral_code', 'whatsapp', 'delivery_address',
+] as const
+
+export function pickProfileFields(body: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const k of PROFILE_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
+  return out
+}
+
+// Product upsert. EXACT union of what ProductsManager.tsx actually writes, verified
+// 2026-07-18 against apps/backend/supabase/migrations (20260627120000_multitenant_schema.sql,
+// 20260703183731_product_images.sql, 20260703215939_product_unit_enum.sql,
+// 20260704000000_product_unit_quantity.sql, 20260714200000_product_promo.sql):
+//   editing (ProductsManager.tsx:230) spreads the WHOLE existing row (id, merchant_id, name,
+//     name_zh, descr, descr_zh, price, unit, sort, active, created_at, image_urls, promo_*,
+//     unit_quantity) then overwrites with the form fields + promoFields() + image_urls/price/
+//     unit_quantity;
+//   adding (ProductsManager.tsx:237) writes name, name_zh, descr, price, unit, unit_quantity,
+//     active, promo_price/promo_limit/promo_end, id (draftId), image_urls, merchant_id;
+//   setProductImages (ProductsManager.tsx:268) spreads the whole row + a new image_urls.
+// `id` is kept here per the task's allowlist contract even though the route ALWAYS overrides
+// it with `:productId` afterwards — it is never trusted from this pick alone.
+// merchant_id is FORCED from the route `:id` and is never accepted from the body — the caller
+// passes it in these call sites only because they always also set the URL from the same value.
+// `sort`, `created_at` and `descr_zh` are deliberately EXCLUDED: no call site sets them
+// intentionally, and since upsert's ON CONFLICT DO UPDATE only touches columns present in the
+// payload, dropping them here leaves an edited row's existing values untouched anyway.
+// `promo_sold` is the load-bearing exclusion: it is an anti-double-discount counter that
+// `products_promo_sold_guard` pins for every role EXCEPT service_role/postgres/supabase_admin —
+// and this handler writes through `admin` (service_role), so that trigger no longer protects it.
+// The full-row spread on edit carries a `promo_sold` value along for the ride, and this
+// allowlist dropping it silently is now the ONLY thing stopping a crafted body from resetting or
+// inflating a promo's sold counter (Global Constraint 1).
+const PRODUCT_FIELDS = [
+  'id', 'name', 'name_zh', 'descr', 'price', 'unit', 'unit_quantity', 'active',
+  'image_urls', 'promo_price', 'promo_limit', 'promo_end',
+] as const
+
+export function pickProductFields(body: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const k of PRODUCT_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
+  return out
+}
+
+// Order patch. EXACT union of the three writers in OrdersView.tsx (via store.ts), verified
+// 2026-07-18:
+//   setOrderStatus (store.ts:662) writes { status } — checked against ORDER_STATUSES
+//     client-side already, but that is not a security boundary, so the handler re-validates.
+//   setOrderNote (store.ts:670) writes { note: trimmed || null }.
+//   setOrderTracking (store.ts:678) writes { courier: courier || null, awb: trimmed || null }.
+// Nothing else is accepted — in particular `total`, `user_id`, `order_number`, `merchant_id`
+// stay out: the update goes through `admin` (service_role) with no RLS or trigger backstop,
+// so this allowlist plus the handler's forced `merchant_id === :id` check (Global Constraint 2)
+// are the only things stopping a crafted body from rewriting an order's price or attribution.
+export function pickOrderFields(body: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (body?.status !== undefined) out.status = body.status
+  if (body?.note !== undefined) out.note = String(body.note ?? '').trim() || null
+  if (body?.courier !== undefined) out.courier = body.courier || null
+  if (body?.awb !== undefined) out.awb = String(body.awb ?? '').trim() || null
+  return out
+}

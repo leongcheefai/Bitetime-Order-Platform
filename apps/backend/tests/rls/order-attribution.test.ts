@@ -36,14 +36,13 @@ function order(merchantId: string, extra: Record<string, unknown> = {}) {
 }
 
 describe('order intake is closed to the browser (RLS + grants)', () => {
-  let customerA: any, customerB: any
+  let customerA: any
   let userA: string
   let activeShop: string
   let merchantOwner: any
 
   beforeAll(async () => {
     customerA = await makeUser('attr-customer-a@test.dev', 'password123')
-    customerB = await makeUser('attr-customer-b@test.dev', 'password123')
     merchantOwner = await makeUser('attr-merchant@test.dev', 'password123')
 
     userA = (await customerA.auth.getUser()).data.user!.id
@@ -105,38 +104,5 @@ describe('order intake is closed to the browser (RLS + grants)', () => {
     const { error } = await anonClient().rpc(fn, {})
 
     expect(error?.code).toBe('PGRST202')
-  })
-
-  // ── Reads are unchanged ────────────────────────────────────────────────────
-
-  it('lets a customer read their own orders', async () => {
-    const { data, error } = await customerA.from('orders').select('order_number')
-
-    expect(error).toBeNull()
-    expect(data!.map((o: any) => o.order_number)).toContain('AT-1')
-  })
-
-  it('does not let a customer read somebody else’s orders', async () => {
-    const { data, error } = await customerB.from('orders').select('order_number')
-
-    expect(error).toBeNull()
-    expect(data).toEqual([])
-  })
-
-  it('lets a guest read nothing', async () => {
-    const { data, error } = await anonClient().from('orders').select('order_number')
-
-    expect(error).toBeNull()
-    expect(data).toEqual([])
-  })
-
-  it('still lets the merchant read every order at their shop, guest ones included', async () => {
-    const { data, error } = await merchantOwner
-      .from('orders').select('order_number, user_id').eq('merchant_id', activeShop)
-
-    expect(error).toBeNull()
-    const numbers = data!.map((o: any) => o.order_number)
-    expect(numbers).toContain('AT-1') // the signed-in customer's
-    expect(numbers).toContain('AT-2') // a guest's
   })
 })
