@@ -764,15 +764,18 @@ export async function fetchProducts(merchantId: string) {
   return (await lookupProducts(merchantId)) ?? []
 }
 
+// merchant_id and id are both threaded from `product` — ProductsManager's callers always set
+// both (merchant_id from `merchant!.id`, id from the row or a client-generated draftId) — so
+// the URL carries the same tenant/row identity the backend then forces server-side anyway.
 export async function upsertProduct(product: any) {
-  const { data, error } = await supabase.from('products').upsert(product).select().single()
-  if (error) throw error
-  return data
+  return apiSend<any>(`/api/merchants/${product.merchant_id}/products/${product.id}`, 'PUT', product, { auth: true })
 }
 
-export async function deleteProduct(id: string) {
-  const { error } = await supabase.from('products').delete().eq('id', id)
-  if (error) throw error
+// Signature change: `merchantId` now threads the URL's tenant segment — the backend nests
+// product deletes under /api/merchants/:id/products/:productId (see writes.ts /
+// requireMerchantOwns) so it can verify tenancy before deleting. Callers must pass it.
+export async function deleteProduct(id: string, merchantId: string) {
+  await apiSend(`/api/merchants/${merchantId}/products/${id}`, 'DELETE', undefined, { auth: true })
 }
 
 // ── Product images (Supabase Storage: public `product-images` bucket) ──────────

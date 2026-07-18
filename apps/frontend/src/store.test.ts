@@ -477,44 +477,63 @@ describe('lookupProducts', () => {
   })
 })
 
-// ── upsertProduct (Task 4.1) ──────────────────────────────────────────────────
+// ── upsertProduct (Task 5) ────────────────────────────────────────────────────
 
 describe('upsertProduct', () => {
-  it('upserts the product and returns the single row', async () => {
-    const product = { name: 'Cookie', merchant_id: 'm1' }
-    const saved = { id: 'p1', ...product }
-    __mocks.single.mockResolvedValueOnce({ data: saved, error: null })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('PUTs /api/merchants/:merchant_id/products/:id with a bearer token, returns the saved row', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const product = { id: 'p1', name: 'Cookie', merchant_id: 'm1', price: 5 }
+    const saved = { ...product }
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true, json: async () => saved, text: async () => JSON.stringify(saved),
+    })
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await upsertProduct(product)
 
-    expect(__mocks.from).toHaveBeenCalledWith('products')
-    expect(__mocks.upsert).toHaveBeenCalledWith(product)
-    expect(__mocks.upsertSelect).toHaveBeenCalled()
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/products\/p1$/)
+    expect(init.method).toBe('PUT')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    expect(JSON.parse(init.body)).toEqual(product)
     expect(result).toEqual(saved)
   })
 
-  it('throws on DB error', async () => {
-    __mocks.single.mockResolvedValueOnce({ data: null, error: new Error('write failed') })
-    await expect(upsertProduct({ name: 'x', merchant_id: 'm1' })).rejects.toThrow('write failed')
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'Upsert failed' }),
+    }))
+    await expect(upsertProduct({ id: 'p1', name: 'x', merchant_id: 'm1' })).rejects.toThrow('Upsert failed')
   })
 })
 
-// ── deleteProduct (Task 4.1) ──────────────────────────────────────────────────
+// ── deleteProduct (Task 5) ────────────────────────────────────────────────────
 
 describe('deleteProduct', () => {
-  it('calls delete().eq(id) on products table', async () => {
-    __mocks.deleteEq.mockResolvedValueOnce({ error: null })
+  afterEach(() => vi.unstubAllGlobals())
 
-    await deleteProduct('p1')
+  it('DELETEs /api/merchants/:merchantId/products/:id with a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
 
-    expect(__mocks.from).toHaveBeenCalledWith('products')
-    expect(__mocks.del).toHaveBeenCalled()
-    expect(__mocks.deleteEq).toHaveBeenCalledWith('id', 'p1')
+    await deleteProduct('p1', 'm1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/products\/p1$/)
+    expect(init.method).toBe('DELETE')
+    expect(init.headers.Authorization).toBe('Bearer tok')
   })
 
-  it('throws on DB error', async () => {
-    __mocks.deleteEq.mockResolvedValueOnce({ error: new Error('delete failed') })
-    await expect(deleteProduct('p1')).rejects.toThrow('delete failed')
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: false, json: async () => ({ error: 'Delete failed' }),
+    }))
+    await expect(deleteProduct('p1', 'm1')).rejects.toThrow('Delete failed')
   })
 })
 

@@ -31,7 +31,7 @@ import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
 import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode, RESERVED_SLUGS } from './slug.js'
-import { pickMerchantConfig, pickProfileFields } from './writes.js'
+import { pickMerchantConfig, pickProfileFields, pickProductFields } from './writes.js'
 
 export const app = new Hono<AppEnv>()
 
@@ -267,6 +267,34 @@ app.get('/api/merchants/:id/products', async (c) => {
   // A 5xx here is the client's "could not ask" signal — do NOT return [] on error.
   if (error) return c.json({ error: 'Lookup failed' }, 500)
   return c.json(data ?? [])
+})
+
+// Product upsert. The write goes through `admin` (service_role), so pickProductFields is the
+// ONLY guard against a crafted body writing merchant_id (forced to :id here, never read from
+// the body) or promo_sold (see writes.ts — the trigger that pins it for other roles does not
+// run for service_role). requireMerchantOwns only proves the caller owns :id; there is no
+// separate tenancy check to make here because the row's merchant_id is FORCED, not read.
+app.put('/api/merchants/:id/products/:productId', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const productId = c.req.param('productId')
+  const row = { ...pickProductFields(await c.req.json().catch(() => ({}))), id: productId, merchant_id: id }
+  const { data, error } = await admin.from('products').upsert(row).select().single()
+  if (error) return c.json({ error: 'Upsert failed' }, 500)
+  return c.json(data)
+})
+
+// Product delete. requireMerchantOwns only proves the caller owns :id — it says nothing about
+// productId, so an owner of shop A could otherwise delete shop B's product by nesting it under
+// :id = A. Loading the product and checking merchant_id === :id before deleting is what closes
+// that hole (Global Constraint 2).
+app.delete('/api/merchants/:id/products/:productId', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const productId = c.req.param('productId')
+  const { data: existing } = await admin.from('products').select('merchant_id').eq('id', productId).maybeSingle()
+  if (!existing || existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
+  const { error } = await admin.from('products').delete().eq('id', productId)
+  if (error) return c.json({ error: 'Delete failed' }, 500)
+  return c.json({ ok: true })
 })
 
 app.get('/api/merchants/:id/vouchers/:code', async (c) => {

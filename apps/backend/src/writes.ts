@@ -38,3 +38,38 @@ export function pickProfileFields(body: any): Record<string, unknown> {
   for (const k of PROFILE_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
   return out
 }
+
+// Product upsert. EXACT union of what ProductsManager.tsx actually writes, verified
+// 2026-07-18 against apps/backend/supabase/migrations (20260627120000_multitenant_schema.sql,
+// 20260703183731_product_images.sql, 20260703215939_product_unit_enum.sql,
+// 20260704000000_product_unit_quantity.sql, 20260714200000_product_promo.sql):
+//   editing (ProductsManager.tsx:230) spreads the WHOLE existing row (id, merchant_id, name,
+//     name_zh, descr, descr_zh, price, unit, sort, active, created_at, image_urls, promo_*,
+//     unit_quantity) then overwrites with the form fields + promoFields() + image_urls/price/
+//     unit_quantity;
+//   adding (ProductsManager.tsx:237) writes name, name_zh, descr, price, unit, unit_quantity,
+//     active, promo_price/promo_limit/promo_end, id (draftId), image_urls, merchant_id;
+//   setProductImages (ProductsManager.tsx:268) spreads the whole row + a new image_urls.
+// `id` is kept here per the task's allowlist contract even though the route ALWAYS overrides
+// it with `:productId` afterwards — it is never trusted from this pick alone.
+// merchant_id is FORCED from the route `:id` and is never accepted from the body — the caller
+// passes it in these call sites only because they always also set the URL from the same value.
+// `sort`, `created_at` and `descr_zh` are deliberately EXCLUDED: no call site sets them
+// intentionally, and since upsert's ON CONFLICT DO UPDATE only touches columns present in the
+// payload, dropping them here leaves an edited row's existing values untouched anyway.
+// `promo_sold` is the load-bearing exclusion: it is an anti-double-discount counter that
+// `products_promo_sold_guard` pins for every role EXCEPT service_role/postgres/supabase_admin —
+// and this handler writes through `admin` (service_role), so that trigger no longer protects it.
+// The full-row spread on edit carries a `promo_sold` value along for the ride, and this
+// allowlist dropping it silently is now the ONLY thing stopping a crafted body from resetting or
+// inflating a promo's sold counter (Global Constraint 1).
+const PRODUCT_FIELDS = [
+  'id', 'name', 'name_zh', 'descr', 'price', 'unit', 'unit_quantity', 'active',
+  'image_urls', 'promo_price', 'promo_limit', 'promo_end',
+] as const
+
+export function pickProductFields(body: any): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const k of PRODUCT_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
+  return out
+}

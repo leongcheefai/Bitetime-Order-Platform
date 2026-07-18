@@ -268,7 +268,7 @@ export default function ProductsManager() {
     await upsertProduct({ ...p, image_urls }); await load()
   }
   async function remove(p: any) {
-    await deleteProduct(p.id)
+    await deleteProduct(p.id, merchant!.id)
     if (p.image_urls?.length) { try { await deleteProductImages(p.image_urls) } catch { /* best-effort */ } }
     await load(); toast.success(t('Product deleted', '产品已删除'))
   }
