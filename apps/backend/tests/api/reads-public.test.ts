@@ -52,4 +52,12 @@ describe('public reads', () => {
     expect(miss.status).toBe(200)
     expect(await miss.json()).toBeNull()
   })
+
+  it('returns 500 when the merchant id is a malformed uuid (could-not-ask, not empty)', async () => {
+    const products = await get('/api/merchants/not-a-uuid/products')
+    expect(products.status).toBe(500)
+
+    const voucher = await get('/api/merchants/not-a-uuid/vouchers/ANYCODE')
+    expect(voucher.status).toBe(500)
+  })
 })
