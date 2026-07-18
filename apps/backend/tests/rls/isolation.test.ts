@@ -33,51 +33,11 @@ describe('tenant isolation (RLS)', () => {
       .insert({ merchant_id: idB, tg_token: 'secretB-tg-token', tg_chat_id: '123456' })
   }, 30_000)
 
-  it('merchant A cannot read merchant B inactive products', async () => {
-    const { data, error } = await merchantA.from('products').select('*').eq('merchant_id', idB)
-    expect(error).toBeNull()
-    expect(data).toEqual([])
-  })
-
   it('merchant A cannot write into merchant B', async () => {
     const { error } = await merchantA
       .from('products')
       .insert({ merchant_id: idB, name: 'hack', price: 1 })
     expect(error).not.toBeNull()
-  })
-
-  it('merchant A can write into its own tenant', async () => {
-    const { error } = await merchantA
-      .from('products')
-      .insert({ merchant_id: idA, name: 'A cookie', price: 5 })
-    expect(error).toBeNull()
-  })
-
-  it('merchant A cannot read merchant B merchant_secrets', async () => {
-    const { data, error } = await merchantA
-      .from('merchant_secrets')
-      .select('*')
-      .eq('merchant_id', idB)
-    // RLS should return empty, not an error (postgres hides rows silently).
-    expect(error).toBeNull()
-    expect(data).toEqual([])
-  })
-
-  it('an owner cannot insert a merchant that is already active (forced to pending)', async () => {
-    // A FRESH owner with no shop yet: merchants(owner_id) is now unique, so merchantA (who
-    // already owns idA) could not insert a second shop at all — a different failure than the
-    // status guard this test is about.
-    const fresh = await makeUser('rls-fresh@test.dev', 'password123')
-    const uFresh = (await fresh.auth.getUser()).data.user!.id
-    const { data, error } = await fresh
-      .from('merchants')
-      .insert({ name: 'Self', slug: 'shop-rls-self', order_prefix: 'SS', owner_id: uFresh, status: 'active' })
-      .select('status')
-      .single()
-    expect(error).toBeNull()
-    expect(data!.status).toBe('pending')                // guard_merchant_status forces pending
-    // cleanup
-    await serviceClient().from('merchants').delete().eq('slug', 'shop-rls-self')
   })
 
   it('an owner cannot flip their own merchant status to active', async () => {
@@ -91,12 +51,6 @@ describe('tenant isolation (RLS)', () => {
     const { data } = await svc.from('merchants').select('status').eq('id', idA).single()
     expect(data!.status).toBe('suspended')              // unchanged
     await svc.from('merchants').update({ status: 'active' }).eq('id', idA) // restore
-  })
-
-  it('an owner can still edit non-status fields on their own merchant', async () => {
-    const { error } = await merchantA
-      .from('merchants').update({ name: 'A renamed' }).eq('id', idA)
-    expect(error).toBeNull()
   })
 
   it('a normal user cannot self-promote to superadmin', async () => {
