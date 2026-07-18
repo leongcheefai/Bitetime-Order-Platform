@@ -14,6 +14,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { env } from './env.js'
 import { admin, getUserFromToken } from './supabase.js'
+import { requireUser, requireSuperadmin, requireMerchantOwns, type AppEnv } from './mw.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
 import { upsertBilling, setMerchantStatus, billingFromSubscription } from './billing.js'
 import { canStartTrial, buildTrialReminderEmail } from './billingLifecycle.js'
@@ -30,9 +31,11 @@ import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
 
-export const app = new Hono()
+export const app = new Hono<AppEnv>()
 
 app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['POST', 'GET', 'OPTIONS'] }))
+
+const ORDER_HISTORY_LIMIT = 20
 
 app.get('/health', (c) => c.json({ ok: true }))
 
@@ -72,6 +75,120 @@ app.get('/api/pricing', async (c) => {
     console.error('Pricing resolution failed:', err instanceof Error ? err.message : String(err))
     return c.json({ error: 'Pricing unavailable' }, 502)
   }
+})
+
+// ── Superadmin reads ──────────────────────────────────────────────────────────
+app.get('/api/merchants', requireSuperadmin, async (c) => {
+  const { data, error } = await admin
+    .from('merchants').select('*').order('created_at', { ascending: false })
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+app.get('/api/billing', requireSuperadmin, async (c) => {
+  const { data, error } = await admin.from('merchant_billing').select('*')
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+// ── Owner-scoped reads (tenant enforced by requireMerchantOwns) ────────────────
+app.get('/api/merchants/:id/orders', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { data, error } = await admin
+    .from('orders').select('*').eq('merchant_id', m.id).order('created_at', { ascending: false })
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+app.get('/api/merchants/:id/orders/count', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { count, error } = await admin
+    .from('orders').select('id', { count: 'exact', head: true }).eq('merchant_id', m.id)
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json({ count: count ?? 0 })
+})
+
+app.get('/api/merchants/:id/vouchers', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { data, error } = await admin.from('vouchers').select('*').eq('merchant_id', m.id)
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+app.get('/api/merchants/:id/billing', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { data, error } = await admin
+    .from('merchant_billing').select('*').eq('merchant_id', m.id).maybeSingle()
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? null)
+})
+
+app.get('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { data, error } = await admin
+    .from('merchant_secrets').select('tg_token, tg_chat_id').eq('merchant_id', m.id).maybeSingle()
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? null)
+})
+
+// ── User-scoped reads ─────────────────────────────────────────────────────────
+app.get('/api/me/profile', requireUser, async (c) => {
+  const user = c.get('user')
+  const { data } = await admin
+    .from('profiles')
+    .select('id, name, email, app_role, merchant_id, whatsapp, delivery_address')
+    .eq('user_id', user.id).is('merchant_id', null).maybeSingle()
+  return c.json(data ?? null)
+})
+
+app.get('/api/me/merchant', requireUser, async (c) => {
+  const user = c.get('user')
+  const { data } = await admin.from('merchants').select('*').eq('owner_id', user.id).maybeSingle()
+  return c.json(data ?? null)
+})
+
+// Any signed-in customer's own history at a shop. NOT requireMerchantOwns — the uid filter,
+// not merchant ownership, is what scopes it. A guest (no token) is 401 and has no history.
+app.get('/api/merchants/:id/my-orders', requireUser, async (c) => {
+  const user = c.get('user')
+  const id = c.req.param('id')
+  const { data, error } = await admin
+    .from('orders').select('*')
+    .eq('merchant_id', id).eq('user_id', user.id)
+    .order('created_at', { ascending: false }).limit(ORDER_HISTORY_LIMIT)
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+// ── Public reads (no auth — storefront) ───────────────────────────────────────
+// Shaped: strip internal columns before returning to an unauthenticated caller.
+app.get('/api/merchants/:slug', async (c) => {
+  const s = (c.req.param('slug') || '').trim().toLowerCase()
+  if (!s) return c.json(null)
+  const { data, error } = await admin.from('merchants').select('*').eq('slug', s).maybeSingle()
+  if (error || !data) return c.json(null)
+  const { owner_id: _owner_id, referred_by_code: _referred_by_code, ...pub } = data
+  return c.json(pub)
+})
+
+app.get('/api/merchants/:id/products', async (c) => {
+  const id = c.req.param('id')
+  const { data, error } = await admin
+    .from('products').select('*').eq('merchant_id', id)
+    .order('sort', { ascending: true }).order('created_at', { ascending: true })
+  // A 5xx here is the client's "could not ask" signal — do NOT return [] on error.
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+app.get('/api/merchants/:id/vouchers/:code', async (c) => {
+  const id = c.req.param('id')
+  const code = c.req.param('code')
+  const { data, error } = await admin
+    .from('vouchers').select('*').eq('merchant_id', id).eq('code', code).maybeSingle()
+  // Same contract: 5xx = could-not-ask; 200 null = shop has no such voucher.
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? null)
 })
 
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────
@@ -146,24 +263,15 @@ app.post('/api/checkout', async (c) => {
 // cancels itself at trial end (missing_payment_method: 'cancel'), which drives
 // the existing subscription.deleted → suspended webhook path. Trials are granted
 // here and only here — Checkout never grants one.
-app.post('/api/admin/approve-merchant', async (c) => {
-  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+app.post('/api/admin/approve-merchant', requireSuperadmin, async (c) => {
   const { merchantId } = await c.req.json().catch(() => ({}))
   if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
 
-  // These reads are independent — the caller's identity (auth → profile) gates the
-  // mutation, while the target merchant + its billing load in parallel. merchant_billing
-  // keys on the merchants PK, so both use merchantId directly. Run them concurrently to
-  // save cross-network round-trips (Railway → Supabase); nothing is mutated until authz passes.
-  const authPromise = getUserFromToken(token).then(async (user) => {
-    if (!user) return { user: null, profile: null }
-    // profiles identity lives in user_id (id is a surrogate PK since the P0 restructure).
-    const { data: profile } = await admin
-      .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
-    return { user, profile }
-  })
-  const [{ user, profile }, merchantRes, billingRes] = await Promise.all([
-    authPromise,
+  // These reads are independent — the target merchant + its billing load in parallel.
+  // merchant_billing keys on the merchants PK, so both use merchantId directly. Run them
+  // concurrently to save cross-network round-trips (Railway → Supabase); requireSuperadmin
+  // has already gated the caller before this handler runs.
+  const [merchantRes, billingRes] = await Promise.all([
     admin
       .from('merchants')
       .select('id, name, status, plan, billing_cycle, billing_region, owner_id')
@@ -171,11 +279,6 @@ app.post('/api/admin/approve-merchant', async (c) => {
       .maybeSingle(),
     admin.from('merchant_billing').select('*').eq('merchant_id', merchantId).maybeSingle(),
   ])
-
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors SessionContext).
-  const isSuper = profile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
-  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
 
   const { data: merchant, error } = merchantRes
   if (error) return c.json({ error: 'Lookup failed' }, 500)
@@ -269,16 +372,7 @@ app.post('/api/admin/approve-merchant', async (c) => {
 // so the admin console can no longer flip it through PostgREST — these writes must
 // come through here. Covers Reject (pending→suspended), Suspend (active→suspended),
 // and Reactivate (suspended→active). Trial-granting stays in approve-merchant.
-app.post('/api/admin/set-merchant-status', async (c) => {
-  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
-  const user = await getUserFromToken(token)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-  const { data: callerProfile } = await admin
-    .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
-  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors approve-merchant).
-  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
-  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
-
+app.post('/api/admin/set-merchant-status', requireSuperadmin, async (c) => {
   const { merchantId, status } = await c.req.json().catch(() => ({}))
   if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
   // 'pending' is never a manual target — it is reached only by revert paths.
@@ -308,16 +402,7 @@ app.post('/api/admin/set-merchant-status', async (c) => {
 // console (set-merchant-status → suspended). If the merchant already carries a
 // real Stripe subscription this overwrites its local status to active — don't comp
 // a paying shop.
-app.post('/api/admin/comp-merchant', async (c) => {
-  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
-  const user = await getUserFromToken(token)
-  if (!user) return c.json({ error: 'Unauthorized' }, 401)
-  const { data: callerProfile } = await admin
-    .from('profiles').select('app_role').eq('user_id', user.id).maybeSingle()
-  // TODO(P3): drop the email fallback once superadmin role is seeded (mirrors approve-merchant).
-  const isSuper = callerProfile?.app_role === 'superadmin' || user.email === 'bitetime@praxor.dev'
-  if (!isSuper) return c.json({ error: 'Forbidden' }, 403)
-
+app.post('/api/admin/comp-merchant', requireSuperadmin, async (c) => {
   const { merchantId } = await c.req.json().catch(() => ({}))
   if (!merchantId) return c.json({ error: 'Missing merchantId' }, 400)
 
