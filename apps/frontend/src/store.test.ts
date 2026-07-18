@@ -91,6 +91,8 @@ import {
   fetchAllMerchants,
   setMerchantStatus,
   fetchProducts,
+  lookupProducts,
+  lookupMerchantVoucher,
   upsertProduct,
   deleteProduct,
   updateMerchantConfig,
@@ -407,40 +409,62 @@ describe('setMerchantStatus', () => {
 // ── fetchProducts (Task 4.1) ───────────────────────────────────────────────────
 
 describe('fetchProducts', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   it('returns empty array immediately when merchantId is falsy', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
     expect(await fetchProducts(null as any)).toEqual([])
     expect(await fetchProducts('')).toEqual([])
-    expect(__mocks.from).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('queries products by merchant_id, ordered by sort then created_at', async () => {
+  it('GETs /api/merchants/:id/products with no auth header and returns the rows', async () => {
     const rows = [{ id: 'p1', sort: 0 }, { id: 'p2', sort: 1 }]
-    __mocks.order
-      .mockReturnValueOnce({ order: __mocks.order }) // first .order() → chainable
-      .mockResolvedValueOnce({ data: rows, error: null }) // second .order() → terminal
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => rows })
+    vi.stubGlobal('fetch', fetchMock)
 
     const result = await fetchProducts('m1')
 
-    expect(__mocks.from).toHaveBeenCalledWith('products')
-    expect(__mocks.select).toHaveBeenCalledWith('*')
-    expect(__mocks.eq).toHaveBeenCalledWith('merchant_id', 'm1')
-    expect(__mocks.order).toHaveBeenNthCalledWith(1, 'sort', { ascending: true })
-    expect(__mocks.order).toHaveBeenNthCalledWith(2, 'created_at', { ascending: true })
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/products$/)
+    expect(init.headers).toEqual({})
     expect(result).toEqual(rows)
   })
 
-  it('returns empty array on DB error', async () => {
-    __mocks.order
-      .mockReturnValueOnce({ order: __mocks.order })
-      .mockResolvedValueOnce({ data: null, error: { message: 'fail' } })
+  it('returns empty array on a failed request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
     expect(await fetchProducts('m1')).toEqual([])
   })
+})
 
-  it('returns empty array when data is null with no error', async () => {
-    __mocks.order
-      .mockReturnValueOnce({ order: __mocks.order })
-      .mockResolvedValueOnce({ data: null, error: null })
-    expect(await fetchProducts('m1')).toEqual([])
+// `lookupProducts` carries the null-vs-"could not ask" contract that `fetchProducts` (above)
+// collapses with `?? []`. A 200 with `[]` is a real answer (the shop sells nothing); a failed
+// request is not an answer at all and must come back as `null`, never `[]`.
+describe('lookupProducts', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns [] immediately when merchantId is falsy, without hitting the network', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await lookupProducts(null as any)).toEqual([])
+    expect(await lookupProducts('')).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('returns [] on a 200 with an empty menu (the real answer: the shop sells nothing)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => [] }))
+    expect(await lookupProducts('m1')).toEqual([])
+  })
+
+  it('returns null when the request fails to resolve (network/CORS rejection) — could not ask', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')))
+    expect(await lookupProducts('m1')).toBeNull()
+  })
+
+  it('returns null on a non-ok response — could not ask', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
+    expect(await lookupProducts('m1')).toBeNull()
   })
 })
 
@@ -960,6 +984,44 @@ describe('fetchMerchantVouchers', () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
     expect(await fetchMerchantVouchers('m1')).toEqual([])
+  })
+})
+
+// `lookupMerchantVoucher` carries the same null-vs-"could not ask" contract as `lookupProducts`:
+// a 200 with a null body is a real answer (the shop has no such voucher), while a failed
+// request must come back as `{ ok:false }`, never collapsed onto "no voucher".
+describe('lookupMerchantVoucher', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('returns { ok:true, voucher:null } immediately when merchantId or code is falsy, without hitting the network', async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await lookupMerchantVoucher('', 'CODE')).toEqual({ ok: true, voucher: null })
+    expect(await lookupMerchantVoucher('m1', '')).toEqual({ ok: true, voucher: null })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('GETs /api/merchants/:id/vouchers/:code with no auth header and maps a found row', async () => {
+    const row = { id: 'v1', code: 'A', kind: 'fixed', amount: 5, used_by: [] }
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => row })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await lookupMerchantVoucher('m1', 'A')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/vouchers\/A$/)
+    expect(init.headers).toEqual({})
+    expect(result).toEqual({ ok: true, voucher: { id: 'v1', code: 'A', type: 'fixed', value: 5, maxUses: null, usedBy: [] } })
+  })
+
+  it('returns { ok:true, voucher:null } on a 200 with a null body (the real answer: no such voucher)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => null }))
+    expect(await lookupMerchantVoucher('m1', 'MISSING')).toEqual({ ok: true, voucher: null })
+  })
+
+  it('returns { ok:false } on a failed request — could not ask', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
+    expect(await lookupMerchantVoucher('m1', 'A')).toEqual({ ok: false })
   })
 })
 

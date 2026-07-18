@@ -456,11 +456,9 @@ export type VoucherLookup =
 
 export async function lookupMerchantVoucher(merchantId: string, code: string): Promise<VoucherLookup> {
   if (!merchantId || !code) return { ok: true, voucher: null };
-  const { data, error } = await supabase
-    .from('vouchers').select('*')
-    .eq('merchant_id', merchantId).eq('code', code).maybeSingle();
-  if (error) return { ok: false };
-  return { ok: true, voucher: data ? voucherFromRow(data) : null };
+  const r = await apiTry<any>(`/api/merchants/${merchantId}/vouchers/${encodeURIComponent(code)}`);
+  if (!r.ok) return { ok: false };            // could not ask → caller changes nothing
+  return { ok: true, voucher: r.data ? voucherFromRow(r.data) : null };
 }
 
 // Fetch one voucher by code with its current used_by, bypassing any stale
@@ -792,11 +790,10 @@ export async function fetchMerchantCustomers(merchantId: string) {
  */
 export async function lookupProducts(merchantId: string) {
   if (!merchantId) return []
-  const { data, error } = await supabase
-    .from('products').select('*').eq('merchant_id', merchantId)
-    .order('sort', { ascending: true }).order('created_at', { ascending: true })
-  if (error) return null
-  return data ?? []
+  const r = await apiTry<any[]>(`/api/merchants/${merchantId}/products`)
+  // r.ok === false is the "could not ask" case → null, exactly as the comment above demands.
+  // A 200 with [] is the real answer (the shop sells nothing) and must NOT become null.
+  return r.ok ? r.data : null
 }
 
 // The menu, with a failure reported as an empty shop. Kept for the callers that only DISPLAY
