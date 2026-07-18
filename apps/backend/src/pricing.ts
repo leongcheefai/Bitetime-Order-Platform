@@ -32,6 +32,9 @@ export async function fetchBasePricing(deps: {
 }): Promise<PricingPayload> {
   const amountOf = async (plan: Plan, cycle: Cycle) => {
     const price = await deps.retrievePrice(priceId(deps.prices, plan, cycle))
+    if (price.currency.toLowerCase() !== 'myr') {
+      throw new Error(`Price for ${plan}/${cycle} is ${price.currency.toUpperCase()}, expected MYR`)
+    }
     return (price.unit_amount ?? 0) / 100
   }
 

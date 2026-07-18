@@ -32,6 +32,16 @@ describe('fetchBasePricing', () => {
       },
     })
   })
+
+  it('rejects when a retrieved Stripe Price is not MYR', async () => {
+    const usdRetrieve = async (id: string) => ({
+      unit_amount: AMOUNTS[id],
+      currency: id === 'p_pm' ? 'usd' : 'myr',
+    })
+    await expect(fetchBasePricing({ prices: PRICES, retrievePrice: usdRetrieve })).rejects.toThrow(
+      /pro\/monthly is USD, expected MYR/,
+    )
+  })
 })
 
 describe('createPricingCache', () => {

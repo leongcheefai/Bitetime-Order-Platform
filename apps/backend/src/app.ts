@@ -475,7 +475,7 @@ app.post('/api/admin/approve-merchant', requireSuperadmin, async (c) => {
   const [merchantRes, billingRes] = await Promise.all([
     admin
       .from('merchants')
-      .select('id, name, status, plan, billing_cycle, billing_region, owner_id')
+      .select('id, name, status, plan, billing_cycle, owner_id')
       .eq('id', merchantId)
       .maybeSingle(),
     admin.from('merchant_billing').select('*').eq('merchant_id', merchantId).maybeSingle(),
