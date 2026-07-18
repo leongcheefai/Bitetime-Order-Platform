@@ -89,6 +89,46 @@ app.get('/api/billing', requireSuperadmin, async (c) => {
   return c.json(data ?? [])
 })
 
+// ── Owner-scoped reads (tenant enforced by requireMerchantOwns) ────────────────
+app.get('/api/merchants/:id/orders', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { data, error } = await admin
+    .from('orders').select('*').eq('merchant_id', m.id).order('created_at', { ascending: false })
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+app.get('/api/merchants/:id/orders/count', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { count, error } = await admin
+    .from('orders').select('id', { count: 'exact', head: true }).eq('merchant_id', m.id)
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json({ count: count ?? 0 })
+})
+
+app.get('/api/merchants/:id/vouchers', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { data, error } = await admin.from('vouchers').select('*').eq('merchant_id', m.id)
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+app.get('/api/merchants/:id/billing', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { data, error } = await admin
+    .from('merchant_billing').select('*').eq('merchant_id', m.id).maybeSingle()
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? null)
+})
+
+app.get('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  const { data, error } = await admin
+    .from('merchant_secrets').select('tg_token, tg_chat_id').eq('merchant_id', m.id).maybeSingle()
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? null)
+})
+
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────
 app.post('/api/checkout', async (c) => {
   const body = await c.req.json().catch(() => ({}))
