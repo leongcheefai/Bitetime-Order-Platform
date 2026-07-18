@@ -160,6 +160,37 @@ app.get('/api/merchants/:id/my-orders', requireUser, async (c) => {
   return c.json(data ?? [])
 })
 
+// ── Public reads (no auth — storefront) ───────────────────────────────────────
+// Shaped: strip internal columns before returning to an unauthenticated caller.
+app.get('/api/merchants/:slug', async (c) => {
+  const s = (c.req.param('slug') || '').trim().toLowerCase()
+  if (!s) return c.json(null)
+  const { data, error } = await admin.from('merchants').select('*').eq('slug', s).maybeSingle()
+  if (error || !data) return c.json(null)
+  const { owner_id, referred_by_code, ...pub } = data
+  return c.json(pub)
+})
+
+app.get('/api/merchants/:id/products', async (c) => {
+  const id = c.req.param('id')
+  const { data, error } = await admin
+    .from('products').select('*').eq('merchant_id', id)
+    .order('sort', { ascending: true }).order('created_at', { ascending: true })
+  // A 5xx here is the client's "could not ask" signal — do NOT return [] on error.
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+app.get('/api/merchants/:id/vouchers/:code', async (c) => {
+  const id = c.req.param('id')
+  const code = c.req.param('code')
+  const { data, error } = await admin
+    .from('vouchers').select('*').eq('merchant_id', id).eq('code', code).maybeSingle()
+  // Same contract: 5xx = could-not-ask; 200 null = shop has no such voucher.
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? null)
+})
+
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────
 app.post('/api/checkout', async (c) => {
   const body = await c.req.json().catch(() => ({}))
