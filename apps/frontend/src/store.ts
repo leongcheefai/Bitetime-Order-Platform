@@ -107,7 +107,7 @@ async function ensureGlobalProfile(fields: {
   return error;
 }
 
-export async function fetchProfileByUserId(userId: string) {
+export async function fetchProfileByUserId(_userId: string) {
   const r = await apiTry<any>('/api/me/profile', { auth: true })
   return r.ok ? r.data : null
 }

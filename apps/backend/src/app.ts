@@ -167,7 +167,7 @@ app.get('/api/merchants/:slug', async (c) => {
   if (!s) return c.json(null)
   const { data, error } = await admin.from('merchants').select('*').eq('slug', s).maybeSingle()
   if (error || !data) return c.json(null)
-  const { owner_id, referred_by_code, ...pub } = data
+  const { owner_id: _owner_id, referred_by_code: _referred_by_code, ...pub } = data
   return c.json(pub)
 })
 

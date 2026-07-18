@@ -4,7 +4,7 @@
 // RLS-exempt, so requireMerchantOwns is the only thing enforcing this.
 import { describe, it, expect, beforeAll } from 'vitest'
 import { app } from '../../src/app.js'
-import { makeUser, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
+import { makeUser, seedMerchant, serviceClient } from '../rls/helpers.js'
 
 async function tokenOf(client: Awaited<ReturnType<typeof makeUser>>) {
   const { data } = await client.auth.getSession()
