@@ -25,7 +25,7 @@ export const env = {
   // Email (Resend). Optional: when the key is unset, sends are skipped with a
   // warning so local dev works without an email account.
   resendApiKey: process.env.RESEND_API_KEY || '',
-  emailFrom: process.env.EMAIL_FROM || 'BiteTime <onboarding@resend.dev>',
+  emailFrom: process.env.EMAIL_FROM || 'TinyOrder <onboarding@resend.dev>',
 
   // Stripe Price IDs per billing region, keyed by `${plan}_${cycle}`. US is the
   // default and required. MY is optional: when its Price IDs are unset the app

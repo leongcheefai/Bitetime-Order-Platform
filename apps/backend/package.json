@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "BiteTime billing backend — Hono + Stripe + Supabase",
+  "description": "TinyOrder billing backend — Hono + Stripe + Supabase",
   "scripts": {
     "dev": "node --import jiti/register --watch --env-file=.env src/index.ts",
     "start": "node dist/server.js",

@@ -67,5 +67,5 @@ enable_confirmations = false
 # into an account — so custom SMTP (Resend, verified sending domain) must be enabled on the project
 # before this ships. Auth mail currently rides Supabase's testing-only sender.
 [auth.email.template.recovery]
-subject = "Reset your BiteTime password / 重设你的 BiteTime 密码"
+subject = "Reset your TinyOrder password / 重设你的 TinyOrder 密码"
 content_path = "./supabase/templates/recovery.html"

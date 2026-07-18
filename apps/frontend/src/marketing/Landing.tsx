@@ -99,7 +99,7 @@ export default function Landing() {
       {/* ── Nav bar ── */}
       <nav className="flex items-center justify-between px-8 py-5 border-b border-clay-border max-[600px]:px-5 max-[600px]:py-4">
         <span className="font-heading text-[22px] font-medium text-oxblood tracking-[0.3px]">
-          BiteTime
+          TinyOrder
         </span>
         <div className="flex items-center gap-5">
           <a href="#pricing" className={navLink}>
@@ -177,8 +177,8 @@ export default function Landing() {
           <HeroItem>
             <p className="text-base leading-[1.7] text-ink-soft max-w-[560px] mx-auto mb-9">
               {t(
-                'Orders get lost across chats and screenshots. BiteTime gives you one branded storefront link — so every order lands in one place and you look the part.',
-                '订单散落在各种聊天和截图里。BiteTime 给你一个专属店面链接——所有订单集中一处，让你更专业。'
+                'Orders get lost across chats and screenshots. TinyOrder gives you one branded storefront link — so every order lands in one place and you look the part.',
+                '订单散落在各种聊天和截图里。TinyOrder 给你一个专属店面链接——所有订单集中一处，让你更专业。'
               )}
             </p>
           </HeroItem>
@@ -381,7 +381,7 @@ export default function Landing() {
 
       {/* ── Footer ── */}
       <footer className="mt-auto px-8 py-6 border-t border-clay-border flex items-center justify-center gap-3 text-[13px] text-text-tertiary">
-        <span className="font-heading text-oxblood font-medium">BiteTime</span>
+        <span className="font-heading text-oxblood font-medium">TinyOrder</span>
         <span className="text-clay-border">·</span>
         <span>{t('Built for food businesses', '专为食品业者打造')}</span>
       </footer>

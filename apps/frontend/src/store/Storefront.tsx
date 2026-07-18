@@ -694,7 +694,7 @@ export default function Storefront() {
             <div>
               <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">{merchant.name}</h1>
               <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">
-                {t('Powered by BiteTime', 'BiteTime 提供技术支持')}
+                {t('Powered by TinyOrder', 'TinyOrder 提供技术支持')}
               </p>
               <div className="flex items-center gap-3 mt-1">
                 {account ? (

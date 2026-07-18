@@ -6,5 +6,5 @@ import { env } from './env.js'
 // app to a port — the routes live in app.ts, which stays importable without starting a
 // server so tests/api can drive it in-process.
 serve({ fetch: app.fetch, port: env.port }, (info) => {
-  console.log(`BiteTime billing server on http://localhost:${info.port}`)
+  console.log(`TinyOrder billing server on http://localhost:${info.port}`)
 })

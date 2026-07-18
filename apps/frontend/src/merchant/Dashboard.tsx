@@ -45,7 +45,7 @@ function DashboardInner() {
 
   return (
     <DashboardShell
-      logo="BiteTime"
+      logo="TinyOrder"
       title={merchant!.name}
       role={role === 'superadmin' ? t('Viewing as shop', '以店铺身份查看') : t('Merchant', '商家')}
       nav={nav}

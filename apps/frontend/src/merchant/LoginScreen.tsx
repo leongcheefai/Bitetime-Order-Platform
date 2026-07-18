@@ -24,7 +24,7 @@ export default function LoginScreen() {
   return (
     <div className="w-[420px] max-w-[calc(100vw-2rem)] pt-8">
       <div className="text-center mb-10">
-        <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">BiteTime</h1>
+        <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">TinyOrder</h1>
         <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">{t('Merchant Portal', '商家入口')}</p>
       </div>
       <Card className="rounded-pill px-8 pt-8 pb-7 gap-0">

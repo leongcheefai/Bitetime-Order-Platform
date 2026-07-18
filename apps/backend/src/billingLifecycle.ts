@@ -28,7 +28,7 @@ export function buildTrialReminderEmail({ shopName, trialEndsAt, dashboardUrl }:
       timeStyle: 'short',
       timeZone: 'UTC',
     }) + ' UTC'
-  const subject = `Your BiteTime trial for ${shopName} ends in 3 days`
+  const subject = `Your TinyOrder trial for ${shopName} ends in 3 days`
   const text = `Hi,
 
 The free trial for ${shopName} ends on ${endsText}.
@@ -38,6 +38,6 @@ ${dashboardUrl}
 
 If no payment method is added, your shop will be suspended when the trial ends. You can reactivate it any time by subscribing.
 
-— BiteTime`
+— TinyOrder`
   return { subject, text }
 }
