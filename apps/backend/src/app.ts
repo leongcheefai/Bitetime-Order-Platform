@@ -14,6 +14,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { env } from './env.js'
 import { admin, getUserFromToken } from './supabase.js'
+import { requireUser, requireSuperadmin, requireMerchantOwns, type AppEnv } from './mw.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
 import { upsertBilling, setMerchantStatus, billingFromSubscription } from './billing.js'
 import { canStartTrial, buildTrialReminderEmail } from './billingLifecycle.js'
@@ -30,7 +31,7 @@ import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { isCart } from '@bitetime/shared'
 
-export const app = new Hono()
+export const app = new Hono<AppEnv>()
 
 app.use('/api/*', cors({ origin: env.frontendUrl, allowMethods: ['POST', 'GET', 'OPTIONS'] }))
 
@@ -72,6 +73,20 @@ app.get('/api/pricing', async (c) => {
     console.error('Pricing resolution failed:', err instanceof Error ? err.message : String(err))
     return c.json({ error: 'Pricing unavailable' }, 502)
   }
+})
+
+// ── Superadmin reads ──────────────────────────────────────────────────────────
+app.get('/api/merchants', requireSuperadmin, async (c) => {
+  const { data, error } = await admin
+    .from('merchants').select('*').order('created_at', { ascending: false })
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
+})
+
+app.get('/api/billing', requireSuperadmin, async (c) => {
+  const { data, error } = await admin.from('merchant_billing').select('*')
+  if (error) return c.json({ error: 'Lookup failed' }, 500)
+  return c.json(data ?? [])
 })
 
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────
