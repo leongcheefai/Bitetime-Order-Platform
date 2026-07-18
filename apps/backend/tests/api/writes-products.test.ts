@@ -107,6 +107,36 @@ describe('PUT /api/merchants/:id/products/:productId', () => {
 
     await serviceClient().from('merchants').delete().eq('id', id)
   })
+
+  // Load-bearing: .upsert() conflict-resolves on the primary key (id), so without a tenancy
+  // check an owner of shop A could nest shop B's productId under :id = A and have it UPDATEd
+  // in place — including merchant_id reassigned to A, a cross-tenant takeover. Product ids are
+  // enumerable via the public GET /api/merchants/:id/products. See CLAUDE.md → Global Constraint 2.
+  it('404s and leaves the row intact when the product belongs to a different shop', async () => {
+    await resetMerchant('prod-put-tenant-a')
+    await resetMerchant('prod-put-tenant-b')
+    const ownerA = await makeUser('prod-put-tenant-a-owner@example.com', 'password123')
+    const { token: tokenA, userId: ownerAId } = await tokenOf(ownerA)
+    const shopA = await seedMerchant({ slug: 'prod-put-tenant-a', owner_id: ownerAId })
+
+    const ownerB = await makeUser('prod-put-tenant-b-owner@example.com', 'password123')
+    const { userId: ownerBId } = await tokenOf(ownerB)
+    const shopB = await seedMerchant({ slug: 'prod-put-tenant-b', owner_id: ownerBId })
+    const productB = await seedProduct({ merchant_id: shopB, name: 'Shop B Cookie', price: 7 })
+
+    const res = await put(`/api/merchants/${shopA}/products/${productB}`, { name: 'Hijacked', price: 999 }, tokenA)
+    expect(res.status).toBe(404)
+
+    const { data } = await serviceClient()
+      .from('products').select('id, merchant_id, name, price').eq('id', productB).single()
+    expect(data!.merchant_id).toBe(shopB)
+    expect(data!.name).toBe('Shop B Cookie')
+    expect(data!.price).toBe(7)
+
+    await serviceClient().from('products').delete().eq('id', productB)
+    await serviceClient().from('merchants').delete().eq('id', shopA)
+    await serviceClient().from('merchants').delete().eq('id', shopB)
+  })
 })
 
 describe('DELETE /api/merchants/:id/products/:productId', () => {

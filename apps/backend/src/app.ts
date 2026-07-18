@@ -274,9 +274,17 @@ app.get('/api/merchants/:id/products', async (c) => {
 // the body) or promo_sold (see writes.ts — the trigger that pins it for other roles does not
 // run for service_role). requireMerchantOwns only proves the caller owns :id; there is no
 // separate tenancy check to make here because the row's merchant_id is FORCED, not read.
+// requireMerchantOwns only proves the caller owns :id — it says nothing about productId, so an
+// owner of shop A could otherwise take over shop B's product by nesting it under :id = A: .upsert()
+// conflict-resolves on the primary key, so if a row with that id already exists it gets UPDATEd
+// in place (including merchant_id reassigned to A) instead of a new row being inserted. Loading
+// the product and checking merchant_id === :id before upserting is what closes that hole
+// (Global Constraint 2), mirroring the DELETE handler below.
 app.put('/api/merchants/:id/products/:productId', requireMerchantOwns, async (c) => {
   const id = c.req.param('id')
   const productId = c.req.param('productId')
+  const { data: existing } = await admin.from('products').select('merchant_id').eq('id', productId).maybeSingle()
+  if (existing && existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
   const row = { ...pickProductFields(await c.req.json().catch(() => ({}))), id: productId, merchant_id: id }
   const { data, error } = await admin.from('products').upsert(row).select().single()
   if (error) return c.json({ error: 'Upsert failed' }, 500)
