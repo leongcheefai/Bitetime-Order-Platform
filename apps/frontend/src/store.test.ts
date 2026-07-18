@@ -1075,30 +1075,66 @@ describe('lookupMerchantVoucher', () => {
 // inside placeOrder's transaction, and is proven against a real Postgres — including under
 // concurrent redemption — in apps/backend/tests/api/orders.test.ts.
 
+// ── createMerchantVoucher / deleteMerchantVoucher (Task 6) ────────────────────
+
 describe('createMerchantVoucher', () => {
-  it('inserts an uppercased code scoped to the merchant and maps the row back', async () => {
-    __mocks.single.mockResolvedValueOnce({ data: { id: 'v9', code: 'SAVE10', kind: 'percent', amount: 10, max_uses: 100, used_by: [] }, error: null })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('POSTs /api/merchants/:merchantId/vouchers with a bearer token and maps the row back', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const row = { id: 'v9', code: 'SAVE10', kind: 'percent', amount: 10, max_uses: 100, used_by: [] }
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => row, text: async () => JSON.stringify(row) })
+    vi.stubGlobal('fetch', fetchMock)
+
     const result = await createMerchantVoucher({ merchantId: 'm1', code: 'save10', kind: 'percent', amount: 10, maxUses: 100 })
-    expect(__mocks.from).toHaveBeenCalledWith('vouchers')
-    expect(__mocks.insert).toHaveBeenCalledWith({ merchant_id: 'm1', code: 'SAVE10', kind: 'percent', amount: 10, max_uses: 100 })
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/vouchers$/)
+    expect(init.method).toBe('POST')
+    expect(init.headers.Authorization).toBe('Bearer tok')
+    // code is sent as-typed — uppercasing/trimming happens server-side now.
+    expect(JSON.parse(init.body)).toEqual({ code: 'save10', kind: 'percent', amount: 10, maxUses: 100 })
     expect(result).toEqual({ id: 'v9', code: 'SAVE10', type: 'percent', value: 10, maxUses: 100, usedBy: [] })
   })
-  it('defaults max_uses to null and throws on error', async () => {
-    __mocks.single.mockResolvedValueOnce({ data: null, error: { message: 'duplicate' } })
-    await expect(createMerchantVoucher({ merchantId: 'm1', code: 'X', kind: 'fixed', amount: 5 })).rejects.toBeTruthy()
-    expect(__mocks.insert).toHaveBeenCalledWith({ merchant_id: 'm1', code: 'X', kind: 'fixed', amount: 5, max_uses: null })
+
+  it('defaults maxUses to null', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const row = { id: 'v10', code: 'X', kind: 'fixed', amount: 5, max_uses: null, used_by: [] }
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => row, text: async () => JSON.stringify(row) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createMerchantVoucher({ merchantId: 'm1', code: 'X', kind: 'fixed', amount: 5 })
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect(JSON.parse(init.body)).toEqual({ code: 'X', kind: 'fixed', amount: 5, maxUses: null })
+  })
+
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'duplicate' }) }))
+    await expect(createMerchantVoucher({ merchantId: 'm1', code: 'X', kind: 'fixed', amount: 5 })).rejects.toThrow('duplicate')
   })
 })
 
 describe('deleteMerchantVoucher', () => {
-  it('deletes by id', async () => {
-    __mocks.deleteEq.mockResolvedValueOnce({ error: null })
-    await deleteMerchantVoucher('v9')
-    expect(__mocks.from).toHaveBeenCalledWith('vouchers')
-    expect(__mocks.deleteEq).toHaveBeenCalledWith('id', 'v9')
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('DELETEs /api/merchants/:merchantId/vouchers/:id with a bearer token', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ ok: true }), text: async () => JSON.stringify({ ok: true }) })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await deleteMerchantVoucher('v9', 'm1')
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toMatch(/\/api\/merchants\/m1\/vouchers\/v9$/)
+    expect(init.method).toBe('DELETE')
+    expect(init.headers.Authorization).toBe('Bearer tok')
   })
-  it('throws on error', async () => {
-    __mocks.deleteEq.mockResolvedValueOnce({ error: { message: 'nope' } })
-    await expect(deleteMerchantVoucher('v9')).rejects.toBeTruthy()
+
+  it('throws on a non-2xx response', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({ error: 'nope' }) }))
+    await expect(deleteMerchantVoucher('v9', 'm1')).rejects.toThrow('nope')
   })
 })

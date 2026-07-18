@@ -444,20 +444,17 @@ export async function fetchMerchantVoucher(merchantId: string, code: string): Pr
 export async function createMerchantVoucher(input: {
   merchantId: string; code: string; kind: string; amount: number; maxUses?: number | null;
 }): Promise<Voucher> {
-  const { data, error } = await supabase.from('vouchers').insert({
-    merchant_id: input.merchantId,
-    code: input.code.trim().toUpperCase(),
+  const data = await apiSend<any>(`/api/merchants/${input.merchantId}/vouchers`, 'POST', {
+    code: input.code,
     kind: input.kind,
     amount: input.amount,
-    max_uses: input.maxUses ?? null,
-  }).select().single();
-  if (error) throw error;
+    maxUses: input.maxUses ?? null,
+  }, { auth: true });
   return voucherFromRow(data);
 }
 
-export async function deleteMerchantVoucher(id: string) {
-  const { error } = await supabase.from('vouchers').delete().eq('id', id);
-  if (error) throw error;
+export async function deleteMerchantVoucher(id: string, merchantId: string) {
+  await apiSend(`/api/merchants/${merchantId}/vouchers/${id}`, 'DELETE', undefined, { auth: true });
 }
 
 // ── Referral program ─────────────────────────────────────────────────────────

@@ -315,6 +315,42 @@ app.get('/api/merchants/:id/vouchers/:code', async (c) => {
   return c.json(data ?? null)
 })
 
+// Voucher create. The insert goes through `admin` (service_role), so forcing merchant_id
+// from :id (never read from the body) is what stops a crafted body from creating a voucher
+// under someone else's shop. This is an INSERT, not an upsert, so the product-PUT hijack
+// class (conflict-resolving onto a stranger's row) does not apply here — there is no
+// client-supplied id to collide on. `code` is uppercased/trimmed server-side, matching the
+// old client-side `input.code.trim().toUpperCase()`.
+app.post('/api/merchants/:id/vouchers', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const b = await c.req.json().catch(() => ({} as any))
+  const code = String(b?.code ?? '').trim().toUpperCase()
+  if (!code) return c.json({ error: 'Missing code' }, 400)
+  const { data, error } = await admin.from('vouchers').insert({
+    merchant_id: id,
+    code,
+    kind: b?.kind,
+    amount: b?.amount,
+    max_uses: b?.maxUses ?? null,
+  }).select().single()
+  if (error) return c.json({ error: 'Create failed' }, 500)
+  return c.json(data)
+})
+
+// Voucher delete. requireMerchantOwns only proves the caller owns :id — it says nothing
+// about voucherId, so an owner of shop A could otherwise delete shop B's voucher by nesting
+// it under :id = A. Loading the voucher and checking merchant_id === :id before deleting is
+// what closes that hole (Global Constraint 2), mirroring the product DELETE handler above.
+app.delete('/api/merchants/:id/vouchers/:voucherId', requireMerchantOwns, async (c) => {
+  const id = c.req.param('id')
+  const voucherId = c.req.param('voucherId')
+  const { data: existing } = await admin.from('vouchers').select('merchant_id').eq('id', voucherId).maybeSingle()
+  if (!existing || existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
+  const { error } = await admin.from('vouchers').delete().eq('id', voucherId)
+  if (error) return c.json({ error: 'Delete failed' }, 500)
+  return c.json({ ok: true })
+})
+
 // ── Create a Stripe Checkout Session for the signed-in merchant ────────────────
 app.post('/api/checkout', async (c) => {
   const body = await c.req.json().catch(() => ({}))

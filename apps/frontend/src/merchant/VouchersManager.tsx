@@ -67,7 +67,7 @@ export default function VouchersManager() {
   }
 
   async function remove(id: string) {
-    await deleteMerchantVoucher(id); await load()
+    await deleteMerchantVoucher(id, merchant!.id); await load()
     toast.success(t('Voucher deleted', '优惠券已删除'))
   }
 
