@@ -177,22 +177,22 @@ export async function fetchMyMerchant(userId: string) {
   return r.ok ? r.data : null
 }
 
-export async function createMerchant({ name, plan = 'basic', billing = 'monthly', region = 'US', referredByCode }: { name: string; plan?: string; billing?: string; region?: string; referredByCode?: string }) {
-  return apiSend<any>('/api/merchants', 'POST', { name, plan, billing, region, referredByCode }, { auth: true })
+export async function createMerchant({ name, plan = 'basic', billing = 'monthly', referredByCode }: { name: string; plan?: string; billing?: string; referredByCode?: string }) {
+  return apiSend<any>('/api/merchants', 'POST', { name, plan, billing, referredByCode }, { auth: true })
 }
 
 // ── Billing (Stripe via the Hono backend) ──────────────────────────────────────
 
 // Create a Stripe Checkout Session for the current merchant and return its URL.
-// `region` bills the region the pricing page displayed (defaults server-side).
-export async function startCheckout({ plan, billing, region }: { plan: string; billing: string; region?: string }) {
+// Every subscription is charged in MYR; the backend no longer takes a region.
+export async function startCheckout({ plan, billing }: { plan: string; billing: string }) {
   const { data: { session } } = await supabase.auth.getSession()
   const token = session?.access_token
   if (!token) throw new Error('Not signed in')
   const res = await fetch(`${API_URL}/api/checkout`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ plan, billing, region }),
+    body: JSON.stringify({ plan, billing }),
   })
   if (!res.ok) {
     const { error } = await res.json().catch(() => ({}))
@@ -202,15 +202,15 @@ export async function startCheckout({ plan, billing, region }: { plan: string; b
   return url
 }
 
-// Region-resolved platform subscription pricing from the backend. `country` is an
-// optional override forwarded as `?country=` (used to preview a region locally / in QA).
+// Platform subscription pricing from the backend, always in MYR. `country` is an
+// optional override forwarded as `?country=` (used to preview an estimate locally / in QA).
 export interface PlatformPricing {
-  region: string
   currency: string
   prices: {
     basic: { monthly: number; yearly: number }
     pro: { monthly: number; yearly: number }
   }
+  estimate: { currency: string; rate: number } | null
 }
 
 export async function fetchPlatformPricing(country?: string): Promise<PlatformPricing> {
