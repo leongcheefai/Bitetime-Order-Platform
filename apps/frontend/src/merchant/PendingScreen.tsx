@@ -17,7 +17,7 @@ export default function PendingScreen() {
   async function completePayment() {
     setBusy(true); setErr('')
     try {
-      const url = await startCheckout({ plan: merchant!.plan as string, billing: merchant!.billing_cycle || 'monthly', region: merchant!.billing_region })
+      const url = await startCheckout({ plan: merchant!.plan as string, billing: merchant!.billing_cycle || 'monthly' })
       window.location.assign(url)
     } catch (e: any) {
       setErr(e.message || t('Could not start checkout', '无法开始结账'))

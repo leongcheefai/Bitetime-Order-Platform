@@ -332,6 +332,11 @@ export default function Landing() {
                   <span className="font-heading text-[34px] font-semibold text-oxblood leading-none">{formatMoney(amount, pricing.currency)}</span>
                   <span className="text-sm text-rose-muted">{t('/mo', '/月')}</span>
                 </div>
+                {pricing.estimate && amount > 0 && (
+                  <p className="text-xs text-rose-muted mt-1 mb-0">
+                    ≈ {formatMoney(amount * pricing.estimate.rate, pricing.estimate.currency)}{t('/mo', '/月')}
+                  </p>
+                )}
                 <p className="min-h-[1.1em] text-xs text-rose-muted mt-[0.35rem] mb-0">
                   {billing === 'yearly' && amount > 0
                     ? t('billed yearly', '按年付费')
@@ -349,7 +354,7 @@ export default function Landing() {
                   ))}
                 </ul>
                 <Link
-                  to={`${tier.to}?plan=${tier.id}&billing=${billing}&region=${pricing.region}`}
+                  to={`${tier.to}?plan=${tier.id}&billing=${billing}`}
                   className={tier.highlight ? cardCtaPrimary : cardCtaGhost}
                 >
                   {tier.cta}

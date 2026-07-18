@@ -19,7 +19,6 @@ export default function SuspendedScreen() {
       const url = await startCheckout({
         plan: merchant?.plan || 'basic',
         billing: merchant?.billing_cycle || 'monthly',
-        region: merchant?.billing_region,
       })
       window.location.assign(url)
     } catch (e) {

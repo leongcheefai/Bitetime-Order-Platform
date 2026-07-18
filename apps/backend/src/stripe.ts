@@ -1,7 +1,6 @@
 import Stripe from 'stripe'
 import { env } from './env.js'
-import { resolvePriceId } from './pricing.js'
-import { DEFAULT_REGION, type Region } from './region.js'
+import { priceId } from './pricing.js'
 
 export const stripe = new Stripe(env.stripeSecretKey)
 
@@ -15,8 +14,7 @@ export function isValidCycle(cycle: string) {
   return CYCLES.includes(cycle)
 }
 
-// Map (plan, cycle, region) → configured Stripe Price ID. Region defaults to the
-// platform default so existing callers keep their USD behavior.
-export function priceFor(plan: string, cycle: string, region: Region = DEFAULT_REGION) {
-  return resolvePriceId(env.prices, plan, cycle, region)
+// Map (plan, cycle) → the configured MYR Stripe Price ID. We charge MYR for everyone.
+export function priceFor(plan: string, cycle: string) {
+  return priceId(env.prices, plan, cycle)
 }

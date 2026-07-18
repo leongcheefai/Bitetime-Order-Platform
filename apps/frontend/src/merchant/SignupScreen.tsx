@@ -54,7 +54,7 @@ export default function SignupScreen() {
                  '账号已创建。请查收邮件确认，然后登录以完成店铺设置。'))
         setBusy(false); return
       }
-      await createMerchant({ name, plan, billing, region: pricing.region, referredByCode: ref })
+      await createMerchant({ name, plan, billing, referredByCode: ref })
       await refreshMerchant()
       if (plan === 'basic') {
         // Cardless trial: no Checkout. The shop waits for platform approval,
@@ -63,8 +63,7 @@ export default function SignupScreen() {
         return
       }
       // Pro pays upfront: hand off to Stripe Checkout; webhook activates the shop.
-      // Bill the region shown on this page so displayed price equals charged price.
-      const url = await startCheckout({ plan, billing, region: pricing.region })
+      const url = await startCheckout({ plan, billing })
       window.location.assign(url)
     } catch (err: any) {
       setMsg(err.message || t('Something went wrong.', '出错了。'))
@@ -86,6 +85,9 @@ export default function SignupScreen() {
         <div className="flex items-baseline flex-wrap gap-2 px-[13px] py-[10px] mb-[14px] bg-oxblood-tint border border-rose-border rounded-md">
           <span className="font-semibold text-oxblood text-[14px]">{planName} · {cycleName}</span>
           <span className="font-heading text-ink text-[15px]">{formatMoney(perMoAmount, pricing.currency)}{t('/mo', '/月')}</span>
+          {pricing.estimate && perMoAmount > 0 && (
+            <span className="text-rose-muted text-[13px]">≈ {formatMoney(perMoAmount * pricing.estimate.rate, pricing.estimate.currency)}{t('/mo', '/月')}</span>
+          )}
           {plan === 'basic' && (
             <Badge variant="default" className="ml-auto py-[2px] tracking-[0.03em]">
               {t('7-day free trial — no card required', '7 天免费试用，无需信用卡')}
