@@ -40,6 +40,14 @@ export default function FeedbackFab() {
   // whatever session happens to be open by then — wiping a message the user has since
   // started typing, or yanking the dialog out from under a second submission in flight.
   const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Bumped by change() on every open and close, so each dialog session has its own id.
+  // send() captures the id before awaiting submitFeedback; if the user closes and reopens
+  // while that request is still in flight, the id has already moved on by the time it
+  // resolves. Without this, the late resolve would call setSent/setError against the new
+  // session — replacing whatever the user is now typing with a stale thank-you (or error)
+  // screen, and even self-closing the dialog out from under them via the auto-close timer.
+  // The request itself is not cancelled and still writes the row; only the render is guarded.
+  const session = useRef(0)
 
   useEffect(() => () => {
     if (autoCloseTimer.current !== null) clearTimeout(autoCloseTimer.current)
@@ -59,6 +67,7 @@ export default function FeedbackFab() {
   // its keep too: it drops the typed message right away instead of holding it until the next
   // open, and it's what cancels the tracked auto-close timer.
   const change = (next: boolean) => {
+    session.current += 1
     if (autoCloseTimer.current !== null) {
       clearTimeout(autoCloseTimer.current)
       autoCloseTimer.current = null
@@ -73,14 +82,21 @@ export default function FeedbackFab() {
 
   const send = async () => {
     if (!canSubmit) return
+    const startedIn = session.current
     setBusy(true)
     setError('')
     try {
       await submitFeedback(merchant.id, { category: category as FeedbackCategory, message: trimmed })
+      // The dialog may have been closed and reopened while that await was pending — a fresh
+      // session the user is now typing into. This request's result belongs to the session
+      // that started it, which no longer exists on screen; touching state here would stomp
+      // the new one. The row is already written, so nothing is lost by staying quiet.
+      if (session.current !== startedIn) return
       setSent(true)
       // Let the thank-you land before the dialog goes away.
       autoCloseTimer.current = setTimeout(() => change(false), 1600)
     } catch (e) {
+      if (session.current !== startedIn) return
       // Keep what they typed — losing a long message to a failed request is the worst
       // possible outcome for a feedback form.
       setError(e instanceof Error ? e.message : t('Could not send feedback', '无法发送反馈'))
