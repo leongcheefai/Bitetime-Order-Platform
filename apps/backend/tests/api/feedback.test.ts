@@ -117,12 +117,21 @@ describe('merchant feedback', () => {
       { category: 'other', message: '   ' }, ownerToken)).status).toBe(400)
   })
 
-  it('lists feedback newest-first to a superadmin, with the shop attached', async () => {
+  it('lists feedback newest-first to a superadmin — the freshest post lands first, with the shop attached', async () => {
+    // Every prior row in `mine` shares this same shop, so a naive "is mine[0] my shop"
+    // check can't fail no matter what order the rows come back in. Post one more row
+    // right here and assert it — the one we KNOW is newest — is first; that only holds
+    // if listFeedback's `.order('created_at', { ascending: false })` is doing its job.
+    const probe = await post(`/api/merchants/${ownShopId}/feedback`,
+      { category: 'other', message: 'freshest feedback for the ordering probe' }, ownerToken)
+    const probeRow = (await probe.json()) as FeedbackRow
+
     const res = await get('/api/admin/feedback', superToken)
     expect(res.status).toBe(200)
     const rows = (await res.json()) as Array<FeedbackRow & { shop_slug: string | null }>
     const mine = rows.filter(r => r.merchant_id === ownShopId)
-    expect(mine.length).toBeGreaterThanOrEqual(2)
+    expect(mine.length).toBeGreaterThanOrEqual(3)
+    expect(mine[0]!.id).toBe(probeRow.id)
     expect(mine[0]!.shop_slug).toBe('feedback-own-shop')
   })
 
@@ -174,5 +183,42 @@ describe('merchant feedback', () => {
       { category: 'other', message: 'merchant cannot resolve this' }, ownerToken)
     const { id } = (await created.json()) as FeedbackRow
     expect((await patch(`/api/admin/feedback/${id}`, { status: 'resolved' }, ownerToken)).status).toBe(403)
+  })
+
+  // feedbackWindow (app.ts) is a module-level singleton shared by every test in this
+  // process, and it cannot be reset from outside. Using feedback-owner / feedback-own-shop
+  // here would burn the quota the earlier tests still rely on, so this test gets its own
+  // pair of users and shops, distinct from every fixture above. It both trips the 429 and
+  // proves the limiter is keyed per user (c.get('user').id) rather than globally or per
+  // merchant: a second, unrelated user submitting to their own shop right after must still
+  // succeed. This issues 22 requests; kept to this one test.
+  it('rate-limits feedback submissions per user, not globally', async () => {
+    await resetMerchant('feedback-limit-shop')
+    await resetMerchant('feedback-limit-second-shop')
+
+    const limited = await makeUser('feedback-limit-owner@example.com', 'password123')
+    const limitedIds = await tokenOf(limited)
+    const limitedShopId = await seedMerchant({ slug: 'feedback-limit-shop', owner_id: limitedIds.userId })
+
+    const other = await makeUser('feedback-limit-second@example.com', 'password123')
+    const otherIds = await tokenOf(other)
+    const otherShopId = await seedMerchant({ slug: 'feedback-limit-second-shop', owner_id: otherIds.userId })
+
+    // Exhaust the limited user's budget: the window allows 20 per hour.
+    for (let i = 0; i < 20; i++) {
+      const res = await post(`/api/merchants/${limitedShopId}/feedback`,
+        { category: 'other', message: `submission ${i}` }, limitedIds.token)
+      expect(res.status).toBe(201)
+    }
+
+    const blocked = await post(`/api/merchants/${limitedShopId}/feedback`,
+      { category: 'other', message: 'one too many' }, limitedIds.token)
+    expect(blocked.status).toBe(429)
+
+    // A different user, submitting to a shop they own, is unaffected — proving the
+    // limiter is keyed per user rather than sharing one global (or per-merchant) counter.
+    const stillAllowed = await post(`/api/merchants/${otherShopId}/feedback`,
+      { category: 'other', message: 'a different user, a fresh budget' }, otherIds.token)
+    expect(stillAllowed.status).toBe(201)
   })
 })
