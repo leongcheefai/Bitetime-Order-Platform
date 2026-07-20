@@ -577,27 +577,18 @@ const MERCHANT_CONFIG_FIELDS = [
 ] as const
 ```
 
-and validate the rate inside `pickMerchantConfig`, immediately after the existing `timezone` check:
+and validate the rate inside `pickMerchantConfig`.
 
-```ts
-  // A tax rate is money, and the column's CHECK would answer a bad value with a 500 from deep
-  // inside PostgREST. Refuse it at the door instead, where the merchant is present to see it.
-  // Note the shape: `undefined` means "not being written" and must pass through untouched;
-  // anything present but not a finite 0-100 number is REFUSED, never coerced — silently
-  // clamping 150 to 100 would charge a rate the merchant never typed.
-  if (out.tax_rate !== undefined) {
-    const rate = typeof out.tax_rate === 'string' ? Number(out.tax_rate) : out.tax_rate
-    if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 100) {
-      throw new BadRequest('tax_rate must be a number between 0 and 100')
-    }
-    out.tax_rate = rate
-  }
-  if (out.tax_enabled !== undefined && typeof out.tax_enabled !== 'boolean') {
-    throw new BadRequest('tax_enabled must be a boolean')
-  }
-```
+`pickMerchantConfig` today only ever *drops* bad input (see the `timezone` line), and dropping a
+bad tax rate is the wrong answer here: the merchant hits Save, sees a success toast, and charges
+nothing. The column's `CHECK` would answer instead with a 500 from deep inside PostgREST. So the
+rate is refused **at the door**, where the merchant is present to see it — which means
+`pickMerchantConfig` needs a way to say *no*.
 
-`writes.ts` has no error type today and `pickMerchantConfig` currently only ever *drops* bad input (see the `timezone` line). Rather than add a throw the route does not expect, follow the file's established shape: return the problem instead. Change the signature to return a discriminated result and update the one route that calls it.
+`writes.ts` has no error type and the route does not expect a throw, so return the problem as a
+discriminated result rather than throwing. Note the shape: `undefined` means "not being written"
+and must pass through untouched, and a present-but-invalid value is **refused, never coerced** —
+silently clamping 150 to 100 would charge a rate the merchant never typed.
 
 In `writes.ts`:
 
