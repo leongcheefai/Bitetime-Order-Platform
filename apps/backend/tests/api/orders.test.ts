@@ -979,11 +979,13 @@ describe('POST /api/orders', () => {
   // Required as of Task 8: the storefront's picker (Task 6) sends one on every honest
   // checkout, so refusing a dateless order no longer closes checkout for anyone.
   describe('fulfilment date', () => {
-    it('refuses an order with no fulfilment date', async () => {
+    it('refuses an order with no fulfilment date, and writes nothing', async () => {
       const res = await post(body(shop, productId)) // carries no fulfilDate
 
       expect(res.status).toBe(409)
       expect(await res.json()).toEqual({ error: 'fulfil_date_required' })
+      expect(await ordersOf(shop)).toEqual([])
+      expect(await counterOf(shop)).toBeNull()
     })
 
     it('stores a fulfilment date the shop is taking orders for', async () => {
