@@ -7,6 +7,7 @@
 // erroring without forcing a full generated-types pass.
 
 import type { User } from '@supabase/supabase-js'
+import type { FeedbackCategory, FeedbackStatus } from '@bitetime/shared'
 
 export type Lang = 'en' | 'zh'
 export type Role = 'customer' | 'merchant' | 'superadmin'
@@ -148,4 +149,19 @@ export interface MerchantState {
   merchant: Merchant | null
   loading: boolean
   notFound: boolean
+}
+
+// One row of merchant platform feedback (#89). shop_name / shop_slug are joined in by the
+// admin list endpoint and are null for a shop that has since been deleted.
+export interface FeedbackItem {
+  id: string
+  merchant_id: string
+  user_id: string
+  category: FeedbackCategory
+  message: string
+  status: FeedbackStatus
+  created_at: string
+  resolved_at: string | null
+  shop_name: string | null
+  shop_slug: string | null
 }
