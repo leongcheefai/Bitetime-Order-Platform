@@ -633,7 +633,9 @@ export default function Storefront() {
             <div className="max-w-[360px] mx-auto mb-5 text-left px-4 py-3 bg-surface-raised border-[1.5px] border-divider rounded-md">
               {success.items.map((item, i) => (
                 <div key={i} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                  <span className="shrink-0 flex items-center gap-1.5 flex-wrap">
+                  {/* min-w-0 (not shrink-0): a long product name must wrap inside its own column.
+                      shrink-0 let it push the price out past the card's right edge. */}
+                  <span className="min-w-0 flex items-center gap-1.5 flex-wrap">
                     {item.name} × {item.qty}
                     {item.promo && (
                       <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
@@ -641,24 +643,24 @@ export default function Storefront() {
                       </span>
                     )}
                   </span>
-                  <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
+                  <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(item.price * item.qty, currency)}</span>
                 </div>
               ))}
               {success.fee > 0 && (
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                  <span className="shrink-0">{t('Delivery fee', '送货费')}</span>
-                  <span className="text-right">{formatMoney(success.fee, currency)}</span>
+                  <span className="min-w-0">{t('Delivery fee', '送货费')}</span>
+                  <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(success.fee, currency)}</span>
                 </div>
               )}
               {success.discount > 0 && (
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                  <span className="shrink-0">{t('Voucher', '优惠券')}</span>
-                  <span className="text-right">−{formatMoney(success.discount, currency)}</span>
+                  <span className="min-w-0">{t('Voucher', '优惠券')}</span>
+                  <span className="shrink-0 text-right whitespace-nowrap">−{formatMoney(success.discount, currency)}</span>
                 </div>
               )}
               <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
-                <span className="shrink-0">{t('Total', '总计')}</span>
-                <span className="text-right">{formatMoney(success.total, currency)}</span>
+                <span className="min-w-0">{t('Total', '总计')}</span>
+                <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(success.total, currency)}</span>
               </div>
             </div>
 
@@ -1055,7 +1057,8 @@ export default function Storefront() {
                   const displayName = (lang === 'zh' && prod?.name_zh) ? prod.name_zh : item.name
                   return (
                     <div key={i} className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                      <span className="shrink-0 flex items-center gap-1.5 flex-wrap">
+                      {/* min-w-0, not shrink-0 — see the success view's line items (#92). */}
+                      <span className="min-w-0 flex items-center gap-1.5 flex-wrap">
                         {displayName} × {item.qty}
                         {item.promo && (
                           <span className="px-1.5 py-0.5 rounded-full bg-oxblood text-white text-[10px] leading-[14px] font-medium">
@@ -1063,29 +1066,29 @@ export default function Storefront() {
                           </span>
                         )}
                       </span>
-                      <span className="text-right">{formatMoney(item.price * item.qty, currency)}</span>
+                      <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(item.price * item.qty, currency)}</span>
                     </div>
                   )
                 })}
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                  <span className="shrink-0">{t('Subtotal', '小计')}</span>
-                  <span className="text-right">{formatMoney(subtotal, currency)}</span>
+                  <span className="min-w-0">{t('Subtotal', '小计')}</span>
+                  <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(subtotal, currency)}</span>
                 </div>
                 {mode === 'delivery' && (
                   <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                    <span className="shrink-0">{t('Delivery fee', '送货费')}</span>
-                    <span className="text-right">{formatMoney(fee, currency)}</span>
+                    <span className="min-w-0">{t('Delivery fee', '送货费')}</span>
+                    <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(fee, currency)}</span>
                   </div>
                 )}
                 {discount > 0 && (
                   <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                    <span className="shrink-0">{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
-                    <span className="text-right">−{formatMoney(discount, currency)}</span>
+                    <span className="min-w-0">{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
+                    <span className="shrink-0 text-right whitespace-nowrap">−{formatMoney(discount, currency)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
-                  <span className="shrink-0">{t('Total', '总计')}</span>
-                  <span className="text-right">{formatMoney(total, currency)}</span>
+                  <span className="min-w-0">{t('Total', '总计')}</span>
+                  <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(total, currency)}</span>
                 </div>
               </>
             )}

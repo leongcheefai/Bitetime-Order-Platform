@@ -85,7 +85,7 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
                 key={`${item.id ?? item.name}-${n}`}
                 label={
                   <span className="inline-flex items-center gap-1.5 min-w-0">
-                    <span>{itemName(item)} × {item.qty}</span>
+                    <span className="min-w-0">{itemName(item)} × {item.qty}</span>
                     {/* Rows written before the promo split lack the key; undefined is falsy. */}
                     {item.promo && (
                       <span
