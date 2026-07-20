@@ -164,7 +164,7 @@ export default function OrderHistory() {
                           ever collected" and not as data this row lost. */}
                       <div className="text-[12px] text-rose-muted mt-0.5">
                         {o.fulfil_date
-                          ? `${t('For', '取货日')} ${formatOrderDate(o.fulfil_date, lang)}`
+                          ? `${t('For', '取货日期')} ${formatOrderDate(o.fulfil_date, lang)}`
                           : '—'}
                       </div>
                     </div>
