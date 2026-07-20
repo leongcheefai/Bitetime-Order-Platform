@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MessageSquarePlus } from 'lucide-react'
 import { FEEDBACK_CATEGORIES, FEEDBACK_MAX_LENGTH, type FeedbackCategory } from '@bitetime/shared'
 import { useSession } from '../SessionContext'
@@ -35,6 +35,15 @@ export default function FeedbackFab() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [sent, setSent] = useState(false)
+  // Tracks the auto-close timer started after a successful send, so a manual close (or
+  // unmount) can cancel it. Left to fire on its own, it calls change(false) against
+  // whatever session happens to be open by then — wiping a message the user has since
+  // started typing, or yanking the dialog out from under a second submission in flight.
+  const autoCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (autoCloseTimer.current !== null) clearTimeout(autoCloseTimer.current)
+  }, [])
 
   if (!merchant) return null
 
@@ -44,6 +53,10 @@ export default function FeedbackFab() {
 
   // Reset on close so reopening never shows the previous submission's thank-you or error.
   const change = (next: boolean) => {
+    if (autoCloseTimer.current !== null) {
+      clearTimeout(autoCloseTimer.current)
+      autoCloseTimer.current = null
+    }
     setOpen(next)
     if (!next) { setCategory(''); setMessage(''); setError(''); setSent(false); setBusy(false) }
   }
@@ -56,7 +69,7 @@ export default function FeedbackFab() {
       await submitFeedback(merchant.id, { category: category as FeedbackCategory, message: trimmed })
       setSent(true)
       // Let the thank-you land before the dialog goes away.
-      setTimeout(() => change(false), 1600)
+      autoCloseTimer.current = setTimeout(() => change(false), 1600)
     } catch (e) {
       // Keep what they typed — losing a long message to a failed request is the worst
       // possible outcome for a feedback form.
