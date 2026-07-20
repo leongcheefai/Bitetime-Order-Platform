@@ -30,7 +30,8 @@ import { listReferredShops, listEarnedRewards } from './referrals.js'
 import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
-import { isCart } from '@bitetime/shared'
+import { insertFeedback, listFeedback, updateFeedbackStatus } from './feedback.js'
+import { isCart, validateFeedback, isFeedbackStatus } from '@bitetime/shared'
 import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode, RESERVED_SLUGS } from './slug.js'
 import { pickMerchantConfig, pickProfileFields, pickProductFields, pickOrderFields, ORDER_STATUSES } from './writes.js'
 
@@ -699,6 +700,48 @@ app.get('/api/referrals/rewards', async (c) => {
   if (!user) return c.json({ error: 'Unauthorized' }, 401)
 
   return c.json(await listEarnedRewards(user.id))
+})
+
+// ── Merchant platform feedback (#89) ────────────────────────────────────────────
+// Per-user, not per-IP: the route is authenticated, so the user id is the real actor and
+// is not spoofable behind a shared NAT the way an IP is. The check runs BEFORE validation
+// so a script cannot hammer the write path with malformed bodies for free; a merchant
+// cannot realistically hit twenty submissions an hour by accident, and the form enforces
+// both rules client-side, so a 400 arriving here is already the abnormal case.
+const feedbackWindow = createSlidingWindow({ limit: 20, windowMs: 60 * 60_000, now: () => Date.now() })
+
+app.post('/api/merchants/:id/feedback', requireMerchantOwns, async (c) => {
+  const user = c.get('user')
+  const merchant = c.get('merchant')
+
+  if (!feedbackWindow.allow(user.id)) {
+    return c.json({ error: 'Too many feedback submissions. Please try again later.' }, 429)
+  }
+
+  const parsed = validateFeedback(await c.req.json().catch(() => ({})))
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+
+  // merchant.id comes from the route the middleware already verified; user.id from the
+  // JWT. Neither is ever read from the body — see tests/api/feedback.test.ts.
+  const row = await insertFeedback({ merchantId: merchant.id, userId: user.id, draft: parsed.value })
+  return c.json(row, 201)
+})
+
+app.get('/api/admin/feedback', requireSuperadmin, async (c) => {
+  const status = c.req.query('status')
+  if (status !== undefined && !isFeedbackStatus(status)) {
+    return c.json({ error: 'Unknown feedback status' }, 400)
+  }
+  return c.json(await listFeedback(status))
+})
+
+app.patch('/api/admin/feedback/:feedbackId', requireSuperadmin, async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { status?: unknown }
+  if (!isFeedbackStatus(body.status)) return c.json({ error: 'Unknown feedback status' }, 400)
+
+  const row = await updateFeedbackStatus(c.req.param('feedbackId'), body.status)
+  if (!row) return c.json({ error: 'Feedback not found' }, 404)
+  return c.json(row)
 })
 
 app.post('/api/customer/signup', async (c) => {
