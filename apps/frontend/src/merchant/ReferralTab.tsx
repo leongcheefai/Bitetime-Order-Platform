@@ -53,7 +53,10 @@ export default function ReferralTab() {
         <CardHeader>
           <CardTitle>{t('Invite & earn', '邀请赚奖励')}</CardTitle>
           <CardDescription>
-            {t('Share your referral code with other shop owners.', '把您的推荐码分享给其他店主。')}
+            {t(
+              'Share your referral code with other shop owners. Every shop that signs up with it and starts paying earns you one month free of your own plan.',
+              '把您的推荐码分享给其他店主。每有一家用您的推荐码注册的店铺开始付费，您就获得一个月您当前方案的免费额度。',
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -103,10 +106,34 @@ export default function ReferralTab() {
             {t('Rewards earned', '已获得奖励')}{rewards ? ` (${rewards.length})` : ''}
           </CardTitle>
           <CardDescription>
-            {t('One free month each time an invited shop starts paying.', '每有一家受邀店铺开始付费，即获得一个月免费。')}
+            {t(
+              'One month free of your current plan — Basic if you are on Basic, Pro if you are on Pro.',
+              '获得一个月您当前方案的免费额度 — 基础版就是基础版，专业版就是专业版。',
+            )}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex flex-col gap-4">
+          {/* The reward rules the ledger alone cannot show: what triggers it, that it stacks,
+              how it is delivered, and the one case where it is forfeited (backend:
+              referralReward.ts / docs/prd-referral-reward.md). */}
+          <ul className="flex list-disc flex-col gap-1.5 rounded-lg border-[1.5px] border-clay-border bg-surface-sunken py-2.5 pl-7 pr-3 text-[13px] text-rose-muted">
+            <li>{t(
+              'Earned when an invited shop pays its first invoice — their free trial does not count.',
+              '当受邀店铺支付第一张账单时获得 — 免费试用不算。',
+            )}</li>
+            <li>{t(
+              'Free months stack: three paying shops means three free months.',
+              '免费月份可累积：三家付费店铺就是三个月免费。',
+            )}</li>
+            <li>{t(
+              'Added to your account as credit and taken off your next invoice automatically.',
+              '以账户余额形式自动抵扣您的下一张账单。',
+            )}</li>
+            <li>{t(
+              'You need an active paid plan of your own when their first payment goes through.',
+              '在对方首次付款时，您本人需处于有效的付费方案中。',
+            )}</li>
+          </ul>
           {rewardsError ? (
             <p className="text-[13px] text-rose-muted">{t('Could not load rewards.', '无法加载奖励。')}</p>
           ) : rewards === null ? (
