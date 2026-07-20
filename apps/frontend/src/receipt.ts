@@ -11,8 +11,8 @@ const round2 = (n: number) => parseFloat(n.toFixed(2))
  *
  * `orders` persists `items`, `shipping_fee`, `discount` and `total` — never a subtotal. Summing
  * the lines is what makes the printed arithmetic close: `pricing.ts` builds the total FROM this
- * same sum (`subtotal = round2(Σ lineTotal)`, `total = round2(subtotal + shipping − discount)`),
- * so subtotal + fee − voucher = total on the page, by construction.
+ * same sum (`subtotal = round2(Σ lineTotal)`, `total = round2(subtotal + shipping − discount + tax)`),
+ * so subtotal + fee − voucher + tax = total on the page, by construction.
  *
  * Deriving it the other way — `total − shipping + discount` — would always reconcile with the
  * total while silently disagreeing with the lines printed directly above it. This way a data bug

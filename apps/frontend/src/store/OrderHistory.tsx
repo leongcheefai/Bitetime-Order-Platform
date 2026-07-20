@@ -202,7 +202,7 @@ export default function OrderHistory() {
                           value={formatMoney((item.price ?? 0) * (item.qty ?? 0), currency)}
                         />
                       ))}
-                      {/* Shipping and the voucher are both stated, or the lines above would not add
+                      {/* Shipping, tax, and the voucher are all stated, or the lines above would not add
                           up to the total below them — a receipt that doesn't reconcile is worse
                           than one that shows only a total. */}
                       {shipping > 0 && (
