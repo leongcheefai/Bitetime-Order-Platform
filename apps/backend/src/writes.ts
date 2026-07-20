@@ -1,3 +1,5 @@
+import { isTimezone } from '@bitetime/shared'
+
 // Column allowlists for write endpoints. The service-role `admin` client bypasses RLS and the
 // guard_merchant_status / guard_profile_privileges triggers, so these picks are the ONLY thing
 // stopping privilege escalation. Never spread a raw client body into a DB write — pick from here.
@@ -12,12 +14,17 @@ export const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancel
 // client-side once locked, but allowlist it anyway — the lock is a UI concern, and the currency
 // column is not a privilege.
 const MERCHANT_CONFIG_FIELDS = [
-  'currency', 'shipping', 'pickup_address', 'payment_bank', 'payment_note',
+  'currency', 'shipping', 'pickup_address', 'payment_bank', 'payment_note', 'config', 'timezone',
 ] as const
 
 export function pickMerchantConfig(body: any): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const k of MERCHANT_CONFIG_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
+  // A timezone is not free text: `todayInZone` feeds it to Intl on EVERY order intake, and a
+  // row holding junk would decide the shop's "today" by falling back — silently moving the
+  // earliest date a customer can pick, for every order, with nothing on screen to say why.
+  // Refused at the door instead, where the merchant is present to see it.
+  if (out.timezone !== undefined && !isTimezone(out.timezone)) delete out.timezone
   return out
 }
 
