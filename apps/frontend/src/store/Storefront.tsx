@@ -577,15 +577,16 @@ export default function Storefront() {
         )
         setError(msg)
         toast.error(msg)
-      } else if (code === 'fulfil_date_unavailable') {
-        // Reachable honestly: a checkout left open past midnight, or a merchant who closed a
-        // day while this customer was typing. Clearing the selection is what RECOVERS it — the
-        // re-render rebuilds the window from the corrected clock, and the stale date is gone
-        // from the grid rather than sitting there selected and refused on every retry.
+      } else if (code === 'fulfil_date_unavailable' || code === 'fulfil_date_required') {
+        // `fulfil_date_required` is unreachable from this form — `canSubmit` will not let a
+        // dateless order be submitted — and it is here precisely because that gate is the ONLY
+        // thing making it so. `fulfil_date_unavailable` IS reachable honestly: a checkout left
+        // open past midnight, or a merchant who closed a day mid-checkout. Clearing the
+        // selection is what recovers it, since the re-render drops the stale date from the grid.
         setFulfilDate(null)
         const msg = t(
-          'That date is no longer available. Please choose another one.',
-          '该日期已不可选，请重新选择日期。',
+          'Please choose a date for your order.',
+          '请选择订单日期。',
         )
         setError(msg)
         toast.error(msg)

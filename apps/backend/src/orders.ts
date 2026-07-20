@@ -25,6 +25,7 @@ export type OrderErrorCode =
   | 'product_unavailable'
   | 'delivery_state_required'
   | 'fulfil_date_unavailable'
+  | 'fulfil_date_required'
 
 /** A refusal the customer can act on, as opposed to a bug. Thrown inside the transaction. */
 export class OrderError extends Error {
@@ -72,11 +73,9 @@ export interface PlaceOrderInput {
    * The date the customer asked for, `YYYY-MM-DD`, on the SHOP's clock.
    *
    * Checked here against the shop's own window, never taken on trust: the picker that produced
-   * it runs in the customer's browser, and a body is a body. Optional for now — the storefront
-   * does not send one until it has a picker, and refusing every dateless order before then
-   * would close checkout. It becomes required in the same change that ships the picker.
+   * it runs in the customer's browser, and a body is a body.
    */
-  fulfilDate?: string | null
+  fulfilDate: string | null
 }
 
 /**
@@ -125,7 +124,13 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     // Before the counter moves. A refused date must cost the shop nothing — not a burnt order
     // number, not a claimed voucher — and throwing here rolls back a transaction that has not
     // yet written anything anyway.
-    if (input.fulfilDate != null && !isDateSelectable(input.fulfilDate, merchant.fulfilment, merchant.timezone, now)) {
+    //
+    // Two codes, not one: "you sent nothing" and "the shop is not taking that day" are
+    // different things for the customer to do about, and the storefront says so.
+    if (input.fulfilDate == null || input.fulfilDate === '') {
+      throw new OrderError('fulfil_date_required')
+    }
+    if (!isDateSelectable(input.fulfilDate, merchant.fulfilment, merchant.timezone, now)) {
       throw new OrderError('fulfil_date_unavailable')
     }
 
@@ -224,7 +229,7 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
         -- The code is recorded only when it actually bought a discount, mirroring the insert
         -- the browser used to make.
         ${discount ? (input.voucherCode ?? null) : null},
-        ${input.fulfilDate ?? null},
+        ${input.fulfilDate},
         ${orderNumber},
         -- Hardcoded, never taken from the caller. A client could otherwise file an order that
         -- is already 'completed' — which the insert policy used to prevent and no longer can,

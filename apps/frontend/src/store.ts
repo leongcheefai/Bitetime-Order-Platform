@@ -525,6 +525,7 @@ export type OrderErrorCode =
   | 'product_unavailable'
   | 'delivery_state_required'
   | 'fulfil_date_unavailable'
+  | 'fulfil_date_required'
 
 /**
  * A refusal the customer can do something about — retry without the voucher, come back later.
