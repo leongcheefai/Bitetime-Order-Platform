@@ -6,9 +6,10 @@ import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError, shopRates, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import { priceOrder, voucherError, shopRates, shopTax, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
+import { formatTaxRate } from '../receipt'
 import { formatUnit } from '../productUnit'
 import { useServerClock } from '../serverClock'
 import { lookupPostcode } from '../postcodes'
@@ -46,6 +47,8 @@ interface SuccessState {
   subtotal: number
   fee: number
   discount: number
+  taxAmount: number
+  taxRate: number
   total: number
   /**
    * The date they asked for, echoed back. `null` only defensively — `canSubmit` will not let a
@@ -150,6 +153,9 @@ export default function Storefront() {
   // by a ringgit would not be a display bug — it would refuse the checkout.
   const { WM: rateWM, EM: rateEM } = shopRates(merchant?.shipping)
   const baseDeliveryFee = rateWM // shown on the Delivery toggle before a state is known
+  // The SAME mapper the order transaction charges with — see the comment on the `priceOrder`
+  // call below.
+  const tax = shopTax(merchant)
   // The voucher's one-per-customer key — the account email, and nothing else. It must match
   // what the SERVER keys on (the JWT's email), or this pre-flight green-lights a claim the
   // server then refuses. A voucher requires an account: there is no guest key (#72).
@@ -304,12 +310,17 @@ export default function Storefront() {
     // shipping it for free. Weaken the gate and the two sides diverge.
     resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     voucher: appliedVoucher,
+    // The SAME mapper the order transaction charges with. A second reading of these columns
+    // here is a second rule, and the customer meets it as a refused checkout (`price_changed`).
+    tax,
   })
   const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice, promo: l.promo }))
   const subtotal = bd.subtotal
   const discount = bd.discount
   const total = bd.total
   const fee = bd.shipping
+  const taxAmount = bd.tax
+  const taxRate = bd.taxRate
   const deliveryReady =
     mode !== 'delivery' ||
     (address.line1.trim() !== '' &&
@@ -522,7 +533,7 @@ export default function Storefront() {
       }
       // Best-effort server-side Telegram notify; never blocks a placed order.
       await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
-      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total, fulfilDate: chosenDate })
+      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, taxAmount, taxRate, total, fulfilDate: chosenDate })
       toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
       // A refused order wrote NOTHING — the transaction rolled back. So for the three voucher
@@ -704,6 +715,12 @@ export default function Storefront() {
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                   <span className="min-w-0">{t('Voucher', '优惠券')}</span>
                   <span className="shrink-0 text-right whitespace-nowrap">−{formatMoney(success.discount, currency)}</span>
+                </div>
+              )}
+              {success.taxRate > 0 && (
+                <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                  <span className="min-w-0">{t('Tax', '税')} ({formatTaxRate(success.taxRate)}%)</span>
+                  <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(success.taxAmount, currency)}</span>
                 </div>
               )}
               <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
@@ -1148,6 +1165,12 @@ export default function Storefront() {
                   <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                     <span className="min-w-0">{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
                     <span className="shrink-0 text-right whitespace-nowrap">−{formatMoney(discount, currency)}</span>
+                  </div>
+                )}
+                {taxRate > 0 && (
+                  <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                    <span className="min-w-0">{t('Tax', '税')} ({formatTaxRate(taxRate)}%)</span>
+                    <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(taxAmount, currency)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
