@@ -188,10 +188,15 @@ describe('merchant feedback', () => {
   // feedbackWindow (app.ts) is a module-level singleton shared by every test in this
   // process, and it cannot be reset from outside. Using feedback-owner / feedback-own-shop
   // here would burn the quota the earlier tests still rely on, so this test gets its own
-  // pair of users and shops, distinct from every fixture above. It both trips the 429 and
-  // proves the limiter is keyed per user (c.get('user').id) rather than globally or per
-  // merchant: a second, unrelated user submitting to their own shop right after must still
-  // succeed. This issues 22 requests; kept to this one test.
+  // pair of users and shops, distinct from every fixture above.
+  //
+  // The test proves the limit trips at 20 per hour and that the counter is not global
+  // (a different user is unaffected). It does not distinguish per-user from per-merchant
+  // keying: merchants_owner_id_key, a unique partial index enforcing one shop per owner
+  // (migration 20260715120100_referral_reward_lookup.sql), means the two are behaviorally
+  // identical for every reachable request state. If a multi-shop-per-owner model lands,
+  // this distinction becomes testable and the test should be extended then.
+  // This issues 22 requests; kept to this one test.
   it('rate-limits feedback submissions per user, not globally', async () => {
     await resetMerchant('feedback-limit-shop')
     await resetMerchant('feedback-limit-second-shop')
