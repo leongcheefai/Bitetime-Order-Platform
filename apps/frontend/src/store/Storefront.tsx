@@ -21,6 +21,7 @@ import CheckoutGate, { GuestStrip } from './CheckoutGate'
 import FulfilDatePicker from './FulfilDatePicker'
 import { checkoutStep, readGuestChoice, rememberGuestChoice } from '../checkoutGate'
 import { cn } from '@/lib/utils'
+import { formatCalendarDate } from '../orderDate'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -46,6 +47,11 @@ interface SuccessState {
   fee: number
   discount: number
   total: number
+  /**
+   * The date they asked for, echoed back. `null` only defensively — `canSubmit` will not let a
+   * dateless order be submitted, so a placed order always has one.
+   */
+  fulfilDate: string | null
 }
 
 /**
@@ -516,7 +522,7 @@ export default function Storefront() {
       }
       // Best-effort server-side Telegram notify; never blocks a placed order.
       await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
-      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total })
+      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total, fulfilDate: chosenDate })
       toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
       // A refused order wrote NOTHING — the transaction rolled back. So for the three voucher
@@ -659,6 +665,18 @@ export default function Storefront() {
               {t('Order number', '订单号')}:<br />
               <strong className="font-mono text-[16px]">{success.orderNumber}</strong>
             </p>
+
+            {/* The date they picked, read back to them. A customer who chose a date and is shown
+                only an order number has no confirmation that the one thing they had to decide was
+                actually recorded — and the merchant is scheduling against it. formatCalendarDate,
+                not formatOrderDate: this is a calendar date, and rendering it in the viewer's zone
+                would show a customer abroad the day before the one they chose. */}
+            {success.fulfilDate && (
+              <p className="text-[15px] text-oxblood mb-5 tracking-[0.5px]">
+                {t('For', '取货日期')}:<br />
+                <strong className="text-[16px]">{formatCalendarDate(success.fulfilDate, lang)}</strong>
+              </p>
+            )}
 
             <div className="max-w-[360px] mx-auto mb-5 text-left px-4 py-3 bg-surface-raised border-[1.5px] border-divider rounded-md">
               {success.items.map((item, i) => (
