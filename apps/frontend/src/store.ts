@@ -839,6 +839,9 @@ export async function fetchAdminFeedback(status?: FeedbackStatus): Promise<Feedb
   return apiGet<FeedbackItem[]>(`/api/admin/feedback${qs}`, { auth: true })
 }
 
+// The PATCH route now joins the shop the same way the admin list does (see
+// updateFeedbackStatus in apps/backend/src/feedback.ts), so this genuinely returns a full
+// FeedbackItem — the spread in AdminFeedback is correct, not merely harmless.
 export async function setFeedbackStatus(id: string, status: FeedbackStatus): Promise<FeedbackItem> {
   return apiSend<FeedbackItem>(`/api/admin/feedback/${id}`, 'PATCH', { status }, { auth: true })
 }

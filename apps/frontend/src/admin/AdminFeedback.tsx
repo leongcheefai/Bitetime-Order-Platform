@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { FeedbackStatus } from '@bitetime/shared'
+import type { FeedbackCategory, FeedbackStatus } from '@bitetime/shared'
 import { useSession } from '../SessionContext'
 import { fetchAdminFeedback, setFeedbackStatus } from '../store'
 import type { FeedbackItem } from '../types'
@@ -7,7 +7,11 @@ import { Card } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 
-const CATEGORY_LABELS: Record<string, { en: string; zh: string }> = {
+// Record<FeedbackCategory, …>, not Record<string, …> — same reasoning as FeedbackFab's
+// CATEGORY_LABELS: a fifth category upstream should be a compile error here too, not a
+// silent raw-key fallback. Wording is intentionally different (admin-facing vs
+// merchant-facing); only the type is shared.
+const CATEGORY_LABELS: Record<FeedbackCategory, { en: string; zh: string }> = {
   bug:     { en: 'Broken',  zh: '故障' },
   feature: { en: 'Request', zh: '建议' },
   billing: { en: 'Billing', zh: '账单' },
@@ -94,8 +98,7 @@ export default function AdminFeedback() {
               <span className="text-[12px] text-text-tertiary">/s/{item.shop_slug}</span>
             )}
             <Badge variant="secondary">
-              {t(CATEGORY_LABELS[item.category]?.en ?? item.category,
-                 CATEGORY_LABELS[item.category]?.zh ?? item.category)}
+              {t(CATEGORY_LABELS[item.category].en, CATEGORY_LABELS[item.category].zh)}
             </Badge>
             {item.status === 'resolved' && (
               <Badge variant="outline">{t('Resolved', '已处理')}</Badge>

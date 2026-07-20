@@ -59,16 +59,22 @@ export async function listFeedback(status?: FeedbackStatus): Promise<FeedbackWit
 }
 
 // Reopening clears resolved_at so the column never claims a resolution that was undone.
+//
+// Joins the shop the same way listFeedback does, so both admin routes return the same
+// FeedbackWithShop shape — the frontend spreads this response over an existing row (see
+// store.ts's setFeedbackStatus) and that spread is only sound if the shape genuinely matches.
 export async function updateFeedbackStatus(
   id: string,
   status: FeedbackStatus,
-): Promise<FeedbackRow | null> {
+): Promise<FeedbackWithShop | null> {
   const { data, error } = await admin
     .from('merchant_feedback')
     .update({ status, resolved_at: status === 'resolved' ? new Date().toISOString() : null })
     .eq('id', id)
-    .select('*')
+    .select('*, merchants(name, slug)')
     .maybeSingle()
   if (error) throw new Error(error.message)
-  return (data as FeedbackRow) ?? null
+  if (!data) return null
+  const { merchants, ...rest } = data as any
+  return { ...rest, shop_name: merchants?.name ?? null, shop_slug: merchants?.slug ?? null }
 }
