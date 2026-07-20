@@ -6,7 +6,7 @@ import { fetchMyOrdersAtShop, fetchProducts, signOut, ORDER_HISTORY_LIMIT } from
 import { StatusBadge } from '../orderStatus'
 import { courierName, trackingUrl } from '../couriers'
 import { formatMoney } from '../currency'
-import { formatOrderDate } from '../orderDate'
+import { formatOrderDate, formatCalendarDate } from '../orderDate'
 import { cn } from '@/lib/utils'
 import AuthPanel from './AuthPanel'
 import MoneyLine from './MoneyLine'
@@ -164,7 +164,7 @@ export default function OrderHistory() {
                           ever collected" and not as data this row lost. */}
                       <div className="text-[12px] text-rose-muted mt-0.5">
                         {o.fulfil_date
-                          ? `${t('For', '取货日期')} ${formatOrderDate(o.fulfil_date, lang)}`
+                          ? `${t('For', '取货日期')} ${formatCalendarDate(o.fulfil_date, lang)}`
                           : '—'}
                       </div>
                     </div>

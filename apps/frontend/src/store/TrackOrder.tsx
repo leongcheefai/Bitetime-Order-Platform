@@ -4,7 +4,7 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { fetchOrderTracking } from '../store'
 import { courierName, trackingUrl } from '../couriers'
-import { formatOrderDate } from '../orderDate'
+import { formatOrderDate, formatCalendarDate } from '../orderDate'
 import { StatusBadge } from '../orderStatus'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -117,7 +117,7 @@ export default function TrackOrder() {
               order, so a missing date must not look like data we lost. */}
           <div className="text-[13px] text-ink">
             <span className="text-rose-muted">{t('For', '取货日期')}: </span>
-            {result.fulfil_date ? formatOrderDate(result.fulfil_date, lang) : '—'}
+            {result.fulfil_date ? formatCalendarDate(result.fulfil_date, lang) : '—'}
           </div>
           {result.courier && (
             <div className="text-[13px] text-ink">

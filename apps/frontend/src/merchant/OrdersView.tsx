@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
+import type { Lang } from '../types'
 import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, setOrderStatus, setOrderNote, setOrderTracking } from '../store'
 import { formatMoney } from '../currency'
 import { formatAddress } from '../address'
-import { formatOrderDate } from '../orderDate'
+import { formatCalendarDate } from '../orderDate'
 import { SkeletonText } from '../components/Loaders'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -51,6 +52,7 @@ function fmtTime(iso: string | null | undefined) {
 // stay stable (defined once) and never reset sorting when the data refetches.
 interface OrderTableMeta {
   t: (en: string, zh: string) => string
+  lang: Lang
   currency?: string
 }
 
@@ -74,6 +76,20 @@ const columns: ColumnDef<any>[] = [
     cell: ({ row }) => (
       <span className="whitespace-nowrap text-text-tertiary">{fmtTime(row.original.created_at)}</span>
     ),
+  },
+  {
+    accessorKey: 'fulfil_date',
+    header: ({ column, table }) => (
+      <SortableHeader column={column} label={(table.options.meta as OrderTableMeta).t('For', '取货日期')} />
+    ),
+    cell: ({ row, table }) => {
+      const meta = table.options.meta as OrderTableMeta
+      return (
+        <span className="whitespace-nowrap">
+          {row.original.fulfil_date ? formatCalendarDate(row.original.fulfil_date, meta.lang) : '—'}
+        </span>
+      )
+    },
   },
   {
     accessorKey: 'customer_name',
@@ -199,7 +215,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
     }).finally(() => setSavingTrack(false))
   }
 
-  const meta: OrderTableMeta = { t, currency: merchant?.currency }
+  const meta: OrderTableMeta = { t, lang, currency: merchant?.currency }
   const orderCurrency = selected?.currency ?? merchant?.currency
   const noteDirty = selected != null && noteDraft.trim() !== (selected.note ?? '')
   const trackDirty = selected != null &&
@@ -310,7 +326,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                       rather than omitted for a legacy order: a missing row here would read as
                       "this order has no fulfilment info" rather than "placed before #91". */}
                   <DetailRow label={t('Date', '日期')}>
-                    {selected.fulfil_date ? formatOrderDate(selected.fulfil_date, lang) : '—'}
+                    {selected.fulfil_date ? formatCalendarDate(selected.fulfil_date, lang) : '—'}
                   </DetailRow>
                   {!(selected.mode === 'delivery' && !readOnly) && selected.courier && (
                     <DetailRow label={t('Courier', '快递公司')}>{courierName(selected.courier) || selected.courier}</DetailRow>
