@@ -20,3 +20,9 @@ export type {
   VoucherCtx, VoucherErrorCode,
   PricedProduct, PricedVoucher, PromoState,
 } from './pricing.js'
+export {
+  fulfilmentConfig, isTimezone, todayInZone,
+  isDateSelectable, selectableDates,
+  DEFAULT_FULFILMENT, DEFAULT_TIMEZONE,
+} from './fulfilment.js'
+export type { FulfilmentConfig } from './fulfilment.js'

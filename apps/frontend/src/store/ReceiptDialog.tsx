@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { formatMoney } from '../currency'
 import { formatAddress } from '../address'
-import { formatOrderDateTime } from '../orderDate'
+import { formatOrderDateTime, formatCalendarDate } from '../orderDate'
 import { receiptSubtotal } from '../receipt'
 import MoneyLine from './MoneyLine'
 import type { Merchant, Order, OrderItem } from '../types'
@@ -69,6 +69,13 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
           <div className="text-[13px] text-rose-muted leading-[1.6] mb-4">
             <div className="font-mono text-ink">{order.order_number}</div>
             <div>{formatOrderDateTime(order.created_at, lang)}</div>
+            {/* When PLACED (above, to the minute) vs. when the customer asked to have it —
+                the fact this document exists to state. `—` rather than a dropped line for a
+                legacy order: this is a keepsake, and a missing fact on it must not read as one
+                we lost. */}
+            <div>
+              {t('For', '取货日期')}: {order.fulfil_date ? formatCalendarDate(order.fulfil_date, lang) : '—'}
+            </div>
             {order.customer_name && <div className="mt-1.5 text-ink">{order.customer_name}</div>}
             {order.customer_wa && <div>{order.customer_wa}</div>}
             {/* Only a delivery has somewhere to go. A pickup order printing a blank

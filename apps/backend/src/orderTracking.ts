@@ -7,6 +7,7 @@ export interface OrderTracking {
   courier: string | null
   awb: string | null
   created_at: string
+  fulfil_date: string | null
 }
 
 /**
@@ -45,10 +46,11 @@ export async function trackOrder(
       courier: string | null
       awb: string | null
       created_at: Date
+      fulfil_date: Date | null
       customer_wa: string | null
     }[]
   >`
-    select o.status, o.mode, o.courier, o.awb, o.created_at, o.customer_wa
+    select o.status, o.mode, o.courier, o.awb, o.created_at, o.fulfil_date, o.customer_wa
     from orders o
     where o.merchant_id = ${merchantId}
       and o.order_number = ${orderNumber.trim()}
@@ -58,14 +60,18 @@ export async function trackOrder(
   const order = rows.find(o => phonesMatch(o.customer_wa, phone))
   if (!order) return null
 
-  // `created_at` arrives from the driver as a Date and the wire contract is an ISO string, so
-  // convert it here. Leaning on c.json() to stringify it would type-check and serialise
-  // identically while handing every in-process caller a Date that claims to be a string.
+  // `created_at` and `fulfil_date` arrive from the driver as Date objects and the wire contract
+  // is a string, so both are converted here. Leaning on c.json() to stringify them would
+  // type-check and serialise identically while handing every in-process caller a Date that
+  // claims to be a string.
   return {
     status: order.status,
     mode: order.mode,
     courier: order.courier,
     awb: order.awb,
     created_at: order.created_at.toISOString(),
+    // `date` has no time component, so it comes back parsed at UTC midnight — slicing to the
+    // calendar portion recovers exactly the `YYYY-MM-DD` that was stored, with no zone drift.
+    fulfil_date: order.fulfil_date ? order.fulfil_date.toISOString().slice(0, 10) : null,
   }
 }

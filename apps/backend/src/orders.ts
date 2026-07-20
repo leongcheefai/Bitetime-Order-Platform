@@ -1,6 +1,6 @@
 import type postgres from 'postgres'
-import { priceOrder, voucherFromRow, shopRates, productFromRow, promoClaims } from '@bitetime/shared'
-import type { PricedProduct, PricedVoucher } from '@bitetime/shared'
+import { priceOrder, voucherFromRow, shopRates, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import type { PricedProduct, PricedVoucher, FulfilmentConfig } from '@bitetime/shared'
 import { withTransaction } from './db.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
 
@@ -24,6 +24,8 @@ export type OrderErrorCode =
   | 'price_changed'
   | 'product_unavailable'
   | 'delivery_state_required'
+  | 'fulfil_date_unavailable'
+  | 'fulfil_date_required'
 
 /** A refusal the customer can act on, as opposed to a bug. Thrown inside the transaction. */
 export class OrderError extends Error {
@@ -67,6 +69,13 @@ export interface PlaceOrderInput {
    */
   quotedTotal: number
   voucherCode?: string | null
+  /**
+   * The date the customer asked for, `YYYY-MM-DD`, on the SHOP's clock.
+   *
+   * Checked here against the shop's own window, never taken on trust: the picker that produced
+   * it runs in the customer's browser, and a body is a body.
+   */
+  fulfilDate: string | null
 }
 
 /**
@@ -111,6 +120,20 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     }
 
     const merchant = await assertOrderableMerchant(tx, input.merchantId)
+
+    // Before the counter moves. A refused date must cost the shop nothing — not a burnt order
+    // number, not a claimed voucher — and throwing here rolls back a transaction that has not
+    // yet written anything anyway.
+    //
+    // Two codes, not one: "you sent nothing" and "the shop is not taking that day" are
+    // different things for the customer to do about, and the storefront says so.
+    if (input.fulfilDate == null || input.fulfilDate === '') {
+      throw new OrderError('fulfil_date_required')
+    }
+    if (!isDateSelectable(input.fulfilDate, merchant.fulfilment, merchant.timezone, now)) {
+      throw new OrderError('fulfil_date_unavailable')
+    }
+
     const day = orderDay(now)
 
     // Lock order is counter → voucher → products, and every intake takes it in that order.
@@ -190,7 +213,7 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     await tx`
       insert into orders (
         merchant_id, user_id, customer_name, customer_wa, mode, address,
-        shipping_fee, items, total, currency, discount, voucher_code, order_number, status
+        shipping_fee, items, total, currency, discount, voucher_code, fulfil_date, order_number, status
       ) values (
         ${input.merchantId},
         ${input.userId},
@@ -206,6 +229,7 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
         -- The code is recorded only when it actually bought a discount, mirroring the insert
         -- the browser used to make.
         ${discount ? (input.voucherCode ?? null) : null},
+        ${input.fulfilDate},
         ${orderNumber},
         -- Hardcoded, never taken from the caller. A client could otherwise file an order that
         -- is already 'completed' — which the insert policy used to prevent and no longer can,
@@ -222,6 +246,8 @@ interface OrderableMerchant {
   order_prefix: string
   rates: { WM: number; EM: number }
   currency: string
+  fulfilment: FulfilmentConfig
+  timezone: string
 }
 
 /**
@@ -233,8 +259,8 @@ interface OrderableMerchant {
  * different layer. (#65 used the term for this check; the glossary wins.)
  */
 async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: string): Promise<OrderableMerchant> {
-  const rows = await tx<{ order_prefix: string; status: string; shipping: unknown; currency: string | null }[]>`
-    select order_prefix, status::text, shipping, currency from merchants where id = ${merchantId}
+  const rows = await tx<{ order_prefix: string; status: string; shipping: unknown; currency: string | null; config: unknown; timezone: string | null }[]>`
+    select order_prefix, status::text, shipping, currency, config, timezone from merchants where id = ${merchantId}
   `
   const merchant = rows[0]
   if (!merchant) throw new OrderError('merchant_not_found')
@@ -245,6 +271,11 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
     // penalty for the two disagreeing is now a REFUSAL (`price_changed`), not a rounding gap.
     rates: shopRates(merchant.shipping),
     currency: merchant.currency ?? 'MYR',
+    // Same argument as shopRates one line up: the picker is BUILT from this function, so intake
+    // must judge with it. A second reading of the bag here is a second rule, and the customer
+    // meets it as a refusal of a date the picker just offered them.
+    fulfilment: fulfilmentConfig(merchant.config),
+    timezone: merchant.timezone ?? DEFAULT_TIMEZONE,
   }
 }
 

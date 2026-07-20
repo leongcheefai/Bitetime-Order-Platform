@@ -6,7 +6,7 @@ import { fetchMyOrdersAtShop, fetchProducts, signOut, ORDER_HISTORY_LIMIT } from
 import { StatusBadge } from '../orderStatus'
 import { courierName, trackingUrl } from '../couriers'
 import { formatMoney } from '../currency'
-import { formatOrderDate } from '../orderDate'
+import { formatOrderDate, formatCalendarDate } from '../orderDate'
 import { cn } from '@/lib/utils'
 import AuthPanel from './AuthPanel'
 import MoneyLine from './MoneyLine'
@@ -159,6 +159,14 @@ export default function OrderHistory() {
                     <div className="min-w-0">
                       <div className="font-mono text-[13px] text-ink truncate">{o.order_number}</div>
                       <div className="text-[12px] text-rose-muted mt-0.5">{formatOrderDate(o.created_at, lang)}</div>
+                      {/* When placed vs. when the customer wants it — a legacy order (placed
+                          before #91) shows `—` rather than nothing, so it reads as "no date was
+                          ever collected" and not as data this row lost. */}
+                      <div className="text-[12px] text-rose-muted mt-0.5">
+                        {o.fulfil_date
+                          ? `${t('For', '取货日期')} ${formatCalendarDate(o.fulfil_date, lang)}`
+                          : '—'}
+                      </div>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <StatusBadge status={o.status ?? 'new'} t={t} />

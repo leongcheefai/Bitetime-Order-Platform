@@ -91,6 +91,22 @@ describe('POST /api/orders/track', () => {
         items: [],
         total: 5,
       },
+      // Carries a fulfilment date, to prove the driver's Date is rendered back as the same
+      // YYYY-MM-DD it was stored with, not shifted by a UTC/local mismatch. `created_at` is
+      // stated explicitly, not left to the column default: a batch `.insert([...])` with mixed
+      // keys sends NULL for any column a row omits, rather than falling through to `now()`.
+      {
+        merchant_id: shop,
+        order_number: 'TR-20260714-0004',
+        customer_name: 'Has A Date',
+        customer_wa: PHONE,
+        mode: 'pickup',
+        status: 'new',
+        items: [],
+        total: 0,
+        fulfil_date: '2026-07-22',
+        created_at: '2026-07-14T02:00:00Z',
+      },
     ])
   }, 30_000)
 
@@ -98,7 +114,7 @@ describe('POST /api/orders/track', () => {
     for (const slug of SLUGS) await resetMerchant(slug)
   })
 
-  it('returns the order’s status, mode, courier, AWB and created_at', async () => {
+  it('returns the order’s status, mode, courier, AWB, created_at and fulfil_date', async () => {
     const res = await track({ merchantId: shop, orderNumber: ORDER_NO, phone: PHONE })
 
     expect(res.status).toBe(200)
@@ -108,6 +124,7 @@ describe('POST /api/orders/track', () => {
       courier: 'jnt',
       awb: 'JT123456789',
       created_at: '2026-07-14T02:00:00.000Z',
+      fulfil_date: null,
     })
   })
 
@@ -208,5 +225,11 @@ describe('POST /api/orders/track', () => {
     const result = await trackOrder(shop, ORDER_NO, PHONE)
 
     expect(typeof result?.created_at).toBe('string')
+  })
+
+  it('hands back fulfil_date as the same YYYY-MM-DD it was stored with', async () => {
+    const result = await trackOrder(shop, 'TR-20260714-0004', PHONE)
+
+    expect(result?.fulfil_date).toBe('2026-07-22')
   })
 })

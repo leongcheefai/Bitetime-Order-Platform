@@ -27,6 +27,8 @@ export interface Merchant {
   billing_cycle?: string
   currency?: string
   pickup_address?: string
+  config?: Record<string, unknown>
+  timezone?: string
   created_at?: string
   [key: string]: any
 }
@@ -113,6 +115,8 @@ export interface Order {
   currency?: string
   status?: OrderStatus | string
   created_at?: string
+  /** `YYYY-MM-DD`. Null on orders placed before fulfilment dates shipped. */
+  fulfil_date?: string | null
   [key: string]: any
 }
 

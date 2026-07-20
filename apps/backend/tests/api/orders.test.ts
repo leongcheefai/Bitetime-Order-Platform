@@ -24,7 +24,7 @@ import { app } from '../../src/app.js'
 import { env } from '../../src/env.js'
 import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
 import { orderDay } from '../../src/orderNumber.js'
-import { MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
+import { MAX_CART_QTY, MAX_CART_LINES, todayInZone, DEFAULT_TIMEZONE } from '@bitetime/shared'
 
 const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended']
 const DAY = orderDay(new Date())
@@ -86,6 +86,25 @@ async function seedVoucher(merchantId: string, code: string, maxUses: number | n
 async function productOf(productId: string) {
   const { data } = await svc().from('products').select('*').eq('id', productId).maybeSingle()
   return data
+}
+
+/** A date the default fulfilment config is certainly taking: today + 1, on the shop's clock. */
+function tomorrowInShopZone(): string {
+  const today = todayInZone(DEFAULT_TIMEZONE, new Date())
+  const ms = Date.parse(`${today}T00:00:00Z`) + 86_400_000
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+/**
+ * Patch a merchant's `config.fulfilment`, preserving whatever else `config` holds —
+ * `fulfilmentConfig` (the same function order intake and the picker both read through)
+ * falls back per field, but a plain column update would blow away the rest of the bag.
+ */
+async function setFulfilmentConfig(merchantId: string, cfg: Record<string, unknown>) {
+  const { data } = await svc().from('merchants').select('config').eq('id', merchantId).single()
+  const config = { ...((data?.config as Record<string, unknown>) ?? {}), fulfilment: cfg }
+  const { error } = await svc().from('merchants').update({ config }).eq('id', merchantId)
+  if (error) throw new Error(`setting fulfilment config for ${merchantId}: ${error.message}`)
 }
 
 /**
@@ -168,6 +187,9 @@ describe('POST /api/orders', () => {
     await svc().from('vouchers').delete().eq('merchant_id', shop)
     await svc().from('products').delete().eq('merchant_id', shop)
     productId = await seedProduct({ merchant_id: shop, price: 13 })
+    // Reset the shop's fulfilment config to default, so mutations in one test (e.g.,
+    // the closed-weekday case below) don't leak to others.
+    await setFulfilmentConfig(shop, { lead_days: 0, window_days: 14, closed_weekdays: [] })
   })
 
   afterAll(async () => {
@@ -177,14 +199,14 @@ describe('POST /api/orders', () => {
   // ── The happy path, and the format that must not move ───────────────────────
 
   it('places an order and returns its number', async () => {
-    const res = await post(body(shop, productId))
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ orderNumber: `OR-${DAY}-0050` })
   })
 
   it('writes the order row, with the cart and the total', async () => {
-    await post(body(shop, productId))
+    await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
     const [order] = await ordersOf(shop)
 
     expect(order).toMatchObject({
@@ -200,8 +222,8 @@ describe('POST /api/orders', () => {
 
   // The counter starts at 50, not 1 — inherited from next_order_number and customer-visible.
   it('starts a shop’s day at 0050 and increments from there', async () => {
-    const first = await post(body(shop, productId))
-    const second = await post(body(shop, productId))
+    const first = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
+    const second = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
 
     expect(await first.json()).toEqual({ orderNumber: `OR-${DAY}-0050` })
     expect(await second.json()).toEqual({ orderNumber: `OR-${DAY}-0051` })
@@ -210,7 +232,7 @@ describe('POST /api/orders', () => {
   // ── The intake gate, now a TypeScript invariant (db.ts bypasses RLS) ───────
 
   it('refuses an order against a pending shop, and writes nothing', async () => {
-    const res = await post(body(pendingShop, productId))
+    const res = await post(body(pendingShop, productId, { fulfilDate: tomorrowInShopZone() }))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'merchant_inactive' })
@@ -219,7 +241,7 @@ describe('POST /api/orders', () => {
   })
 
   it('refuses an order against a suspended shop, and writes nothing', async () => {
-    const res = await post(body(suspendedShop, productId))
+    const res = await post(body(suspendedShop, productId, { fulfilDate: tomorrowInShopZone() }))
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'merchant_inactive' })
@@ -227,7 +249,7 @@ describe('POST /api/orders', () => {
   })
 
   it('refuses an order against a merchant that does not exist', async () => {
-    const res = await post(body('00000000-0000-0000-0000-000000000000', productId))
+    const res = await post(body('00000000-0000-0000-0000-000000000000', productId, { fulfilDate: tomorrowInShopZone() }))
 
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'merchant_not_found' })
@@ -236,7 +258,7 @@ describe('POST /api/orders', () => {
   // The insert policy used to enforce this. It no longer runs on the backend's connection,
   // so the endpoint has to — a client must not be able to file an already-completed order.
   it('never persists a status the client asked for', async () => {
-    await post(body(shop, productId, { status: 'done' }))
+    await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), status: 'done' }))
     const [order] = await ordersOf(shop)
 
     expect(order.status).toBe('new')
@@ -246,7 +268,7 @@ describe('POST /api/orders', () => {
   // NaN) would push it all the way to Postgres and return a 500 — a bad request reported as a
   // server fault, and a lie in the logs when someone comes to debug it.
   it('rejects a malformed body rather than coercing it into a 500', async () => {
-    const res = await post(body(shop, productId, { quotedTotal: 'abc' }))
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 'abc' }))
 
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: 'invalid_body' })
@@ -267,7 +289,7 @@ describe('POST /api/orders', () => {
 
     for (const [name, qty] of cases) {
       it(`rejects ${name}`, async () => {
-        const res = await post(body(shop, productId, { cart: { [productId]: qty } }))
+        const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), cart: { [productId]: qty } }))
 
         expect(res.status).toBe(400)
         expect(await errorOf(res)).toBe('invalid_body')
@@ -279,7 +301,7 @@ describe('POST /api/orders', () => {
     // the same astronomical total it asked for, so the two agree and the order commits. The cap
     // is the only thing standing in front of it.
     it('rejects an absurd quantity', async () => {
-      const res = await post(body(shop, productId, { cart: { [productId]: 1e21 }, quotedTotal: 13e21 }))
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), cart: { [productId]: 1e21 }, quotedTotal: 13e21 }))
 
       expect(res.status).toBe(400)
       expect(await errorOf(res)).toBe('invalid_body')
@@ -292,7 +314,7 @@ describe('POST /api/orders', () => {
     // module exists to prevent.
     it('rejects a quantity past the per-line cap', async () => {
       const qty = MAX_CART_QTY + 1
-      const res = await post(body(shop, productId, { cart: { [productId]: qty }, quotedTotal: 13 * qty }))
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), cart: { [productId]: qty }, quotedTotal: 13 * qty }))
 
       expect(res.status).toBe(400)
       expect(await errorOf(res)).toBe('invalid_body')
@@ -301,6 +323,7 @@ describe('POST /api/orders', () => {
 
     it('accepts a quantity exactly at the cap', async () => {
       const res = await post(body(shop, productId, {
+        fulfilDate: tomorrowInShopZone(),
         cart: { [productId]: MAX_CART_QTY },
         quotedTotal: 13 * MAX_CART_QTY,
       }))
@@ -316,7 +339,7 @@ describe('POST /api/orders', () => {
           `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`, 1,
         ]),
       )
-      const res = await post(body(shop, productId, { cart }))
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), cart }))
 
       expect(res.status).toBe(400)
       expect(await errorOf(res)).toBe('invalid_body')
@@ -324,7 +347,7 @@ describe('POST /api/orders', () => {
     })
 
     it('rejects an empty cart', async () => {
-      const res = await post(body(shop, productId, { cart: {} }))
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), cart: {} }))
 
       expect(res.status).toBe(400)
       expect(await errorOf(res)).toBe('invalid_body')
@@ -334,7 +357,7 @@ describe('POST /api/orders', () => {
     // An array has no ids at all — `Object.values([])` is empty, so a laxer check would call
     // it valid and hand cartProducts a cart with nothing in it.
     it('rejects a cart sent as an array', async () => {
-      const res = await post(body(shop, productId, { cart: [] }))
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), cart: [] }))
 
       expect(res.status).toBe(400)
       expect(await errorOf(res)).toBe('invalid_body')
@@ -350,6 +373,7 @@ describe('POST /api/orders', () => {
     for (const mode of ['sameday', 'banana', '', 'DELIVERY']) {
       it(`refuses mode ${JSON.stringify(mode)}, and writes nothing`, async () => {
         const res = await post(body(shop, productId, {
+          fulfilDate: tomorrowInShopZone(),
           mode,
           address: { line1: '1 Jalan Besar', postcode: '88000', city: 'Kota Kinabalu', state: 'Sabah' },
         }))
@@ -364,14 +388,14 @@ describe('POST /api/orders', () => {
   // ── Attribution: the JWT decides, the body never does ───────────────────────
 
   it('attributes a signed-in customer’s order to them', async () => {
-    await post(body(shop, productId), customerToken)
+    await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }), customerToken)
     const [order] = await ordersOf(shop)
 
     expect(order.user_id).toBe(customerId)
   })
 
   it('leaves a guest’s order unattributed', async () => {
-    await post(body(shop, productId))
+    await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
     const [order] = await ordersOf(shop)
 
     expect(order.user_id).toBeNull()
@@ -382,14 +406,14 @@ describe('POST /api/orders', () => {
   // anything reaching it with a settable user_id is this backend. The endpoint must therefore
   // never take user_id from the body, and these two tests are what hold that line.
   it('ignores a user_id in a guest’s body — a guest cannot attribute an order to anyone', async () => {
-    await post(body(shop, productId, { user_id: strangerId, userId: strangerId }))
+    await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), user_id: strangerId, userId: strangerId }))
     const [order] = await ordersOf(shop)
 
     expect(order.user_id).toBeNull()
   })
 
   it('ignores a stranger’s user_id in a signed-in customer’s body', async () => {
-    await post(body(shop, productId, { user_id: strangerId, userId: strangerId }), customerToken)
+    await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), user_id: strangerId, userId: strangerId }), customerToken)
     const [order] = await ordersOf(shop)
 
     expect(order.user_id).toBe(customerId)
@@ -405,7 +429,7 @@ describe('POST /api/orders', () => {
   it('claims the voucher and records the order’s discount', async () => {
     await seedVoucher(shop, 'SAVE5', null)
 
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
 
     expect(res.status).toBe(200)
     const [order] = await ordersOf(shop)
@@ -414,7 +438,7 @@ describe('POST /api/orders', () => {
   })
 
   it('rejects a voucher code that does not exist', async () => {
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_not_found' })
@@ -422,9 +446,9 @@ describe('POST /api/orders', () => {
 
   it('rejects a voucher this customer already used', async () => {
     await seedVoucher(shop, 'SAVE5', null)
-    await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
+    await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
 
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_already_used' })
@@ -435,9 +459,9 @@ describe('POST /api/orders', () => {
   // person, and this test is about the former.
   it('rejects a voucher that has hit its cap', async () => {
     await seedVoucher(shop, 'CAP1', 1)
-    await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP1' }), customerToken)
+    await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'CAP1' }), customerToken)
 
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP1' }), strangerToken)
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'CAP1' }), strangerToken)
 
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'voucher_fully_used' })
@@ -446,7 +470,7 @@ describe('POST /api/orders', () => {
   // THE BUG THIS TICKET EXISTS TO KILL. Before, the order was already committed by the time
   // the redemption failed — so the customer kept a discount on a voucher never marked used.
   it('rolls the whole order back when the voucher claim fails — no row, no burnt counter', async () => {
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
 
     expect(res.status).toBe(409)
     // WHICH refusal, and not merely that there was one. Signed in, with a code that does not
@@ -473,7 +497,7 @@ describe('POST /api/orders', () => {
       .insert({ merchant_id: shop, order_number: `OR-${DAY}-0050`, status: 'new', total: 1 })
     expect(error).toBeNull()
 
-    const res = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)
 
     // Not a domain refusal — the customer did nothing wrong, so this is a 500, not a 409.
     expect(res.status).toBe(500)
@@ -486,13 +510,13 @@ describe('POST /api/orders', () => {
   })
 
   it('lets the customer retry without the voucher, and that order succeeds', async () => {
-    const failed = await post(body(shop, productId, { quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
+    const failed = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'NOPE' }), customerToken)
     expect(failed.status).toBe(409)
     // The retry is only interesting after a failed CLAIM. Assert the code, or this test also
     // passes when the voucher was refused for having no account at all — a different story.
     expect(await errorOf(failed)).toBe('voucher_not_found')
 
-    const retry = await post(body(shop, productId), customerToken)
+    const retry = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }), customerToken)
 
     expect(retry.status).toBe(200)
     // The failed attempt burned nothing: this is still the day's FIRST order.
@@ -509,7 +533,7 @@ describe('POST /api/orders', () => {
     it('refuses a voucher from a guest, and writes nothing', async () => {
       await seedVoucher(shop, 'SAVE5', null)
 
-      const res = await post(body(shop, productId, { voucherCode: 'SAVE5', quotedTotal: 21 }))
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), voucherCode: 'SAVE5', quotedTotal: 21 }))
       expect(res.status).toBe(409)
       expect(await errorOf(res)).toBe('voucher_requires_account')
       expect(await ordersOf(shop)).toHaveLength(0)
@@ -523,7 +547,7 @@ describe('POST /api/orders', () => {
       const res = await post(
         // The body still tries to name its own key. It must be IGNORED, not honoured — the
         // direct analogue of the suite's "never persists a status the client asked for".
-        body(shop, productId, { voucherCode: 'SAVE5', voucherEntry: 'someone@else.com', quotedTotal: 21 }),
+        body(shop, productId, { fulfilDate: tomorrowInShopZone(), voucherCode: 'SAVE5', voucherEntry: 'someone@else.com', quotedTotal: 21 }),
         customerToken,
       )
       expect(res.status).toBe(200)
@@ -534,12 +558,12 @@ describe('POST /api/orders', () => {
     it('cannot be redeemed twice by the same account — the hole itself', async () => {
       await seedVoucher(shop, 'SAVE5', null)
 
-      const first = await post(body(shop, productId, { voucherCode: 'SAVE5', quotedTotal: 21 }), customerToken)
+      const first = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), voucherCode: 'SAVE5', quotedTotal: 21 }), customerToken)
       expect(first.status).toBe(200)
 
       // Before the fix this succeeded by simply varying `voucherEntry`. Now the body carries no
       // key at all, so the attack cannot even be EXPRESSED — which is the point.
-      const second = await post(body(shop, productId, { voucherCode: 'SAVE5', quotedTotal: 21 }), customerToken)
+      const second = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), voucherCode: 'SAVE5', quotedTotal: 21 }), customerToken)
       expect(second.status).toBe(409)
       expect(await errorOf(second)).toBe('voucher_already_used')
 
@@ -551,7 +575,7 @@ describe('POST /api/orders', () => {
   // ── Concurrency. Real row locks, real Postgres — the point of the driver ────
 
   it('gives two concurrent orders distinct order numbers', async () => {
-    const results = await Promise.all(Array.from({ length: 8 }, () => post(body(shop, productId))))
+    const results = await Promise.all(Array.from({ length: 8 }, () => post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))))
     const numbers = await Promise.all(results.map(r => r.json() as Promise<{ orderNumber: string }>))
 
     const distinct = new Set(numbers.map(n => n.orderNumber))
@@ -563,7 +587,7 @@ describe('POST /api/orders', () => {
   // loser must read the winner's write through the row lock, not the stale row.
   it('lets exactly one of two concurrent orders redeem a single-use voucher', async () => {
     await seedVoucher(shop, 'ONCE', 1)
-    const one = () => post(body(shop, productId, { quotedTotal: 21, voucherCode: 'ONCE' }), customerToken)
+    const one = () => post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'ONCE' }), customerToken)
 
     const [a, b] = await Promise.all([one(), one()])
     const statuses = [a.status, b.status].sort()
@@ -601,7 +625,7 @@ describe('POST /api/orders', () => {
   it('holds a voucher’s cap under concurrent load', async () => {
     await seedVoucher(shop, 'CAP2', 2)
     const attempts = racerTokens.map(token =>
-      post(body(shop, productId, { quotedTotal: 21, voucherCode: 'CAP2' }), token),
+      post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'CAP2' }), token),
     )
 
     const results = await Promise.all(attempts)
@@ -623,7 +647,7 @@ describe('POST /api/orders', () => {
   describe('the backend is the price authority', () => {
     it('refuses a body that names its own total, and writes nothing', async () => {
       // THE HOLE THIS TASK CLOSES. Before it, this committed an order at zero.
-      const res = await post(body(shop, productId, { quotedTotal: 0 }))
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 0 }))
       expect(res.status).toBe(409)
       expect(await errorOf(res)).toBe('price_changed')
       expect(await ordersOf(shop)).toHaveLength(0)
@@ -634,6 +658,7 @@ describe('POST /api/orders', () => {
     // row is what proves it was ignored rather than merely absent.
     it('commits the server-derived total and items, not anything the body said', async () => {
       const res = await post(body(shop, productId, {
+        fulfilDate: tomorrowInShopZone(),
         items: [{ id: 'x', name: 'Free Ferrari', qty: 1, price: 0 }],
         total: 0,
         shippingFee: -50,
@@ -660,7 +685,7 @@ describe('POST /api/orders', () => {
     it('refuses with price_changed when the price moves between quote and submit', async () => {
       await svc().from('products').update({ price: 15 }).eq('id', productId)
 
-      const res = await post(body(shop, productId))  // still quoting the old 26
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))  // still quoting the old 26
       expect(res.status).toBe(409)
       expect(await errorOf(res)).toBe('price_changed')
       expect(await ordersOf(shop)).toHaveLength(0)
@@ -674,7 +699,7 @@ describe('POST /api/orders', () => {
       // RLS-exempt, so this is the test that the TypeScript invariant actually holds.
       const strangersProduct = await seedProduct({ merchant_id: suspendedShop, price: 13 })
 
-      const res = await post(body(shop, strangersProduct))
+      const res = await post(body(shop, strangersProduct, { fulfilDate: tomorrowInShopZone() }))
       expect(res.status).toBe(409)
       expect(await errorOf(res)).toBe('product_unavailable')
       expect(await ordersOf(shop)).toHaveLength(0)
@@ -683,14 +708,14 @@ describe('POST /api/orders', () => {
     it('refuses a product that is not active', async () => {
       const hidden = await seedProduct({ merchant_id: shop, price: 13, active: false })
 
-      const res = await post(body(shop, hidden))
+      const res = await post(body(shop, hidden, { fulfilDate: tomorrowInShopZone() }))
       expect(res.status).toBe(409)
       expect(await errorOf(res)).toBe('product_unavailable')
       expect(await ordersOf(shop)).toHaveLength(0)
     })
 
     it('refuses a cart id that is not a product id, as a refusal and not a 500', async () => {
-      const res = await post(body(shop, productId, { cart: { 'not-a-uuid': 1 } }))
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), cart: { 'not-a-uuid': 1 } }))
       expect(res.status).toBe(409)
       expect(await errorOf(res)).toBe('product_unavailable')
     })
@@ -705,6 +730,7 @@ describe('POST /api/orders', () => {
     // total 0. The fix is the regex's missing `i` — see the UUID const in orders.ts.
     it('refuses an uppercase-uuid cart key instead of silently pricing the order at zero', async () => {
       const res = await post(body(shop, productId, {
+        fulfilDate: tomorrowInShopZone(),
         cart: { [productId.toUpperCase()]: 2 },
         quotedTotal: 0,
       }))
@@ -722,6 +748,7 @@ describe('POST /api/orders', () => {
       await svc().from('merchants').update({ shipping: { WM: 8, EM: 18 } }).eq('id', shop)
 
       const res = await post(body(shop, productId, {
+        fulfilDate: tomorrowInShopZone(),
         mode: 'delivery',
         address: { line1: '1 Jalan Besar', postcode: '88000', city: 'Kota Kinabalu', state: 'Sabah' },
         quotedTotal: 44,   // 26 + EM 18
@@ -750,7 +777,7 @@ describe('POST /api/orders', () => {
 
       for (const [name, address] of cases) {
         it(`refuses a delivery with ${name}, and writes nothing`, async () => {
-          const res = await post(body(shop, productId, { mode: 'delivery', address, quotedTotal: 26 }))
+          const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), mode: 'delivery', address, quotedTotal: 26 }))
 
           expect(res.status).toBe(409)
           expect(await errorOf(res)).toBe('delivery_state_required')
@@ -763,7 +790,7 @@ describe('POST /api/orders', () => {
       // The refusal is about the DELIVERY, not about the address: a pickup has nowhere to ship
       // to and must keep working with no address at all.
       it('still takes a pickup with no address', async () => {
-        const res = await post(body(shop, productId))
+        const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
 
         expect(res.status).toBe(200)
         const [order] = await ordersOf(shop)
@@ -777,6 +804,7 @@ describe('POST /api/orders', () => {
       })
 
       const res = await post(body(shop, productId, {
+        fulfilDate: tomorrowInShopZone(),
         voucherCode: 'SAVE10',
         quotedTotal: 23.4,   // 26 − 10%
       }), customerToken)
@@ -798,7 +826,7 @@ describe('POST /api/orders', () => {
     it('commits at the promo price and moves the counter', async () => {
       const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8 })
 
-      const res = await post(body(shop, promoProductId, { cart: { [promoProductId]: 2 }, quotedTotal: 16 }))
+      const res = await post(body(shop, promoProductId, { fulfilDate: tomorrowInShopZone(), cart: { [promoProductId]: 2 }, quotedTotal: 16 }))
 
       expect(res.status).toBe(200)
       const [order] = await ordersOf(shop)
@@ -815,6 +843,7 @@ describe('POST /api/orders', () => {
       const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 3, promoSold: 0 })
 
       const res = await post(body(shop, promoProductId, {
+        fulfilDate: tomorrowInShopZone(),
         cart: { [promoProductId]: 5 },
         quotedTotal: 3 * 8 + 2 * 10,
       }))
@@ -840,6 +869,7 @@ describe('POST /api/orders', () => {
       const normalProductId = await seedProduct({ merchant_id: shop, price: 5 })
 
       const res = await post(body(shop, promoProductId, {
+        fulfilDate: tomorrowInShopZone(),
         cart: { [promoProductId]: 3, [normalProductId]: 1 },
         quotedTotal: 3 * 8 + 5,
       }))
@@ -862,7 +892,7 @@ describe('POST /api/orders', () => {
     // counter). Kept for the same reason the voucher test is kept: real Postgres, real locks.
     it('two checkouts race the last promo unit and exactly one wins', async () => {
       const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoLimit: 1, promoSold: 0 })
-      const one = () => post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+      const one = () => post(body(shop, promoProductId, { fulfilDate: tomorrowInShopZone(), cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
 
       const [a, b] = await Promise.all([one(), one()])
       const statuses = [a.status, b.status].sort()
@@ -913,7 +943,7 @@ describe('POST /api/orders', () => {
         await new Promise(resolve => setTimeout(resolve, 100))
 
         // The intake quotes the promo price for a unit that is already spoken for.
-        const resPromise = post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+        const resPromise = post(body(shop, promoProductId, { fulfilDate: tomorrowInShopZone(), cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
 
         // Let the intake's select actually reach (and block on, if the lock is real) the row
         // before releasing the holder.
@@ -934,13 +964,62 @@ describe('POST /api/orders', () => {
       const past = new Date(Date.now() - 24 * 60 * 60_000).toISOString()
       const promoProductId = await seedPromoProduct(shop, { price: 10, promoPrice: 8, promoEnd: past })
 
-      const stale = await post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
+      const stale = await post(body(shop, promoProductId, { fulfilDate: tomorrowInShopZone(), cart: { [promoProductId]: 1 }, quotedTotal: 8 }))
       expect(stale.status).toBe(409)
       expect(await errorOf(stale)).toBe('price_changed')
 
-      const fresh = await post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 10 }))
+      const fresh = await post(body(shop, promoProductId, { fulfilDate: tomorrowInShopZone(), cart: { [promoProductId]: 1 }, quotedTotal: 10 }))
       expect(fresh.status).toBe(200)
       expect((await productOf(promoProductId))!.promo_sold).toBe(0)
+    })
+  })
+
+  // ── Fulfilment date: judged against the shop's own window and clock (#91) ───
+  //
+  // Required as of Task 8: the storefront's picker (Task 6) sends one on every honest
+  // checkout, so refusing a dateless order no longer closes checkout for anyone.
+  describe('fulfilment date', () => {
+    it('refuses an order with no fulfilment date, and writes nothing', async () => {
+      const res = await post(body(shop, productId)) // carries no fulfilDate
+
+      expect(res.status).toBe(409)
+      expect(await res.json()).toEqual({ error: 'fulfil_date_required' })
+      expect(await ordersOf(shop)).toEqual([])
+      expect(await counterOf(shop)).toBeNull()
+    })
+
+    it('stores a fulfilment date the shop is taking orders for', async () => {
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
+
+      expect(res.status).toBe(200)
+      const [order] = await ordersOf(shop)
+      expect(order.fulfil_date).not.toBeNull()
+    })
+
+    it('refuses a date past the end of the shop window, and writes nothing', async () => {
+      const res = await post(body(shop, productId, { fulfilDate: '2099-01-01' }))
+
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('fulfil_date_unavailable')
+      expect(await ordersOf(shop)).toEqual([])
+      expect(await counterOf(shop)).toBeNull()
+    })
+
+    it('refuses a date on a weekday the shop is closed', async () => {
+      // Shut the shop every day, so whatever date the helper picks is closed.
+      await setFulfilmentConfig(shop, { lead_days: 0, window_days: 14, closed_weekdays: [0, 1, 2, 3, 4, 5, 6] })
+
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
+
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('fulfil_date_unavailable')
+    })
+
+    it('refuses a malformed date rather than storing it', async () => {
+      const res = await post(body(shop, productId, { fulfilDate: 'next tuesday' }))
+
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('fulfil_date_unavailable')
     })
   })
 })

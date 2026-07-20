@@ -6,7 +6,7 @@ import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError, shopRates, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
+import { priceOrder, voucherError, shopRates, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
@@ -18,8 +18,10 @@ import LanguageSelect from '../components/LanguageSelect'
 import ImageLightbox from '../components/ImageLightbox'
 import SignInDialog from './SignInDialog'
 import CheckoutGate, { GuestStrip } from './CheckoutGate'
+import FulfilDatePicker from './FulfilDatePicker'
 import { checkoutStep, readGuestChoice, rememberGuestChoice } from '../checkoutGate'
 import { cn } from '@/lib/utils'
+import { formatCalendarDate } from '../orderDate'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -45,6 +47,11 @@ interface SuccessState {
   fee: number
   discount: number
   total: number
+  /**
+   * The date they asked for, echoed back. `null` only defensively — `canSubmit` will not let a
+   * dateless order be submitted, so a placed order always has one.
+   */
+  fulfilDate: string | null
 }
 
 /**
@@ -75,6 +82,7 @@ export default function Storefront() {
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }
   const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup')  // 'pickup' | 'delivery'
+  const [fulfilDate, setFulfilDate] = useState<string | null>(null)
 
   // Prefill is DERIVED, never copied into state by an effect. `null` means "the customer hasn't
   // touched this field", so a profile that arrives a beat after the page fills the form — while a
@@ -256,6 +264,20 @@ export default function Storefront() {
   const { now: serverNow, resync: resyncClock, adopt: adoptClock } = useServerClock()
   const now = serverNow()
 
+  // The SHOP's window, on the SHOP's clock — `now` is the server-corrected time the same
+  // breakdown prices with. The list is derived, never stored, so ANY re-render recomputes it
+  // from the current corrected clock — but nothing schedules a re-render at midnight by
+  // itself, and `handleSubmit` reads `chosenDate` from the closure it was called with, not
+  // from a fresh render. So a checkout left open past midnight CAN still submit a stale date;
+  // what closes that case is the backend's refusal plus the `setFulfilDate(null)` recovery in
+  // handleSubmit's catch branch (see `fulfil_date_unavailable` below), not this list by itself.
+  const fulfilDates = useMemo(
+    () => selectableDates(fulfilmentConfig(merchant.config), merchant.timezone ?? DEFAULT_TIMEZONE, now),
+    [merchant.config, merchant.timezone, now],
+  )
+  // A date the shop stopped offering while the page sat open is not a selection any more.
+  const chosenDate = fulfilDate && fulfilDates.includes(fulfilDate) ? fulfilDate : null
+
   // The menu, mapped once for the pricing rule: the rows arrive snake_cased from PostgREST and
   // `priceOrder` reads `promoPrice`. Unmapped, every promo silently prices at the base price here
   // and at the promo price on the backend — which is a refused checkout for every promo order.
@@ -294,7 +316,7 @@ export default function Storefront() {
       address.postcode.length === 5 &&
       address.city.trim() !== '' &&
       address.state.trim() !== '')
-  const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady
+  const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady && chosenDate !== null
 
   // The one decision that says whether this customer is ever asked to sign in. `account` is
   // `undefined` until the session resolves — 'pending' holds the checkout back for that beat
@@ -487,6 +509,7 @@ export default function Storefront() {
         cart: Object.fromEntries(Object.entries(cart).filter(([, qty]) => qty > 0)),
         quotedTotal: total,
         voucherCode: appliedVoucher?.code ?? null,
+        fulfilDate: chosenDate,
       })
       // Remember what they typed, silently, so they never type it again — at this shop or any
       // other. Best-effort and unawaited: the order is already placed, and a profile write that
@@ -499,7 +522,7 @@ export default function Storefront() {
       }
       // Best-effort server-side Telegram notify; never blocks a placed order.
       await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
-      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total })
+      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total, fulfilDate: chosenDate })
       toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
       // A refused order wrote NOTHING — the transaction rolled back. So for the three voucher
@@ -560,6 +583,19 @@ export default function Storefront() {
         const msg = t(
           'Please choose the state you are delivering to.',
           '请选择送货的州属。',
+        )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'fulfil_date_unavailable' || code === 'fulfil_date_required') {
+        // `fulfil_date_required` is unreachable from this form — `canSubmit` will not let a
+        // dateless order be submitted — and it is here precisely because that gate is the ONLY
+        // thing making it so. `fulfil_date_unavailable` IS reachable honestly: a checkout left
+        // open past midnight, or a merchant who closed a day mid-checkout. Clearing the
+        // selection is what recovers it, since the re-render drops the stale date from the grid.
+        setFulfilDate(null)
+        const msg = t(
+          'Please choose a date for your order.',
+          '请选择订单日期。',
         )
         setError(msg)
         toast.error(msg)
@@ -629,6 +665,18 @@ export default function Storefront() {
               {t('Order number', '订单号')}:<br />
               <strong className="font-mono text-[16px]">{success.orderNumber}</strong>
             </p>
+
+            {/* The date they picked, read back to them. A customer who chose a date and is shown
+                only an order number has no confirmation that the one thing they had to decide was
+                actually recorded — and the merchant is scheduling against it. formatCalendarDate,
+                not formatOrderDate: this is a calendar date, and rendering it in the viewer's zone
+                would show a customer abroad the day before the one they chose. */}
+            {success.fulfilDate && (
+              <p className="text-[15px] text-oxblood mb-5 tracking-[0.5px]">
+                {t('For', '取货日期')}:<br />
+                <strong className="text-[16px]">{formatCalendarDate(success.fulfilDate, lang)}</strong>
+              </p>
+            )}
 
             <div className="max-w-[360px] mx-auto mb-5 text-left px-4 py-3 bg-surface-raised border-[1.5px] border-divider rounded-md">
               {success.items.map((item, i) => (
@@ -948,6 +996,22 @@ export default function Storefront() {
                 </div>
               </div>
             )}
+          </div>
+
+          <hr className="border-0 border-t border-clay-border my-6" />
+
+          {/* When */}
+          <div className="mb-7">
+            <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">
+              {t('Date', '日期')} *
+            </div>
+            <FulfilDatePicker
+              available={fulfilDates}
+              value={chosenDate}
+              onChange={setFulfilDate}
+              t={t}
+              lang={lang}
+            />
           </div>
 
           <hr className="border-0 border-t border-clay-border my-6" />
