@@ -51,14 +51,24 @@ export default function FeedbackFab() {
   const tooLong = trimmed.length > FEEDBACK_MAX_LENGTH
   const canSubmit = category !== '' && trimmed.length > 0 && !tooLong && !busy
 
-  // Reset on close so reopening never shows the previous submission's thank-you or error.
+  // Reset on both directions, not just close. A dialog has to open clean regardless of how
+  // the previous session ended — including one abandoned mid-request, where the in-flight
+  // submission resolves in the background (setSent(true), a fresh timer) after the user has
+  // already walked away; without a reset on open, that stale success state is still sitting
+  // there waiting to be shown as a thank-you nobody asked for. Resetting on close still earns
+  // its keep too: it drops the typed message right away instead of holding it until the next
+  // open, and it's what cancels the tracked auto-close timer.
   const change = (next: boolean) => {
     if (autoCloseTimer.current !== null) {
       clearTimeout(autoCloseTimer.current)
       autoCloseTimer.current = null
     }
     setOpen(next)
-    if (!next) { setCategory(''); setMessage(''); setError(''); setSent(false); setBusy(false) }
+    setCategory('')
+    setMessage('')
+    setError('')
+    setSent(false)
+    setBusy(false)
   }
 
   const send = async () => {
