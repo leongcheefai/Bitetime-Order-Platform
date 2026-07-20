@@ -178,7 +178,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       }
       setFields(applied)
       setSaved(applied)
-      toast.success(t('Shipping saved', '运费已保存'))
+      toast.success(t('Settings saved', '设置已保存'))
     } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
     finally { setBusy(false) }
   }
@@ -260,10 +260,13 @@ function ShippingTab({ onDirtyChange }: TabProps) {
               variant="compact"
             />
             {/* Says what the rate DOES, because the base is not obvious: it is charged on the
-                food after any voucher, and never on the delivery fee. */}
+                food after any voucher, and never on the delivery fee. Also says what a BLANK (or
+                zero) rate does, same reason as the East-Malaysia hint above: shopTax collapses
+                a blank/0 rate to tax OFF, so the checkbox pops back unticked after save — this
+                is what stops that from reading as an unexplained bug. */}
             <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
-              {t('Added on top of your item prices, after any voucher discount. Delivery fees are not taxed.',
-                 '在商品价格之上加收，扣除优惠券后计算。运费不征税。')}
+              {t('Added on top of your item prices, after any voucher discount. Delivery fees are not taxed. Leave blank, or enter 0, to turn tax off.',
+                 '在商品价格之上加收，扣除优惠券后计算。运费不征税。留空或填 0 即可关闭税费。')}
             </p>
           </div>
         </div>
@@ -278,7 +281,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             className="resize-y min-h-[72px] max-w-[420px]" />
         </div>
       </div>
-      <SaveRow busy={busy} label={{ idle: t('Save shipping', '保存运费'), busy: t('Saving…', '保存中…') }} />
+      <SaveRow busy={busy} label={{ idle: t('Save', '保存'), busy: t('Saving…', '保存中…') }} />
     </form>
   )
 }
