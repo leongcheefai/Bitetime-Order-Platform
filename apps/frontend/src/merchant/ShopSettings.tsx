@@ -163,11 +163,18 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       await refreshMerchant()
       // Show back the rates that were actually SAVED, not the blank that was typed — a merchant
       // must never be left looking at an empty box while their shop charges the WM rate.
+      //
+      // Tax goes through shopTax for the same reason: a ticked-but-blank rate is written as
+      // `{tax_enabled: true, tax_rate: 0}`, which shopTax collapses to OFF when it reads the row
+      // back on reload. Carrying `fields.taxEnabled` over verbatim would show CHECKED here and
+      // UNCHECKED after a refresh — shopTax is what the checkbox must agree with.
+      const tax = shopTax({ tax_enabled: fields.taxEnabled, tax_rate: Number(fields.taxRate) || 0 })
       const applied = {
         ...fields,
         wm: String(shipping.WM),
         em: String(shipping.EM),
-        taxRate: Number(fields.taxRate) ? String(Number(fields.taxRate)) : '',
+        taxEnabled: tax.enabled,
+        taxRate: tax.rate ? String(tax.rate) : '',
       }
       setFields(applied)
       setSaved(applied)
