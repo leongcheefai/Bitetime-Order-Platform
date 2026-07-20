@@ -7,16 +7,72 @@ describe('pickMerchantConfig — fulfilment', () => {
       config: { fulfilment: { lead_days: 1, window_days: 7, closed_weekdays: [1] } },
       timezone: 'Asia/Kuala_Lumpur',
     })).toEqual({
-      config: { fulfilment: { lead_days: 1, window_days: 7, closed_weekdays: [1] } },
-      timezone: 'Asia/Kuala_Lumpur',
+      ok: true,
+      patch: {
+        config: { fulfilment: { lead_days: 1, window_days: 7, closed_weekdays: [1] } },
+        timezone: 'Asia/Kuala_Lumpur',
+      },
     })
   })
 
   it('drops a timezone Intl cannot parse rather than writing it', () => {
-    expect(pickMerchantConfig({ timezone: 'Mars/Olympus' })).toEqual({})
+    expect(pickMerchantConfig({ timezone: 'Mars/Olympus' })).toEqual({ ok: true, patch: {} })
   })
 
   it('still refuses the privilege columns', () => {
-    expect(pickMerchantConfig({ status: 'active', owner_id: 'x', slug: 'y', plan: 'pro' })).toEqual({})
+    expect(pickMerchantConfig({ status: 'active', owner_id: 'x', slug: 'y', plan: 'pro' })).toEqual({ ok: true, patch: {} })
+  })
+})
+
+describe('pickMerchantConfig — tax (#88)', () => {
+  it('accepts a valid enabled + rate pair', () => {
+    expect(pickMerchantConfig({ tax_enabled: true, tax_rate: 6 })).toEqual({
+      ok: true,
+      patch: { tax_enabled: true, tax_rate: 6 },
+    })
+  })
+
+  it('coerces a numeric-string rate (PATCH bodies can carry either)', () => {
+    expect(pickMerchantConfig({ tax_rate: '6' })).toEqual({ ok: true, patch: { tax_rate: 6 } })
+  })
+
+  it('refuses a rate above 100 rather than clamping it', () => {
+    expect(pickMerchantConfig({ tax_rate: 150 })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a negative rate', () => {
+    expect(pickMerchantConfig({ tax_rate: -1 })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a non-numeric rate', () => {
+    expect(pickMerchantConfig({ tax_rate: 'six' })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a blank rate rather than coercing it to 0', () => {
+    expect(pickMerchantConfig({ tax_rate: '' })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a whitespace-only rate rather than coercing it to 0', () => {
+    expect(pickMerchantConfig({ tax_rate: '   ' })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a non-boolean tax_enabled', () => {
+    expect(pickMerchantConfig({ tax_enabled: 'yes' })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a rate the numeric(5,2) column would round on write', () => {
+    expect(pickMerchantConfig({ tax_rate: 100.005 })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a rate with more than 2 decimal places', () => {
+    expect(pickMerchantConfig({ tax_rate: 6.567 })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('accepts a rate with exactly 1 decimal place', () => {
+    expect(pickMerchantConfig({ tax_rate: 6.5 })).toEqual({ ok: true, patch: { tax_rate: 6.5 } })
+  })
+
+  it('accepts a whole-number rate', () => {
+    expect(pickMerchantConfig({ tax_rate: 6 })).toEqual({ ok: true, patch: { tax_rate: 6 } })
   })
 })

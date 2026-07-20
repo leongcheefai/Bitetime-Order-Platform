@@ -30,6 +30,10 @@ export interface Merchant {
   config?: Record<string, unknown>
   timezone?: string
   created_at?: string
+  /** Whether this shop charges tax. See `shopTax` — never read this without it. */
+  tax_enabled?: boolean
+  /** A PERCENTAGE: 6 means 6%. PostgREST sends a number; read via `shopTax`. */
+  tax_rate?: number | string
   [key: string]: any
 }
 
@@ -112,6 +116,11 @@ export interface Order {
   shipping_fee?: number
   items?: OrderItem[]
   total?: number
+  /** Tax charged on this order. 0 on orders placed before tax settings shipped. */
+  tax?: number
+  /** The percentage that produced `tax`. **Gate the tax line on this, not on `tax`** — a fully
+   *  discounted order at a taxed shop has tax 0 and must still show its rate. */
+  tax_rate?: number
   currency?: string
   status?: OrderStatus | string
   created_at?: string
@@ -153,6 +162,11 @@ export interface MerchantState {
   merchant: Merchant | null
   loading: boolean
   notFound: boolean
+  // Re-fetch the CURRENT slug's merchant row without disturbing `loading`/`notFound`. Distinct
+  // from `SessionValue.refreshMerchant`, which re-reads the SIGNED-IN user's own shop for the
+  // merchant dashboard — this one re-reads whatever shop `/s/:slug` is pointed at, which any
+  // visitor (including a guest) can be looking at. A failed refresh leaves `merchant` untouched.
+  refresh: () => Promise<void>
 }
 
 // One row of merchant platform feedback (#89). shop_name / shop_slug are joined in by the

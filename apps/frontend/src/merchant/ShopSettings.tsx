@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
 import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret, merchantHasOrders } from '../store'
-import { shopRates } from '@bitetime/shared'
+import { shopRates, shopTax } from '@bitetime/shared'
 import { CURRENCIES, CURRENCY_CODES, DEFAULT_CURRENCY, currencyDef } from '../currency'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -105,11 +105,17 @@ function ShippingTab({ onDirtyChange }: TabProps) {
     // wire. A third fallback rule here would show a rate (EM 18) that nobody quotes and nobody
     // bills — and saving it would move a real price the merchant never meant to touch.
     const rates = shopRates(merchant!.shipping)
+    // shopTax, not a local `?? 0`, for the same reason shopRates is used one line up: this form
+    // shows the merchant what their shop CHARGES, and the charge is decided by that one function
+    // on both sides of the wire.
+    const tax = shopTax(merchant!)
     return {
       currency: merchant!.currency ?? DEFAULT_CURRENCY,
       wm: String(rates.WM),
       em: String(rates.EM),
       pickupAddress: merchant!.pickup_address ?? '',
+      taxEnabled: tax.enabled,
+      taxRate: tax.rate ? String(tax.rate) : '',
     }
   })
   const [fields, setFields] = useState<SettingsFields>(saved)
@@ -146,15 +152,33 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         // currency when it is still editable.
         ...(currencyLocked ? {} : { currency: fields.currency }),
         shipping,
-        pickup_address: fields.pickupAddress.trim() || null,
+        pickup_address: (fields.pickupAddress ?? '').trim() || null,
+        // A blank rate box is 0, and 0 is "no tax" — the same collapse `shopTax` makes when it
+        // reads the row back, so the form cannot save a value it then displays differently.
+        // The checkbox is stored as typed: a merchant who unticks it keeps their rate on the
+        // row, and reads it back as OFF because `shopTax` gates on the flag.
+        tax_enabled: fields.taxEnabled,
+        tax_rate: Number(fields.taxRate) || 0,
       })
       await refreshMerchant()
       // Show back the rates that were actually SAVED, not the blank that was typed — a merchant
       // must never be left looking at an empty box while their shop charges the WM rate.
-      const applied = { ...fields, wm: String(shipping.WM), em: String(shipping.EM) }
+      //
+      // Tax goes through shopTax for the same reason: a ticked-but-blank rate is written as
+      // `{tax_enabled: true, tax_rate: 0}`, which shopTax collapses to OFF when it reads the row
+      // back on reload. Carrying `fields.taxEnabled` over verbatim would show CHECKED here and
+      // UNCHECKED after a refresh — shopTax is what the checkbox must agree with.
+      const tax = shopTax({ tax_enabled: fields.taxEnabled, tax_rate: Number(fields.taxRate) || 0 })
+      const applied = {
+        ...fields,
+        wm: String(shipping.WM),
+        em: String(shipping.EM),
+        taxEnabled: tax.enabled,
+        taxRate: tax.rate ? String(tax.rate) : '',
+      }
       setFields(applied)
       setSaved(applied)
-      toast.success(t('Shipping saved', '运费已保存'))
+      toast.success(t('Settings saved', '设置已保存'))
     } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
     finally { setBusy(false) }
   }
@@ -216,6 +240,38 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         </div>
       </div>
       <div className={CARD}>
+        <h3 className={HEADING}>{t('Tax', '税')}</h3>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-[14px] text-ink">
+            <input
+              type="checkbox"
+              checked={fields.taxEnabled}
+              onChange={e => setFields(f => ({ ...f, taxEnabled: e.target.checked }))}
+            />
+            {t('Charge tax on orders', '订单收取税费')}
+          </label>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-tax-rate">{t('Tax rate (%)', '税率 (%)')}</Label>
+            <Input
+              id="shop-tax-rate" type="number" step="0.01" min="0" max="100"
+              value={fields.taxRate}
+              disabled={!fields.taxEnabled}
+              onChange={e => setFields(f => ({ ...f, taxRate: e.target.value }))}
+              variant="compact"
+            />
+            {/* Says what the rate DOES, because the base is not obvious: it is charged on the
+                food after any voucher, and never on the delivery fee. Also says what a BLANK (or
+                zero) rate does, same reason as the East-Malaysia hint above: shopTax collapses
+                a blank/0 rate to tax OFF, so the checkbox pops back unticked after save — this
+                is what stops that from reading as an unexplained bug. */}
+            <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
+              {t('Added on top of your item prices, after any voucher discount. Delivery fees are not taxed. Leave blank, or enter 0, to turn tax off.',
+                 '在商品价格之上加收，扣除优惠券后计算。运费不征税。留空或填 0 即可关闭税费。')}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className={CARD}>
         <h3 className={HEADING}>{t('Pickup address', '自取地址')}</h3>
         <div className="flex flex-col gap-[6px]">
           <Label htmlFor="shop-pickup">{t('Shown to customers who choose pickup', '选择自取的顾客可见')}</Label>
@@ -225,7 +281,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             className="resize-y min-h-[72px] max-w-[420px]" />
         </div>
       </div>
-      <SaveRow busy={busy} label={{ idle: t('Save shipping', '保存运费'), busy: t('Saving…', '保存中…') }} />
+      <SaveRow busy={busy} label={{ idle: t('Save', '保存'), busy: t('Saving…', '保存中…') }} />
     </form>
   )
 }

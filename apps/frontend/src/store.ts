@@ -164,11 +164,23 @@ export async function compMerchant(id: string) {
   return res.json()
 }
 
-export async function fetchMerchantBySlug(slug: string | undefined) {
+// The "could not ask" vs "the answer is empty" distinction, same shape as
+// `lookupMerchantVoucher` / `lookupProducts`: `{ ok: false }` means the request itself never
+// landed (network/CORS/non-2xx) and a caller that would DROP something on that must not treat
+// it as an answer. `{ ok: true, merchant: null }` is a real answer — the slug is reserved or no
+// row matches — and is safe to adopt. `fetchMerchantBySlug` below collapses both to `null` for
+// callers that only ever DISPLAY the result; `MerchantContext.refresh` uses this directly so a
+// dropped packet mid-checkout cannot blank an already-loaded storefront.
+export async function lookupMerchantBySlug(slug: string | undefined): Promise<{ ok: true; merchant: any | null } | { ok: false }> {
   const s = (slug || '').trim().toLowerCase()
-  if (!s || RESERVED_SLUGS.includes(s)) return null
+  if (!s || RESERVED_SLUGS.includes(s)) return { ok: true, merchant: null }
   const r = await apiTry<any>(`/api/merchants/${encodeURIComponent(s)}`)
-  return r.ok ? r.data : null
+  return r.ok ? { ok: true, merchant: r.data } : { ok: false }
+}
+
+export async function fetchMerchantBySlug(slug: string | undefined) {
+  const found = await lookupMerchantBySlug(slug)
+  return found.ok ? found.merchant : null
 }
 
 export async function fetchMyMerchant(userId: string) {

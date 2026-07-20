@@ -75,6 +75,9 @@ export async function seedMerchant(fields: {
   name?: string
   order_prefix?: string
   status?: MerchantStatus
+  /** Defaults to the column defaults (off / 0) when omitted — see 20260720140000_merchant_tax.sql. */
+  tax_enabled?: boolean
+  tax_rate?: number
 }) {
   await resetMerchant(fields.slug)
   const { data, error } = await serviceClient()
@@ -85,6 +88,8 @@ export async function seedMerchant(fields: {
       name: fields.name ?? fields.slug,
       order_prefix: fields.order_prefix ?? 'XX',
       status: fields.status ?? 'active',
+      ...(fields.tax_enabled !== undefined ? { tax_enabled: fields.tax_enabled } : {}),
+      ...(fields.tax_rate !== undefined ? { tax_rate: fields.tax_rate } : {}),
     })
     .select('id')
     .single()

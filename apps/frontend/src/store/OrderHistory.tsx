@@ -7,6 +7,7 @@ import { StatusBadge } from '../orderStatus'
 import { courierName, trackingUrl } from '../couriers'
 import { formatMoney } from '../currency'
 import { formatOrderDate, formatCalendarDate } from '../orderDate'
+import { formatTaxRate } from '../receipt'
 import { cn } from '@/lib/utils'
 import AuthPanel from './AuthPanel'
 import MoneyLine from './MoneyLine'
@@ -146,6 +147,8 @@ export default function OrderHistory() {
               const currency = o.currency ?? merchant.currency
               const shipping = o.shipping_fee ?? 0
               const discount = o.discount ?? 0
+              const tax = o.tax ?? 0
+              const taxRate = o.tax_rate ?? 0
               return (
                 <div key={id} className={cn(i > 0 && 'border-t border-clay-border')}>
                   {/* Status and total sit on the row, unexpanded. "Where's my order?" is the single
@@ -199,7 +202,7 @@ export default function OrderHistory() {
                           value={formatMoney((item.price ?? 0) * (item.qty ?? 0), currency)}
                         />
                       ))}
-                      {/* Shipping and the voucher are both stated, or the lines above would not add
+                      {/* Shipping, tax, and the voucher are all stated, or the lines above would not add
                           up to the total below them — a receipt that doesn't reconcile is worse
                           than one that shows only a total. */}
                       {shipping > 0 && (
@@ -209,6 +212,12 @@ export default function OrderHistory() {
                         <MoneyLine
                           label={`${t('Voucher', '优惠券')}${o.voucher_code ? ` (${o.voucher_code})` : ''}`}
                           value={`−${formatMoney(discount, currency)}`}
+                        />
+                      )}
+                      {taxRate > 0 && (
+                        <MoneyLine
+                          label={`${t('Tax', '税')} (${formatTaxRate(taxRate)}%)`}
+                          value={formatMoney(tax, currency)}
                         />
                       )}
                       <div className="flex justify-between items-start gap-2 text-[14px] font-medium text-ink border-t border-rose-border mt-2 pt-2">

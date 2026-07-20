@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  priceOrder, voucherError, voucherFromRow, shopRates, DEFAULT_WM_RATE,
+  priceOrder, voucherError, voucherFromRow, shopRates, shopTax, DEFAULT_WM_RATE,
   promoClaims, productFromRow, promoState,
 } from './pricing.js'
 import type { PricedProduct } from './pricing.js'
@@ -417,5 +417,119 @@ describe('shopRates', () => {
   it('coerces a numeric string, and refuses anything that is not a number', () => {
     expect(shopRates({ WM: '8.50', EM: '18' })).toEqual({ WM: 8.5, EM: 18 })
     expect(shopRates({ WM: 'abc', EM: null })).toEqual({ WM: DEFAULT_WM_RATE, EM: DEFAULT_WM_RATE })
+  })
+})
+
+describe('tax', () => {
+  const products = [{ id: 'a', name: 'Nasi Lemak', price: 10 }]
+  const cart = { a: 2 }
+  const rates = { WM: 8, EM: 18 }
+
+  it('is absent when no tax is configured — today\'s numbers, unchanged', () => {
+    const bd = priceOrder({ products, cart, mode: 'delivery', state: 'Selangor', rates })
+    expect(bd.subtotal).toBe(20)
+    expect(bd.shipping).toBe(8)
+    expect(bd.tax).toBe(0)
+    expect(bd.taxRate).toBe(0)
+    expect(bd.total).toBe(28)
+  })
+
+  it('is absent when tax is configured but disabled', () => {
+    const bd = priceOrder({
+      products, cart, mode: 'pickup', rates,
+      tax: { enabled: false, rate: 6 },
+    })
+    expect(bd.tax).toBe(0)
+    expect(bd.taxRate).toBe(0)
+    expect(bd.total).toBe(20)
+  })
+
+  it('adds tax on the subtotal, and never on shipping', () => {
+    const bd = priceOrder({
+      products, cart, mode: 'delivery', state: 'Selangor', rates,
+      tax: { enabled: true, rate: 6 },
+    })
+    // 6% of 20 = 1.20. The RM8 delivery fee is NOT taxed.
+    expect(bd.tax).toBe(1.2)
+    expect(bd.taxRate).toBe(6)
+    expect(bd.total).toBe(29.2) // 20 + 8 + 1.20
+  })
+
+  it('taxes the subtotal AFTER the voucher comes off', () => {
+    const bd = priceOrder({
+      products, cart, mode: 'pickup', rates,
+      voucher: { code: 'X', type: 'fixed', value: 5 },
+      tax: { enabled: true, rate: 6 },
+    })
+    // discount 5 off (20 + 0); taxable base 20 − 5 = 15; tax 0.90
+    expect(bd.discount).toBe(5)
+    expect(bd.tax).toBe(0.9)
+    expect(bd.total).toBe(15.9)
+  })
+
+  it('never charges a negative tax when the voucher exceeds the subtotal', () => {
+    const bd = priceOrder({
+      products, cart, mode: 'delivery', state: 'Selangor', rates,
+      voucher: { code: 'X', type: 'fixed', value: 25 },
+      tax: { enabled: true, rate: 6 },
+    })
+    // discount is min(25, 20 + 8) = 25, which is MORE than the 20 subtotal.
+    // Base clamps to 0 — an unclamped base would be a tax that pays the customer.
+    expect(bd.discount).toBe(25)
+    expect(bd.tax).toBe(0)
+    expect(bd.total).toBe(3)
+  })
+
+  it('rounds tax to cents', () => {
+    const bd = priceOrder({
+      products: [{ id: 'a', name: 'Kopi', price: 3.33 }], cart: { a: 1 },
+      mode: 'pickup', rates,
+      tax: { enabled: true, rate: 6 },
+    })
+    expect(bd.tax).toBe(0.2) // 3.33 * 0.06 = 0.1998
+    expect(bd.total).toBe(3.53)
+  })
+
+  it('carries a fractional rate through to the breakdown', () => {
+    const bd = priceOrder({
+      products, cart, mode: 'pickup', rates,
+      tax: { enabled: true, rate: 6.5 },
+    })
+    expect(bd.taxRate).toBe(6.5)
+    expect(bd.tax).toBe(1.3)
+  })
+})
+
+describe('shopTax', () => {
+  it('reads an enabled rate off a merchant row', () => {
+    expect(shopTax({ tax_enabled: true, tax_rate: 6 })).toEqual({ enabled: true, rate: 6 })
+  })
+
+  it('is OFF for a shop that never configured tax', () => {
+    const off = { enabled: false, rate: 0 }
+    expect(shopTax(null)).toEqual(off)
+    expect(shopTax(undefined)).toEqual(off)
+    expect(shopTax({})).toEqual(off)
+    expect(shopTax('nonsense')).toEqual(off)
+  })
+
+  it('is OFF when the flag is false, even with a rate stored', () => {
+    expect(shopTax({ tax_enabled: false, tax_rate: 6 })).toEqual({ enabled: false, rate: 6 })
+  })
+
+  it('coerces the string a postgres.js numeric arrives as', () => {
+    // postgres.js hands back '6.00'; PostgREST hands back 6. Two sides mapping
+    // differently is a refused checkout for every order at the shop.
+    expect(shopTax({ tax_enabled: true, tax_rate: '6.00' })).toEqual({ enabled: true, rate: 6 })
+    expect(shopTax({ tax_enabled: true, tax_rate: '6.50' })).toEqual({ enabled: true, rate: 6.5 })
+  })
+
+  it('fails to NO tax on an unparseable rate, never to a number nobody chose', () => {
+    expect(shopTax({ tax_enabled: true, tax_rate: 'abc' })).toEqual({ enabled: false, rate: 0 })
+    expect(shopTax({ tax_enabled: true, tax_rate: null })).toEqual({ enabled: false, rate: 0 })
+  })
+
+  it('treats an enabled 0% as no tax', () => {
+    expect(shopTax({ tax_enabled: true, tax_rate: 0 })).toEqual({ enabled: false, rate: 0 })
   })
 })

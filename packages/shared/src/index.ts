@@ -11,14 +11,14 @@ export type {
   FeedbackCategory, FeedbackStatus, FeedbackDraft, FeedbackValidation,
 } from './feedback.js'
 export {
-  priceOrder, voucherError, shippingFee, voucherFromRow, shopRates,
+  priceOrder, voucherError, shippingFee, voucherFromRow, shopRates, shopTax,
   promoState, promoClaims, productFromRow,
   EM_STATES, DEFAULT_WM_RATE,
 } from './pricing.js'
 export type {
   PriceInput, PriceBreakdown, PriceLine,
   VoucherCtx, VoucherErrorCode,
-  PricedProduct, PricedVoucher, PromoState,
+  PricedProduct, PricedVoucher, PromoState, ShopTax,
 } from './pricing.js'
 export {
   fulfilmentConfig, isTimezone, todayInZone,

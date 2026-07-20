@@ -11,8 +11,8 @@ const round2 = (n: number) => parseFloat(n.toFixed(2))
  *
  * `orders` persists `items`, `shipping_fee`, `discount` and `total` — never a subtotal. Summing
  * the lines is what makes the printed arithmetic close: `pricing.ts` builds the total FROM this
- * same sum (`subtotal = round2(Σ lineTotal)`, `total = round2(subtotal + shipping − discount)`),
- * so subtotal + fee − voucher = total on the page, by construction.
+ * same sum (`subtotal = round2(Σ lineTotal)`, `total = round2(subtotal + shipping − discount + tax)`),
+ * so subtotal + fee − voucher + tax = total on the page, by construction.
  *
  * Deriving it the other way — `total − shipping + discount` — would always reconcile with the
  * total while silently disagreeing with the lines printed directly above it. This way a data bug
@@ -30,4 +30,16 @@ const round2 = (n: number) => parseFloat(n.toFixed(2))
 export function receiptSubtotal(items: OrderItem[] | null | undefined): number {
   if (!items) return 0
   return round2(items.reduce((sum, it) => sum + round2((it.price ?? 0) * (it.qty ?? 0)), 0))
+}
+
+/**
+ * A tax rate as it is printed: `6`, `6.5`, never `6.00`.
+ *
+ * `tax_rate` is `numeric(5,2)`, so PostgREST can hand back `6` and postgres.js `'6.00'` for
+ * the same shop — the label must not depend on which one arrived.
+ */
+export function formatTaxRate(rate: number | string | null | undefined): string {
+  const n = typeof rate === 'string' ? Number(rate) : rate
+  if (n === null || n === undefined || !Number.isFinite(n)) return '0'
+  return String(parseFloat(n.toFixed(2)))
 }

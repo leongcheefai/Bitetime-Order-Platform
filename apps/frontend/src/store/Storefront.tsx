@@ -6,9 +6,10 @@ import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError, shopRates, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import { priceOrder, voucherError, shopRates, shopTax, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
+import { formatTaxRate } from '../receipt'
 import { formatUnit } from '../productUnit'
 import { useServerClock } from '../serverClock'
 import { lookupPostcode } from '../postcodes'
@@ -46,6 +47,8 @@ interface SuccessState {
   subtotal: number
   fee: number
   discount: number
+  taxAmount: number
+  taxRate: number
   total: number
   /**
    * The date they asked for, echoed back. `null` only defensively — `canSubmit` will not let a
@@ -74,7 +77,7 @@ const VOUCHER_REFUSALS = {
 } as const
 
 export default function Storefront() {
-  const { merchant: merchantNullable } = useMerchant()
+  const { merchant: merchantNullable, refresh: refreshMerchant } = useMerchant()
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
   const { lang, t, account, profile, refreshProfile } = useSession()
   const viewVariants = usePageVariants()
@@ -150,6 +153,9 @@ export default function Storefront() {
   // by a ringgit would not be a display bug — it would refuse the checkout.
   const { WM: rateWM, EM: rateEM } = shopRates(merchant?.shipping)
   const baseDeliveryFee = rateWM // shown on the Delivery toggle before a state is known
+  // The SAME mapper the order transaction charges with — see the comment on the `priceOrder`
+  // call below.
+  const tax = shopTax(merchant)
   // The voucher's one-per-customer key — the account email, and nothing else. It must match
   // what the SERVER keys on (the JWT's email), or this pre-flight green-lights a claim the
   // server then refuses. A voucher requires an account: there is no guest key (#72).
@@ -304,12 +310,17 @@ export default function Storefront() {
     // shipping it for free. Weaken the gate and the two sides diverge.
     resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     voucher: appliedVoucher,
+    // The SAME mapper the order transaction charges with. A second reading of these columns
+    // here is a second rule, and the customer meets it as a refused checkout (`price_changed`).
+    tax,
   })
   const cartItems: CartLine[] = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice, promo: l.promo }))
   const subtotal = bd.subtotal
   const discount = bd.discount
   const total = bd.total
   const fee = bd.shipping
+  const taxAmount = bd.tax
+  const taxRate = bd.taxRate
   const deliveryReady =
     mode !== 'delivery' ||
     (address.line1.trim() !== '' &&
@@ -402,13 +413,17 @@ export default function Storefront() {
   }
 
   /**
-   * Re-read everything the quote is built from: the products AND the applied voucher.
+   * Re-read everything the quote is built from: the products, the applied voucher, AND the
+   * merchant row.
    *
-   * Both are inputs to `priceOrder`, and the backend prices from its own fresh copy of both, so
-   * a refusal that refreshed only the products left the other half of the quote stale — and a
-   * stale input re-quotes to the same refused number on the next tap. A voucher that has since
-   * been deleted comes back null and is dropped, said out loud rather than silently: the
-   * customer can re-apply a code, but not one that no longer exists.
+   * All three are inputs to `priceOrder` (the merchant row carries shipping rates, tax and the
+   * promo config), and the backend prices from its own fresh copy of all of them, so a refusal
+   * that refreshed only some left the rest of the quote stale — and a stale input re-quotes to
+   * the same refused number on the next tap. A voucher that has since been deleted comes back
+   * null and is dropped, said out loud rather than silently: the customer can re-apply a code,
+   * but not one that no longer exists. The merchant refresh (`useMerchant().refresh`) applies
+   * itself internally and only ever adopts a real answer — see `MerchantContext.refresh` for why
+   * a failed fetch there must never blank the storefront.
    *
    * IT ASKS WITH `lookupProducts`/`lookupMerchantVoucher`, AND THAT IS THE LOAD-BEARING PART.
    * This runs on the RECOVERY path — the one moment a connection is most likely to be flaky —
@@ -441,6 +456,10 @@ export default function Storefront() {
       lookupProducts(merchant.id).catch(() => null),
       code ? lookupMerchantVoucher(merchant.id, code).catch(() => ({ ok: false as const })) : null,
       serverNow ? Promise.resolve(adoptClock(serverNow)) : resyncClock(),
+      // Tax/shipping/config all live on this row. Self-contained: unlike the other two fetches,
+      // it applies its own result (or nothing, on failure) rather than returning data for us to
+      // adopt below — see MerchantContext.refresh for why a dropped packet here changes nothing.
+      refreshMerchant().catch(() => null),
     ])
     // `[]` is an ANSWER — the shop really sells nothing, and pruning the whole cart is right.
     // `null` is the absence of one, and prunes nothing.
@@ -522,7 +541,7 @@ export default function Storefront() {
       }
       // Best-effort server-side Telegram notify; never blocks a placed order.
       await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
-      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, total, fulfilDate: chosenDate })
+      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, taxAmount, taxRate, total, fulfilDate: chosenDate })
       toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
       // A refused order wrote NOTHING — the transaction rolled back. So for the three voucher
@@ -704,6 +723,12 @@ export default function Storefront() {
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                   <span className="min-w-0">{t('Voucher', '优惠券')}</span>
                   <span className="shrink-0 text-right whitespace-nowrap">−{formatMoney(success.discount, currency)}</span>
+                </div>
+              )}
+              {success.taxRate > 0 && (
+                <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                  <span className="min-w-0">{t('Tax', '税')} ({formatTaxRate(success.taxRate)}%)</span>
+                  <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(success.taxAmount, currency)}</span>
                 </div>
               )}
               <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">
@@ -1148,6 +1173,12 @@ export default function Storefront() {
                   <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
                     <span className="min-w-0">{t('Voucher', '优惠券')} ({appliedVoucher?.code})</span>
                     <span className="shrink-0 text-right whitespace-nowrap">−{formatMoney(discount, currency)}</span>
+                  </div>
+                )}
+                {taxRate > 0 && (
+                  <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
+                    <span className="min-w-0">{t('Tax', '税')} ({formatTaxRate(taxRate)}%)</span>
+                    <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(taxAmount, currency)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-[10px]">

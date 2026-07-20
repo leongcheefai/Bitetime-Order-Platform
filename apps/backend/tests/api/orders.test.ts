@@ -1022,6 +1022,80 @@ describe('POST /api/orders', () => {
       expect(await errorOf(res)).toBe('fulfil_date_unavailable')
     })
   })
+
+  // ── Tax: derived inside the transaction, snapshotted with the rate that produced it (#88) ──
+  //
+  // Each case gets its own shop (seedMerchant, extended with tax_enabled/tax_rate — same
+  // helper the rest of this suite seeds `shop`/`pendingShop`/`suspendedShop` from) rather than
+  // mutating the shared `shop`: the shared one is reused by dozens of tests above that assume
+  // tax is off, and flipping it under them would make this block's ordering load-bearing.
+  describe('tax', () => {
+    const TAX_SLUGS = ['ord-tax-a', 'ord-tax-b', 'ord-tax-c', 'ord-tax-d']
+
+    afterAll(async () => {
+      for (const slug of TAX_SLUGS) await resetMerchant(slug)
+    })
+
+    /** A fresh shop + one RM10 product, optionally taxed from birth. */
+    async function makeTaxShop(slug: string, tax?: { tax_enabled: boolean; tax_rate: number }) {
+      const owner = await makeUser(`${slug}-owner@test.dev`, 'password123')
+      const ownerId = (await owner.auth.getUser()).data.user!.id
+      const id = await seedMerchant({ slug, owner_id: ownerId, order_prefix: 'TX', ...(tax ?? {}) })
+      const taxedProductId = await seedProduct({ merchant_id: id, price: 10 })
+      return { id, productId: taxedProductId }
+    }
+
+    /** Flips a shop's tax settings after it already exists — the "merchant raised the rate mid-checkout" case. */
+    async function setShopTax(merchantId: string, patch: { tax_enabled: boolean; tax_rate: number }) {
+      const { error } = await svc().from('merchants').update(patch).eq('id', merchantId)
+      if (error) throw new Error(`setting tax for ${merchantId}: ${error.message}`)
+    }
+
+    it('commits tax and the rate that produced it', async () => {
+      const { id: taxShop, productId: taxProductId } = await makeTaxShop('ord-tax-a', { tax_enabled: true, tax_rate: 6 })
+
+      const res = await post(body(taxShop, taxProductId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21.2 }))
+      expect(res.status).toBe(200)
+
+      const [order] = await ordersOf(taxShop)
+      expect(Number(order.total)).toBe(21.2)
+      expect(Number(order.tax)).toBe(1.2)
+      expect(Number(order.tax_rate)).toBe(6)
+    })
+
+    it('commits zero tax for a shop that charges none', async () => {
+      const { id: taxShop, productId: taxProductId } = await makeTaxShop('ord-tax-b')
+
+      const res = await post(body(taxShop, taxProductId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 20 }))
+      expect(res.status).toBe(200)
+
+      const [order] = await ordersOf(taxShop)
+      expect(Number(order.tax)).toBe(0)
+      expect(Number(order.tax_rate)).toBe(0)
+    })
+
+    it('refuses a quote computed before the merchant raised the rate', async () => {
+      const { id: taxShop, productId: taxProductId } = await makeTaxShop('ord-tax-c', { tax_enabled: true, tax_rate: 6 })
+      await setShopTax(taxShop, { tax_enabled: true, tax_rate: 8 })
+
+      const res = await post(body(taxShop, taxProductId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21.2 }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('price_changed')
+    })
+
+    it('ignores a tax the client puts in the body', async () => {
+      const { id: taxShop, productId: taxProductId } = await makeTaxShop('ord-tax-d', { tax_enabled: true, tax_rate: 6 })
+
+      const res = await post(body(taxShop, taxProductId, {
+        fulfilDate: tomorrowInShopZone(), quotedTotal: 21.2, tax: 0, tax_rate: 0,
+      }))
+      expect(res.status).toBe(200)
+
+      const [order] = await ordersOf(taxShop)
+      expect(Number(order.tax)).toBe(1.2)
+      expect(Number(order.tax_rate)).toBe(6)
+    })
+  })
 })
 
 describe('GET /api/time', () => {
