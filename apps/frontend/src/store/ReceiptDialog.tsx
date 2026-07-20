@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { formatMoney } from '../currency'
 import { formatAddress } from '../address'
 import { formatOrderDateTime, formatCalendarDate } from '../orderDate'
-import { receiptSubtotal } from '../receipt'
+import { receiptSubtotal, formatTaxRate } from '../receipt'
 import MoneyLine from './MoneyLine'
 import type { Merchant, Order, OrderItem } from '../types'
 
@@ -43,6 +43,8 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
   const subtotal = receiptSubtotal(order.items)
   const shipping = order.shipping_fee ?? 0
   const discount = order.discount ?? 0
+  const tax = order.tax ?? 0
+  const taxRate = order.tax_rate ?? 0
   const address = order.mode === 'delivery' ? formatAddress(order.address) : ''
 
   return (
@@ -111,7 +113,7 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
 
           {/* Subtotal is stated here and nowhere else in the app: it is what closes the
               arithmetic on a page that has to stand on its own — subtotal + fee − voucher
-              = total, every term printed. */}
+              + tax = total, every term printed. */}
           <div className="border-t border-clay-border mt-2 pt-2">
             <MoneyLine label={t('Subtotal', '小计')} value={money(subtotal)} />
             {shipping > 0 && (
@@ -122,6 +124,9 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
                 label={`${t('Voucher', '优惠券')}${order.voucher_code ? ` (${order.voucher_code})` : ''}`}
                 value={`−${money(discount)}`}
               />
+            )}
+            {taxRate > 0 && (
+              <MoneyLine label={`${t('Tax', '税')} (${formatTaxRate(taxRate)}%)`} value={money(tax)} />
             )}
           </div>
 

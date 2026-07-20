@@ -6,6 +6,7 @@ import { fetchMerchantOrders, setOrderStatus, setOrderNote, setOrderTracking } f
 import { formatMoney } from '../currency'
 import { formatAddress } from '../address'
 import { formatCalendarDate } from '../orderDate'
+import { formatTaxRate } from '../receipt'
 import { SkeletonText } from '../components/Loaders'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -307,6 +308,12 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                           {t('Discount', '折扣')}{selected.voucher_code ? ` (${selected.voucher_code})` : ''}
                         </span>
                         <span className="tabular-nums text-ink">−{formatMoney(selected.discount, orderCurrency)}</span>
+                      </div>
+                    )}
+                    {selected.tax_rate != null && selected.tax_rate > 0 && (
+                      <div className="flex justify-between">
+                        <span className="text-rose-muted">{t('Tax', '税')} ({formatTaxRate(selected.tax_rate)}%)</span>
+                        <span className="tabular-nums text-ink">{formatMoney(selected.tax ?? 0, orderCurrency)}</span>
                       </div>
                     )}
                     <div className="flex justify-between font-medium">
