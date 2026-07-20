@@ -51,7 +51,7 @@ New `apps/backend/src/feedback.ts`. Every write here is a single statement, so i
 - Body passes through a `pickFeedback()` allowlist in `writes.ts`: `category` and `message` only.
 - `merchant_id` comes from the route param the middleware already verified; `user_id` from the caller's JWT; `status` is forced to `open`. None of the three is ever read from the body.
 - Validation lives in a pure `validateFeedback(body)` returning `{ ok, error }`, so it unit-tests with no Supabase running.
-- Rate limited through the existing `rateLimit.ts`: 5 submissions per hour per user.
+- Rate limited through the existing `rateLimit.ts`: 20 submissions per hour per user (raised from an initial 5 — the API suite files 7 rows under a single owner, and 5 would have 429'd two unrelated tests).
 - Returns `201` with the created row, or `400` with the validation error.
 
 ### `GET /api/admin/feedback` — `requireSuperadmin`
