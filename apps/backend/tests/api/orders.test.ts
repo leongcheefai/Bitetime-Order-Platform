@@ -24,7 +24,7 @@ import { app } from '../../src/app.js'
 import { env } from '../../src/env.js'
 import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
 import { orderDay } from '../../src/orderNumber.js'
-import { MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
+import { MAX_CART_QTY, MAX_CART_LINES, todayInZone, DEFAULT_TIMEZONE } from '@bitetime/shared'
 
 const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended']
 const DAY = orderDay(new Date())
@@ -86,6 +86,25 @@ async function seedVoucher(merchantId: string, code: string, maxUses: number | n
 async function productOf(productId: string) {
   const { data } = await svc().from('products').select('*').eq('id', productId).maybeSingle()
   return data
+}
+
+/** A date the default fulfilment config is certainly taking: today + 1, on the shop's clock. */
+function tomorrowInShopZone(): string {
+  const today = todayInZone(DEFAULT_TIMEZONE, new Date())
+  const ms = Date.parse(`${today}T00:00:00Z`) + 86_400_000
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
+/**
+ * Patch a merchant's `config.fulfilment`, preserving whatever else `config` holds —
+ * `fulfilmentConfig` (the same function order intake and the picker both read through)
+ * falls back per field, but a plain column update would blow away the rest of the bag.
+ */
+async function setFulfilmentConfig(merchantId: string, cfg: Record<string, unknown>) {
+  const { data } = await svc().from('merchants').select('config').eq('id', merchantId).single()
+  const config = { ...((data?.config as Record<string, unknown>) ?? {}), fulfilment: cfg }
+  const { error } = await svc().from('merchants').update({ config }).eq('id', merchantId)
+  if (error) throw new Error(`setting fulfilment config for ${merchantId}: ${error.message}`)
 }
 
 /**
@@ -941,6 +960,46 @@ describe('POST /api/orders', () => {
       const fresh = await post(body(shop, promoProductId, { cart: { [promoProductId]: 1 }, quotedTotal: 10 }))
       expect(fresh.status).toBe(200)
       expect((await productOf(promoProductId))!.promo_sold).toBe(0)
+    })
+  })
+
+  // ── Fulfilment date: judged against the shop's own window and clock (#91) ───
+  //
+  // Optional here — the storefront has no date picker until Task 6, and refusing every
+  // dateless order before then would close checkout. Task 8 makes it required.
+  describe('fulfilment date', () => {
+    it('stores a fulfilment date the shop is taking orders for', async () => {
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
+
+      expect(res.status).toBe(200)
+      const [order] = await ordersOf(shop)
+      expect(order.fulfil_date).not.toBeNull()
+    })
+
+    it('refuses a date past the end of the shop window, and writes nothing', async () => {
+      const res = await post(body(shop, productId, { fulfilDate: '2099-01-01' }))
+
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('fulfil_date_unavailable')
+      expect(await ordersOf(shop)).toEqual([])
+      expect(await counterOf(shop)).toBeNull()
+    })
+
+    it('refuses a date on a weekday the shop is closed', async () => {
+      // Shut the shop every day, so whatever date the helper picks is closed.
+      await setFulfilmentConfig(shop, { lead_days: 0, window_days: 14, closed_weekdays: [0, 1, 2, 3, 4, 5, 6] })
+
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
+
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('fulfil_date_unavailable')
+    })
+
+    it('refuses a malformed date rather than storing it', async () => {
+      const res = await post(body(shop, productId, { fulfilDate: 'next tuesday' }))
+
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('fulfil_date_unavailable')
     })
   })
 })

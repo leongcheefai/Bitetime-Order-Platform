@@ -847,6 +847,11 @@ app.post('/api/orders', async (c) => {
   // the hole.
   const mode = b.mode === 'pickup' || b.mode === 'delivery' ? b.mode : null
 
+  // A string or nothing. The SHAPE is checked here; whether the shop is actually taking that
+  // date is `placeOrder`'s call, because the window is the shop's rule and not HTTP's — the
+  // same split as `mode` (allowlisted here) versus the delivery region (refused there).
+  const fulfilDate = typeof b.fulfilDate === 'string' ? b.fulfilDate : null
+
   if (
     typeof b.merchantId !== 'string' || !b.merchantId ||
     typeof b.customerName !== 'string' ||
@@ -872,6 +877,7 @@ app.post('/api/orders', async (c) => {
       cart: b.cart,
       quotedTotal,
       voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
+      fulfilDate,
     })
     return c.json(result)
   } catch (err) {
