@@ -8,16 +8,28 @@ export const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancel
 
 // Owner-editable shop config. Deliberately EXCLUDES status, owner_id, slug, plan, billing_*, id.
 // Mirrors what the browser could safely write under the old RLS+trigger regime. This is the
-// EXACT union of the two updateMerchantConfig call sites (ShopSettings.tsx:141 writes
-// { currency?, shipping, pickup_address }; :243 writes { payment_bank, payment_note }) —
-// verified 2026-07-18. `shipping` is a jsonb column (shopRates output); `currency` is dropped
-// client-side once locked, but allowlist it anyway — the lock is a UI concern, and the currency
-// column is not a privilege.
+// EXACT union of the THREE updateMerchantConfig call sites (ShopSettings.tsx:141 writes
+// { currency?, shipping, pickup_address }; :243 writes { payment_bank, payment_note }; the Tax
+// tab (#88 Task 4) writes { tax_enabled, tax_rate }) — verified 2026-07-20. `shipping` is a
+// jsonb column (shopRates output); `currency` is dropped client-side once locked, but allowlist
+// it anyway — the lock is a UI concern, and the currency column is not a privilege.
 const MERCHANT_CONFIG_FIELDS = [
   'currency', 'shipping', 'pickup_address', 'payment_bank', 'payment_note', 'config', 'timezone',
+  'tax_enabled', 'tax_rate',
 ] as const
 
-export function pickMerchantConfig(body: any): Record<string, unknown> {
+/**
+ * `undefined` means "not being written" and passes through untouched. A present-but-invalid
+ * value is REFUSED, never coerced or silently dropped — unlike `timezone` below, a bad tax rate
+ * must not save silently: the merchant would see a success toast and charge nothing (or the
+ * wrong thing), because the column's own CHECK would otherwise answer with a bare 500 from deep
+ * inside PostgREST, long after the merchant who typed 150 has moved on.
+ */
+export type PickResult =
+  | { ok: true; patch: Record<string, unknown> }
+  | { ok: false; error: string }
+
+export function pickMerchantConfig(body: any): PickResult {
   const out: Record<string, unknown> = {}
   for (const k of MERCHANT_CONFIG_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
   // A timezone is not free text: `todayInZone` feeds it to Intl on EVERY order intake, and a
@@ -25,7 +37,17 @@ export function pickMerchantConfig(body: any): Record<string, unknown> {
   // earliest date a customer can pick, for every order, with nothing on screen to say why.
   // Refused at the door instead, where the merchant is present to see it.
   if (out.timezone !== undefined && !isTimezone(out.timezone)) delete out.timezone
-  return out
+  if (out.tax_rate !== undefined) {
+    const rate = typeof out.tax_rate === 'string' ? Number(out.tax_rate) : out.tax_rate
+    if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 100) {
+      return { ok: false, error: 'tax_rate must be a number between 0 and 100' }
+    }
+    out.tax_rate = rate
+  }
+  if (out.tax_enabled !== undefined && typeof out.tax_enabled !== 'boolean') {
+    return { ok: false, error: 'tax_enabled must be a boolean' }
+  }
+  return { ok: true, patch: out }
 }
 
 // Caller's GLOBAL profile (merchant_id IS NULL). EXACT union of the two writers,

@@ -1,6 +1,6 @@
 import type postgres from 'postgres'
-import { priceOrder, voucherFromRow, shopRates, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
-import type { PricedProduct, PricedVoucher, FulfilmentConfig } from '@bitetime/shared'
+import { priceOrder, voucherFromRow, shopRates, shopTax, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import type { PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax } from '@bitetime/shared'
 import { withTransaction } from './db.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
 
@@ -171,6 +171,7 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
       state: deliveryState(input.mode, input.address),
       rates: merchant.rates,
       voucher,
+      tax: merchant.tax,
       now,
     })
 
@@ -213,7 +214,7 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     await tx`
       insert into orders (
         merchant_id, user_id, customer_name, customer_wa, mode, address,
-        shipping_fee, items, total, currency, discount, voucher_code, fulfil_date, order_number, status
+        shipping_fee, items, total, currency, discount, tax, tax_rate, voucher_code, fulfil_date, order_number, status
       ) values (
         ${input.merchantId},
         ${input.userId},
@@ -226,6 +227,10 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
         ${bd.total},
         ${merchant.currency},
         ${discount},
+        -- Derived from the shop's own row inside this transaction, NEVER from the body — the
+        -- same rule as total and user_id above. A client-supplied tax is a client-chosen total.
+        ${bd.tax},
+        ${bd.taxRate},
         -- The code is recorded only when it actually bought a discount, mirroring the insert
         -- the browser used to make.
         ${discount ? (input.voucherCode ?? null) : null},
@@ -248,6 +253,7 @@ interface OrderableMerchant {
   currency: string
   fulfilment: FulfilmentConfig
   timezone: string
+  tax: ShopTax
 }
 
 /**
@@ -259,8 +265,8 @@ interface OrderableMerchant {
  * different layer. (#65 used the term for this check; the glossary wins.)
  */
 async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: string): Promise<OrderableMerchant> {
-  const rows = await tx<{ order_prefix: string; status: string; shipping: unknown; currency: string | null; config: unknown; timezone: string | null }[]>`
-    select order_prefix, status::text, shipping, currency, config, timezone from merchants where id = ${merchantId}
+  const rows = await tx<{ order_prefix: string; status: string; shipping: unknown; currency: string | null; config: unknown; timezone: string | null; tax_enabled: boolean; tax_rate: unknown }[]>`
+    select order_prefix, status::text, shipping, currency, config, timezone, tax_enabled, tax_rate from merchants where id = ${merchantId}
   `
   const merchant = rows[0]
   if (!merchant) throw new OrderError('merchant_not_found')
@@ -276,6 +282,10 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
     // meets it as a refusal of a date the picker just offered them.
     fulfilment: fulfilmentConfig(merchant.config),
     timezone: merchant.timezone ?? DEFAULT_TIMEZONE,
+    // shopTax, for the same reason as shopRates above: the storefront quotes from this exact
+    // function, and the penalty for the two disagreeing is a REFUSAL, not a rounding gap.
+    // postgres.js hands `tax_rate` back as a string; the mapper is what knows that.
+    tax: shopTax(merchant),
   }
 }
 

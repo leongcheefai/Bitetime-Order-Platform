@@ -180,6 +180,47 @@ describe('PATCH /api/merchants/:id (config)', () => {
 
     await serviceClient().from('merchants').delete().eq('id', id)
   })
+
+  // ── Tax settings (#88) — accepted from the owner, refused (never coerced) when invalid ──
+  it('accepts tax settings from the owner', async () => {
+    await resetMerchant('cfg-tax-shop')
+    const client = await makeUser('cfg-tax@example.com', 'password123')
+    const { token, userId } = await tokenOf(client)
+    const id = await seedMerchant({ slug: 'cfg-tax-shop', owner_id: userId })
+
+    const res = await patch(`/api/merchants/${id}`, { tax_enabled: true, tax_rate: 6 }, token)
+
+    expect(res.status).toBe(200)
+    const m = (await res.json()) as { tax_enabled: boolean; tax_rate: number }
+    expect(m.tax_enabled).toBe(true)
+    expect(Number(m.tax_rate)).toBe(6)
+
+    await serviceClient().from('merchants').delete().eq('id', id)
+  })
+
+  it('refuses a rate outside 0-100 instead of storing it', async () => {
+    await resetMerchant('cfg-tax-hi-shop')
+    const client = await makeUser('cfg-tax-hi@example.com', 'password123')
+    const { token, userId } = await tokenOf(client)
+    const id = await seedMerchant({ slug: 'cfg-tax-hi-shop', owner_id: userId })
+
+    const res = await patch(`/api/merchants/${id}`, { tax_rate: 150 }, token)
+    expect(res.status).toBe(400)
+
+    await serviceClient().from('merchants').delete().eq('id', id)
+  })
+
+  it('refuses a non-numeric rate', async () => {
+    await resetMerchant('cfg-tax-nan-shop')
+    const client = await makeUser('cfg-tax-nan@example.com', 'password123')
+    const { token, userId } = await tokenOf(client)
+    const id = await seedMerchant({ slug: 'cfg-tax-nan-shop', owner_id: userId })
+
+    const res = await patch(`/api/merchants/${id}`, { tax_rate: 'six' }, token)
+    expect(res.status).toBe(400)
+
+    await serviceClient().from('merchants').delete().eq('id', id)
+  })
 })
 
 describe('PATCH /api/merchants/:id/slug', () => {
