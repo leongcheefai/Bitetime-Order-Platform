@@ -10,6 +10,7 @@ import VouchersManager from './VouchersManager'
 import ShopSettings from './ShopSettings'
 import OrdersView from './OrdersView'
 import CustomersView from './CustomersView'
+import FeedbackFab from './FeedbackFab'
 import { NavGuardProvider, useNavGuard } from './NavGuard'
 import { useDashboardSection } from '../useDashboardSection'
 
@@ -64,6 +65,7 @@ function DashboardInner() {
           {section === 'settings'  && <ShopSettings />}
         </motion.div>
       </AnimatePresence>
+      <FeedbackFab />
     </DashboardShell>
   )
 }

@@ -62,7 +62,7 @@ export async function resetMerchant(slug: string) {
   if (!data) return
   // Children first — they carry FKs back to the merchant. Mirrors the
   // tenant-scoped tables in CLAUDE.md → Data layer; a new one means adding it here.
-  for (const table of ['orders', 'products', 'merchant_secrets', 'order_counters', 'vouchers', 'settings']) {
+  for (const table of ['orders', 'products', 'merchant_secrets', 'order_counters', 'vouchers', 'settings', 'merchant_feedback']) {
     await svc.from(table).delete().eq('merchant_id', data.id)
   }
   await svc.from('merchants').delete().eq('id', data.id)

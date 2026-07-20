@@ -1,12 +1,12 @@
 import type { User } from '@supabase/supabase-js';
 import { voucherFromRow } from '@bitetime/shared';
+import type { FeedbackDraft, FeedbackStatus } from '@bitetime/shared';
 import { supabase } from './supabase';
 import { RESERVED_SLUGS } from './slug';
 import { SignupError, signupErrorCode } from './signupError'
-import type { EarnedReward, Order, ReferredShop, Voucher } from './types';
+import type { AddressParts, EarnedReward, FeedbackItem, Order, ReferredShop, Voucher } from './types';
 import type { SavedDetails } from './savedDetails';
 import { resetRedirectUrl } from './resetPassword';
-import type { AddressParts } from './types'
 import { API_URL, apiGet, apiTry, apiSend } from './api'
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
@@ -820,4 +820,28 @@ export async function fetchMerchantSecret(merchantId: string) {
 
 export async function upsertMerchantSecret(merchantId: string, secret: any) {
   await apiSend(`/api/merchants/${merchantId}/secret`, 'PUT', secret, { auth: true })
+}
+
+// ── Merchant platform feedback (#89) ────────────────────────────────────────────
+// merchantId scopes the route; the backend re-derives ownership from the bearer token
+// and ignores anything else in the body, so there is nothing else to send.
+//
+// Returns nothing: the POST responds with a bare merchant_feedback row, which is NOT a
+// FeedbackItem — it carries no shop_name / shop_slug, and only the admin list joins those
+// in. Claiming the richer type here would be a cast the compiler cannot check. Throws on
+// failure (apiSend's contract), which is what the form renders.
+export async function submitFeedback(merchantId: string, draft: FeedbackDraft): Promise<void> {
+  await apiSend<unknown>(`/api/merchants/${merchantId}/feedback`, 'POST', draft, { auth: true })
+}
+
+export async function fetchAdminFeedback(status?: FeedbackStatus): Promise<FeedbackItem[]> {
+  const qs = status ? `?status=${status}` : ''
+  return apiGet<FeedbackItem[]>(`/api/admin/feedback${qs}`, { auth: true })
+}
+
+// The PATCH route now joins the shop the same way the admin list does (see
+// updateFeedbackStatus in apps/backend/src/feedback.ts), so this genuinely returns a full
+// FeedbackItem — the spread in AdminFeedback is correct, not merely harmless.
+export async function setFeedbackStatus(id: string, status: FeedbackStatus): Promise<FeedbackItem> {
+  return apiSend<FeedbackItem>(`/api/admin/feedback/${id}`, 'PATCH', { status }, { auth: true })
 }
