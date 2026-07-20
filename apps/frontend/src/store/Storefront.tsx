@@ -6,7 +6,7 @@ import { useSession } from '../SessionContext'
 import { usePageVariants } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError, shopRates, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES } from '@bitetime/shared'
+import { priceOrder, voucherError, shopRates, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatUnit } from '../productUnit'
@@ -18,6 +18,7 @@ import LanguageSelect from '../components/LanguageSelect'
 import ImageLightbox from '../components/ImageLightbox'
 import SignInDialog from './SignInDialog'
 import CheckoutGate, { GuestStrip } from './CheckoutGate'
+import FulfilDatePicker from './FulfilDatePicker'
 import { checkoutStep, readGuestChoice, rememberGuestChoice } from '../checkoutGate'
 import { cn } from '@/lib/utils'
 import { Button } from '../components/ui/button'
@@ -75,6 +76,7 @@ export default function Storefront() {
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }
   const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup')  // 'pickup' | 'delivery'
+  const [fulfilDate, setFulfilDate] = useState<string | null>(null)
 
   // Prefill is DERIVED, never copied into state by an effect. `null` means "the customer hasn't
   // touched this field", so a profile that arrives a beat after the page fills the form — while a
@@ -256,6 +258,17 @@ export default function Storefront() {
   const { now: serverNow, resync: resyncClock, adopt: adoptClock } = useServerClock()
   const now = serverNow()
 
+  // The SHOP's window, on the SHOP's clock — `now` is the server-corrected time the same
+  // breakdown prices with. The list is derived, never stored: a checkout left open across
+  // midnight re-renders with yesterday dropped, so the customer cannot submit a date the
+  // backend would refuse.
+  const fulfilDates = useMemo(
+    () => selectableDates(fulfilmentConfig(merchant.config), merchant.timezone ?? DEFAULT_TIMEZONE, now),
+    [merchant.config, merchant.timezone, now],
+  )
+  // A date the shop stopped offering while the page sat open is not a selection any more.
+  const chosenDate = fulfilDate && fulfilDates.includes(fulfilDate) ? fulfilDate : null
+
   // The menu, mapped once for the pricing rule: the rows arrive snake_cased from PostgREST and
   // `priceOrder` reads `promoPrice`. Unmapped, every promo silently prices at the base price here
   // and at the promo price on the backend — which is a refused checkout for every promo order.
@@ -294,7 +307,7 @@ export default function Storefront() {
       address.postcode.length === 5 &&
       address.city.trim() !== '' &&
       address.state.trim() !== '')
-  const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady
+  const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady && chosenDate !== null
 
   // The one decision that says whether this customer is ever asked to sign in. `account` is
   // `undefined` until the session resolves — 'pending' holds the checkout back for that beat
@@ -487,6 +500,7 @@ export default function Storefront() {
         cart: Object.fromEntries(Object.entries(cart).filter(([, qty]) => qty > 0)),
         quotedTotal: total,
         voucherCode: appliedVoucher?.code ?? null,
+        fulfilDate: chosenDate,
       })
       // Remember what they typed, silently, so they never type it again — at this shop or any
       // other. Best-effort and unawaited: the order is already placed, and a profile write that
@@ -560,6 +574,18 @@ export default function Storefront() {
         const msg = t(
           'Please choose the state you are delivering to.',
           '请选择送货的州属。',
+        )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'fulfil_date_unavailable') {
+        // Reachable honestly: a checkout left open past midnight, or a merchant who closed a
+        // day while this customer was typing. Clearing the selection is what RECOVERS it — the
+        // re-render rebuilds the window from the corrected clock, and the stale date is gone
+        // from the grid rather than sitting there selected and refused on every retry.
+        setFulfilDate(null)
+        const msg = t(
+          'That date is no longer available. Please choose another one.',
+          '该日期已不可选，请重新选择日期。',
         )
         setError(msg)
         toast.error(msg)
@@ -948,6 +974,22 @@ export default function Storefront() {
                 </div>
               </div>
             )}
+          </div>
+
+          <hr className="border-0 border-t border-clay-border my-6" />
+
+          {/* When */}
+          <div className="mb-7">
+            <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">
+              {t('Date', '日期')} *
+            </div>
+            <FulfilDatePicker
+              available={fulfilDates}
+              value={chosenDate}
+              onChange={setFulfilDate}
+              t={t}
+              lang={lang}
+            />
           </div>
 
           <hr className="border-0 border-t border-clay-border my-6" />

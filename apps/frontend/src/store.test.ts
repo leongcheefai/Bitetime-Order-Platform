@@ -672,6 +672,7 @@ describe('placeOrder', () => {
       address: '123 Jalan ABC',
       cart: { p1: 2 },
       quotedTotal: 24,
+      fulfilDate: '2026-07-21',
     })
 
     const [url, init] = fetchMock.mock.calls[0]
