@@ -24,7 +24,6 @@ export default function AdminHome() {
 
   return (
     <DashboardShell
-      logo="TinyOrder"
       title={t('Platform admin', '平台管理')}
       role={t('Superadmin', '超级管理员')}
       nav={nav}

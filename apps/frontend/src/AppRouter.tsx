@@ -7,6 +7,7 @@ import { Toaster } from './components/ui/sonner'
 import { MerchantProvider, useMerchant } from './MerchantContext'
 import RequireRole from './RequireRole'
 import { Spinner } from './components/Loaders'
+import Wordmark from './components/Wordmark'
 
 // Route-level code splitting: each surface ships its own chunk, so a storefront
 // customer never downloads merchant/admin/signup code (signup pulls in the heavy
@@ -42,7 +43,7 @@ function StorefrontShell() {
   if (notFound) return (
     <div className="form-wrap text-center pt-8 pb-12">
       <div className="text-center mb-10">
-        <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">TinyOrder</h1>
+        <h1><Wordmark className="h-8 mx-auto" /></h1>
         <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">Shop not found</p>
       </div>
       <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border text-left">
@@ -58,7 +59,7 @@ function StorefrontShell() {
   if (merchant.status !== 'active') return (
     <div className="form-wrap text-center pt-8 pb-12">
       <div className="text-center mb-10">
-        <h1 className="font-heading text-[26px] font-medium text-oxblood tracking-[0.3px]">TinyOrder</h1>
+        <h1><Wordmark className="h-8 mx-auto" /></h1>
         <p className="font-heading text-[13px] italic text-rose-muted mt-[5px]">{merchant.name}</p>
       </div>
       <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border text-left">
