@@ -141,9 +141,13 @@ export interface ShopTax {
  * the same reason: the browser quotes and the backend charges, and a disagreement between
  * them is not a rounding gap — it is a `price_changed` refusal for every order at that shop.
  *
- * The fallback is always OFF, rate 0. A shop that never configured tax must never grow one,
- * and an unparseable rate must fail to NO tax rather than to a number nobody chose — the
- * same direction `shopRates` fails in, for the same reason.
+ * The `enabled` fallback is always OFF: a shop that never configured tax, or an unparseable
+ * rate, must fail to NO tax rather than to a number nobody chose — the same direction
+ * `shopRates` fails in, for the same reason. `rate` is only zeroed alongside it when there is
+ * no usable rate to keep; a disabled shop's own stored rate is otherwise passed through
+ * unchanged, because it is what keeps that rate visible in the merchant's own (disabled) field
+ * after they untick "charge tax" — `shopTax({tax_enabled: false, tax_rate: 6})` returns
+ * `{enabled: false, rate: 6}`, not `{enabled: false, rate: 0}`.
  *
  * `num()` is not defensiveness: postgres.js returns `numeric` as a STRING ('6.00') while
  * PostgREST returns a number (6).

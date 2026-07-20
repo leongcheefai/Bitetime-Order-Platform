@@ -129,7 +129,7 @@ No new endpoint and no new error code. A quote computed against a rate the merch
 changed disagrees with the charge and is refused by the existing `price_changed` path — the
 customer is shown the new total and confirms it, never quietly charged more.
 
-**Storefront**: the breakdown renders a tax row between discount and total when `bd.tax > 0`.
+**Storefront**: the breakdown renders a tax row between discount and total when `bd.taxRate > 0`.
 Label `t('Tax', '税')`; the rate is formatted from `bd.taxRate` with trailing zeros trimmed
 (`6`, not `6.00`).
 
