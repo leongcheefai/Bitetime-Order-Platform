@@ -27,6 +27,8 @@ export interface Merchant {
   billing_cycle?: string
   currency?: string
   pickup_address?: string
+  config?: Record<string, unknown>
+  timezone?: string
   created_at?: string
   [key: string]: any
 }
