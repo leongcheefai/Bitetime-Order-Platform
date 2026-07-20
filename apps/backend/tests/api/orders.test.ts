@@ -187,6 +187,9 @@ describe('POST /api/orders', () => {
     await svc().from('vouchers').delete().eq('merchant_id', shop)
     await svc().from('products').delete().eq('merchant_id', shop)
     productId = await seedProduct({ merchant_id: shop, price: 13 })
+    // Reset the shop's fulfilment config to default, so mutations in one test (e.g.,
+    // the closed-weekday case below) don't leak to others.
+    await setFulfilmentConfig(shop, { lead_days: 0, window_days: 14, closed_weekdays: [] })
   })
 
   afterAll(async () => {
