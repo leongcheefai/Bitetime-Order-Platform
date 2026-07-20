@@ -48,6 +48,14 @@ describe('pickMerchantConfig — tax (#88)', () => {
     expect(pickMerchantConfig({ tax_rate: 'six' })).toEqual({ ok: false, error: expect.any(String) })
   })
 
+  it('refuses a blank rate rather than coercing it to 0', () => {
+    expect(pickMerchantConfig({ tax_rate: '' })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a whitespace-only rate rather than coercing it to 0', () => {
+    expect(pickMerchantConfig({ tax_rate: '   ' })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
   it('refuses a non-boolean tax_enabled', () => {
     expect(pickMerchantConfig({ tax_enabled: 'yes' })).toEqual({ ok: false, error: expect.any(String) })
   })

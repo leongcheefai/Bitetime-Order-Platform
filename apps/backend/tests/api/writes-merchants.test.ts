@@ -207,6 +207,12 @@ describe('PATCH /api/merchants/:id (config)', () => {
     const res = await patch(`/api/merchants/${id}`, { tax_rate: 150 }, token)
     expect(res.status).toBe(400)
 
+    // Load-bearing: read back with the service client, NOT just the response status — a
+    // handler that stored 150 and THEN returned 400 would still pass a status-only assertion.
+    const { data: row } = await serviceClient()
+      .from('merchants').select('tax_rate').eq('id', id).single()
+    expect(Number(row!.tax_rate)).toBe(0)
+
     await serviceClient().from('merchants').delete().eq('id', id)
   })
 

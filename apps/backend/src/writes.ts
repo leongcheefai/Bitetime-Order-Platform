@@ -18,6 +18,12 @@ const MERCHANT_CONFIG_FIELDS = [
   'tax_enabled', 'tax_rate',
 ] as const
 
+// `undefined` means "not being written" and passes through untouched; a present-but-invalid
+// value is REFUSED (see pickMerchantConfig's doc below), never coerced.
+export type PickResult =
+  | { ok: true; patch: Record<string, unknown> }
+  | { ok: false; error: string }
+
 /**
  * `undefined` means "not being written" and passes through untouched. A present-but-invalid
  * value is REFUSED, never coerced or silently dropped — unlike `timezone` below, a bad tax rate
@@ -25,10 +31,6 @@ const MERCHANT_CONFIG_FIELDS = [
  * wrong thing), because the column's own CHECK would otherwise answer with a bare 500 from deep
  * inside PostgREST, long after the merchant who typed 150 has moved on.
  */
-export type PickResult =
-  | { ok: true; patch: Record<string, unknown> }
-  | { ok: false; error: string }
-
 export function pickMerchantConfig(body: any): PickResult {
   const out: Record<string, unknown> = {}
   for (const k of MERCHANT_CONFIG_FIELDS) if (body?.[k] !== undefined) out[k] = body[k]
@@ -38,6 +40,12 @@ export function pickMerchantConfig(body: any): PickResult {
   // Refused at the door instead, where the merchant is present to see it.
   if (out.timezone !== undefined && !isTimezone(out.timezone)) delete out.timezone
   if (out.tax_rate !== undefined) {
+    // A blank/whitespace string must be REFUSED, not coerced: Number('') and Number('   ')
+    // are both 0, so without this guard a cleared field would silently save a 0% rate and
+    // report success instead of the "tax is now off" surprise it actually is.
+    if (typeof out.tax_rate === 'string' && out.tax_rate.trim() === '') {
+      return { ok: false, error: 'tax_rate must be a number between 0 and 100' }
+    }
     const rate = typeof out.tax_rate === 'string' ? Number(out.tax_rate) : out.tax_rate
     if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 100) {
       return { ok: false, error: 'tax_rate must be a number between 0 and 100' }
