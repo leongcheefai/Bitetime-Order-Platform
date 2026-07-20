@@ -66,6 +66,10 @@ export function fulfilmentConfig(raw: unknown): FulfilmentConfig {
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
+function formatUTCDate(d: Date): string {
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+}
+
 /**
  * A calendar date as UTC midnight milliseconds — the ONLY place a date string becomes a number.
  *
@@ -79,7 +83,7 @@ function dayMs(date: string): number | null {
   const ms = Date.parse(`${date}T00:00:00Z`)
   if (Number.isNaN(ms)) return null
   const d = new Date(ms)
-  const round = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+  const round = formatUTCDate(d)
   return round === date ? ms : null
 }
 
@@ -87,7 +91,7 @@ const DAY = 86_400_000
 
 function fromDayMs(ms: number): string {
   const d = new Date(ms)
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+  return formatUTCDate(d)
 }
 
 /**
