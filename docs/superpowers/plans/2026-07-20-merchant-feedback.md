@@ -630,9 +630,9 @@ Then add the routes after the referral routes (`app.get('/api/referrals/rewards'
 // Per-user, not per-IP: the route is authenticated, so the user id is the real actor and
 // is not spoofable behind a shared NAT the way an IP is. The check runs BEFORE validation
 // so a script cannot hammer the write path with malformed bodies for free; a merchant
-// cannot realistically hit five submissions an hour by accident, and the form enforces
+// cannot realistically hit twenty submissions an hour by accident, and the form enforces
 // both rules client-side, so a 400 arriving here is already the abnormal case.
-const feedbackWindow = createSlidingWindow({ limit: 5, windowMs: 60 * 60_000, now: () => Date.now() })
+const feedbackWindow = createSlidingWindow({ limit: 20, windowMs: 60 * 60_000, now: () => Date.now() })
 
 app.post('/api/merchants/:id/feedback', requireMerchantOwns, async (c) => {
   const user = c.get('user')
@@ -677,7 +677,7 @@ pnpm --filter @bitetime/backend test:db -- feedback
 
 Expected: PASS — 12 tests.
 
-Note: the suite files more than five submissions for one owner. If the rate limit trips it, that is a real finding — raise the limit or split the owner across two users rather than deleting the assertion.
+Note: the suite files seven submissions as the same owner, which is why the window is 20/hour and not 5 — at 5 the sixth submission would 429 and two later tests would fail for a reason that has nothing to do with what they assert. If the limit ever trips this suite again, raise it or split the owner across users; never delete the assertion.
 
 - [ ] **Step 6: Typecheck and commit**
 
