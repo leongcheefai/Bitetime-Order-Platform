@@ -259,9 +259,12 @@ export default function Storefront() {
   const now = serverNow()
 
   // The SHOP's window, on the SHOP's clock — `now` is the server-corrected time the same
-  // breakdown prices with. The list is derived, never stored: a checkout left open across
-  // midnight re-renders with yesterday dropped, so the customer cannot submit a date the
-  // backend would refuse.
+  // breakdown prices with. The list is derived, never stored, so ANY re-render recomputes it
+  // from the current corrected clock — but nothing schedules a re-render at midnight by
+  // itself, and `handleSubmit` reads `chosenDate` from the closure it was called with, not
+  // from a fresh render. So a checkout left open past midnight CAN still submit a stale date;
+  // what closes that case is the backend's refusal plus the `setFulfilDate(null)` recovery in
+  // handleSubmit's catch branch (see `fulfil_date_unavailable` below), not this list by itself.
   const fulfilDates = useMemo(
     () => selectableDates(fulfilmentConfig(merchant.config), merchant.timezone ?? DEFAULT_TIMEZONE, now),
     [merchant.config, merchant.timezone, now],
