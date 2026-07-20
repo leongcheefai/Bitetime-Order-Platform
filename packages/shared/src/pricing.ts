@@ -56,6 +56,11 @@ export interface PriceBreakdown {
   subtotal: number
   shipping: number
   discount: number
+  /** Money. 0 when the shop charges no tax. */
+  tax: number
+  /** The percentage that produced `tax` — 6 means 6%. 0 when the shop charges no tax.
+   *  Stored on the order and used to LABEL the line, because `tax` alone cannot say "6%". */
+  taxRate: number
   total: number
 }
 
@@ -68,6 +73,8 @@ export interface PriceInput {
   samedayFee?: number
   resolvedShipping?: number // caller-resolved flat fee; wins over region logic
   voucher?: PricedVoucher | null
+  /** The shop's tax, mapped through `shopTax`. Absent means no tax. */
+  tax?: ShopTax
   extraLines?: PriceLine[]
   // NO promoSold input. The count is a column on the product row, and a second channel for it is
   // a second thing to diverge — the browser quotes and the backend charges from the same row.
@@ -123,6 +130,34 @@ export function shopRates(shipping: unknown): { WM: number; EM: number } {
   return { WM, EM }
 }
 
+export interface ShopTax {
+  enabled: boolean
+  /** A PERCENTAGE, not a fraction: 6 means 6%. */
+  rate: number
+}
+
+/**
+ * A merchant row → the tax `priceOrder` charges. The twin of `shopRates`, and it exists for
+ * the same reason: the browser quotes and the backend charges, and a disagreement between
+ * them is not a rounding gap — it is a `price_changed` refusal for every order at that shop.
+ *
+ * The fallback is always OFF, rate 0. A shop that never configured tax must never grow one,
+ * and an unparseable rate must fail to NO tax rather than to a number nobody chose — the
+ * same direction `shopRates` fails in, for the same reason.
+ *
+ * `num()` is not defensiveness: postgres.js returns `numeric` as a STRING ('6.00') while
+ * PostgREST returns a number (6).
+ *
+ * An enabled 0% is normalised to disabled. They charge the same money, and collapsing them
+ * here means every consumer has ONE thing to test instead of two that must agree.
+ */
+export function shopTax(row: unknown): ShopTax {
+  const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>
+  const rate = num(r.tax_rate)
+  if (rate === null || rate <= 0) return { enabled: false, rate: 0 }
+  return { enabled: r.tax_enabled === true, rate }
+}
+
 export function priceOrder(input: PriceInput): PriceBreakdown {
   const now = input.now ?? new Date()
 
@@ -161,9 +196,23 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
 
   const beforeDiscount = subtotal + shipping
   const discount = voucherDiscount(input.voucher, beforeDiscount)
-  const total = round2(beforeDiscount - discount)
 
-  return { lines, subtotal, shipping, discount, total }
+  // Tax is the LAST step, and its base is `subtotal − discount` — NOT `beforeDiscount`.
+  // Shipping is not taxed (the shop sells food, the courier sells delivery), and the customer
+  // is not taxed on money a voucher took off. The clamp is not defensiveness: a fixed voucher
+  // is `min(value, subtotal + shipping)`, so it CAN exceed the subtotal alone — and an
+  // unclamped base is then a NEGATIVE tax, a tax that pays the customer.
+  //
+  // Note what is NOT changed: `discount` is still computed on `subtotal + shipping`. Moving
+  // that base would shift every existing shop's totals for a feature they never turned on.
+  const tax = input.tax?.enabled
+    ? round2((Math.max(0, round2(subtotal - discount)) * input.tax.rate) / 100)
+    : 0
+  const taxRate = input.tax?.enabled ? input.tax.rate : 0
+
+  const total = round2(beforeDiscount - discount + tax)
+
+  return { lines, subtotal, shipping, discount, tax, taxRate, total }
 }
 
 export type VoucherErrorCode =
