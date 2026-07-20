@@ -41,14 +41,28 @@ export function pickMerchantConfig(body: any): PickResult {
   if (out.timezone !== undefined && !isTimezone(out.timezone)) delete out.timezone
   if (out.tax_rate !== undefined) {
     // A blank/whitespace string must be REFUSED, not coerced: Number('') and Number('   ')
-    // are both 0, so without this guard a cleared field would silently save a 0% rate and
-    // report success instead of the "tax is now off" surprise it actually is.
+    // are both 0. This is NOT what the frontend sends — ShopSettings.tsx sends
+    // `Number(fields.taxRate) || 0`, a number, and a blank field already collapses to 0 client
+    // side before it ever reaches this endpoint — but this route is public, and any other
+    // (non-UI) caller can send a raw string. Without this guard, that caller's cleared/blank
+    // field would silently save a 0% rate and report success instead of the "tax is now off"
+    // surprise it actually is.
     if (typeof out.tax_rate === 'string' && out.tax_rate.trim() === '') {
       return { ok: false, error: 'tax_rate must be a number between 0 and 100' }
     }
     const rate = typeof out.tax_rate === 'string' ? Number(out.tax_rate) : out.tax_rate
     if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 100) {
       return { ok: false, error: 'tax_rate must be a number between 0 and 100' }
+    }
+    // The column is `numeric(5,2)` — it can only STORE 2 decimal places. A rate that does not
+    // survive a round-trip at 2 decimals (100.005, 6.567) would otherwise pass this allowlist,
+    // get silently rounded by Postgres on write (6.567 → 6.57), and a rounded-up rate like
+    // 100.005 → 100.01 can even trip `merchants_tax_rate_range`, surfacing as app.ts's bare
+    // `{error: 'Update failed'}` 500 instead of the 400 this allowlist exists to produce.
+    // Refused, never coerced — rounding it here ourselves would just move the silent-drift bug
+    // from Postgres to us.
+    if (Number(rate.toFixed(2)) !== rate) {
+      return { ok: false, error: 'tax_rate must not have more than 2 decimal places' }
     }
     out.tax_rate = rate
   }

@@ -59,4 +59,20 @@ describe('pickMerchantConfig — tax (#88)', () => {
   it('refuses a non-boolean tax_enabled', () => {
     expect(pickMerchantConfig({ tax_enabled: 'yes' })).toEqual({ ok: false, error: expect.any(String) })
   })
+
+  it('refuses a rate the numeric(5,2) column would round on write', () => {
+    expect(pickMerchantConfig({ tax_rate: 100.005 })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('refuses a rate with more than 2 decimal places', () => {
+    expect(pickMerchantConfig({ tax_rate: 6.567 })).toEqual({ ok: false, error: expect.any(String) })
+  })
+
+  it('accepts a rate with exactly 1 decimal place', () => {
+    expect(pickMerchantConfig({ tax_rate: 6.5 })).toEqual({ ok: true, patch: { tax_rate: 6.5 } })
+  })
+
+  it('accepts a whole-number rate', () => {
+    expect(pickMerchantConfig({ tax_rate: 6 })).toEqual({ ok: true, patch: { tax_rate: 6 } })
+  })
 })
