@@ -4,12 +4,12 @@ import { ArrowLeft, Menu, X } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { signOut } from '../store'
 import LanguageSelect from './LanguageSelect'
+import Wordmark from './Wordmark'
 import { cn } from '@/lib/utils'
 
 export interface NavItem { key: string; label: string; icon: ReactNode }
 
 interface DashboardShellProps {
-  logo: string
   title?: string
   role?: string
   nav: NavItem[]
@@ -25,7 +25,7 @@ interface DashboardShellProps {
 // hamburger in a slim top bar, so the full column width is free for content.
 // data-layout-flush triggers body:has([data-layout-flush]) in index.css
 // (removes body padding + stretches body flex to full viewport height).
-export default function DashboardShell({ logo, title, role, nav, active, onSelect, backTo, children }: DashboardShellProps) {
+export default function DashboardShell({ title, role, nav, active, onSelect, backTo, children }: DashboardShellProps) {
   const { t } = useSession()
   const [open, setOpen] = useState(false)
 
@@ -62,7 +62,7 @@ export default function DashboardShell({ logo, title, role, nav, active, onSelec
         >
           <Menu size={22} strokeWidth={1.75} />
         </button>
-        <span className="font-heading text-[19px] font-medium text-oxblood tracking-[0.5px]">{logo}</span>
+        <Wordmark className="h-6" />
       </header>
 
       {/* Backdrop — only rendered on mobile while the drawer is open. */}
@@ -90,10 +90,7 @@ export default function DashboardShell({ logo, title, role, nav, active, onSelec
 
         {/* Brand block */}
         <div className="px-5 pt-7 pb-5 border-b border-divider relative max-sm:pt-5">
-          {/* Logo — Lora serif */}
-          <div className="font-heading text-[22px] font-medium text-oxblood tracking-[0.5px]">
-            {logo}
-          </div>
+          <Wordmark className="h-7" />
           {/* Shop / app title */}
           {title && (
             <div className="font-heading text-[13px] text-rose-muted mt-0.5">

@@ -1,5 +1,6 @@
 import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
+import Wordmark from './Wordmark'
 
 // Top-level catch-all. Without a boundary above `createRoot`, any uncaught throw
 // during render unmounts the whole tree to a blank #root — recoverable only by a
@@ -31,7 +32,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="min-h-screen w-full flex items-center justify-center p-6">
         <div className="bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-6 max-w-[420px] w-full box-border text-center">
-          <h1 className="font-heading text-[22px] font-medium text-oxblood tracking-[0.3px]">TinyOrder</h1>
+          <h1><Wordmark className="h-7 mx-auto" /></h1>
           <p className="text-rose-muted text-[14px] leading-[1.6] mt-3">
             Something went wrong loading the page.
             <br />

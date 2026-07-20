@@ -5,6 +5,7 @@ import { signOut } from '../store'
 import { usePlatformPricing } from '../usePlatformPricing'
 import { formatMoney } from '../currency'
 import LanguageSelect from '../components/LanguageSelect'
+import Wordmark from '../components/Wordmark'
 import { Button } from '../components/ui/button'
 import { cn } from '../lib/utils'
 import {
@@ -98,9 +99,7 @@ export default function Landing() {
 
       {/* ── Nav bar ── */}
       <nav className="flex items-center justify-between px-8 py-5 border-b border-clay-border max-[600px]:px-5 max-[600px]:py-4">
-        <span className="font-heading text-[22px] font-medium text-oxblood tracking-[0.3px]">
-          TinyOrder
-        </span>
+        <Wordmark className="h-7 max-[600px]:h-6" />
         <div className="flex items-center gap-5">
           <a href="#pricing" className={navLink}>
             {t('Pricing', '价格')}
@@ -386,7 +385,7 @@ export default function Landing() {
 
       {/* ── Footer ── */}
       <footer className="mt-auto px-8 py-6 border-t border-clay-border flex items-center justify-center gap-3 text-[13px] text-text-tertiary">
-        <span className="font-heading text-oxblood font-medium">TinyOrder</span>
+        <Wordmark className="h-[18px]" />
         <span className="text-clay-border">·</span>
         <span>{t('Built for food businesses', '专为食品业者打造')}</span>
       </footer>
