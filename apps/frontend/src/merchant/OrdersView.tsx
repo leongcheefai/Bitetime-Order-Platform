@@ -4,6 +4,7 @@ import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, setOrderStatus, setOrderNote, setOrderTracking } from '../store'
 import { formatMoney } from '../currency'
 import { formatAddress } from '../address'
+import { formatOrderDate } from '../orderDate'
 import { SkeletonText } from '../components/Loaders'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -141,7 +142,7 @@ function Section({ title, children }: { title?: string; children: React.ReactNod
 }
 
 export default function OrdersView({ readOnly = false }: { readOnly?: boolean } = {}) {
-  const { t, merchant } = useSession()
+  const { t, lang, merchant } = useSession()
   const [orders, setOrders] = useState<any[] | null>(null)
   const [selected, setSelected] = useState<any | null>(null)
   const [noteDraft, setNoteDraft] = useState('')
@@ -304,9 +305,13 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                   <DetailRow label={t('Mode', '方式')}>{modeLabel(selected.mode, t)}</DetailRow>
                   {selected.region && <DetailRow label={t('Region', '地区')}>{selected.region}</DetailRow>}
                   {selected.address && <DetailRow label={t('Address', '地址')}>{formatAddress(selected.address)}</DetailRow>}
-                  {selected.preferred_date && (
-                    <DetailRow label={t('Date', '日期')}>{selected.preferred_date}</DetailRow>
-                  )}
+                  {/* The date the CUSTOMER asked for — what the merchant is scheduling around —
+                      not `created_at` above, which is when the order was placed. Shown as `—`
+                      rather than omitted for a legacy order: a missing row here would read as
+                      "this order has no fulfilment info" rather than "placed before #91". */}
+                  <DetailRow label={t('Date', '日期')}>
+                    {selected.fulfil_date ? formatOrderDate(selected.fulfil_date, lang) : '—'}
+                  </DetailRow>
                   {!(selected.mode === 'delivery' && !readOnly) && selected.courier && (
                     <DetailRow label={t('Courier', '快递公司')}>{courierName(selected.courier) || selected.courier}</DetailRow>
                   )}

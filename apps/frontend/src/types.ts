@@ -115,6 +115,8 @@ export interface Order {
   currency?: string
   status?: OrderStatus | string
   created_at?: string
+  /** `YYYY-MM-DD`. Null on orders placed before fulfilment dates shipped. */
+  fulfil_date?: string | null
   [key: string]: any
 }
 

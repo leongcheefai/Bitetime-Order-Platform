@@ -703,6 +703,7 @@ export async function fetchOrderTracking(merchantId: string, orderNumber: string
     courier: string | null
     awb: string | null
     created_at: string
+    fulfil_date: string | null
   } | null
 }
 

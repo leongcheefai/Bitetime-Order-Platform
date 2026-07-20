@@ -58,6 +58,11 @@ export function buildOrderMessage(order: any, merchantName?: string): string {
   msg += `*Name:* ${order.customer_name ?? ''}\n`
   if (order.customer_wa) msg += `*WhatsApp:* ${order.customer_wa}\n`
   if (order.mode) msg += `*Mode:* ${order.mode}\n`
+  // The merchant reading this on their phone is the person scheduling around it, so it sits
+  // with the mode rather than down by the totals. Omitted rather than blanked for rows written
+  // before #91 — `orders.fulfil_date` is null for every one of them, and a `*Date:* ` with
+  // nothing after it reads as data we lost.
+  if (order.fulfil_date) msg += `*Date:* ${order.fulfil_date}\n`
   if (order.address) msg += `*Address:* ${formatAddress(order.address)}\n`
   msg += `\n*Items:*\n${lines}\n`
   if (order.shipping_fee) msg += `*Shipping:* ${formatMoney(order.shipping_fee, cur)}\n`

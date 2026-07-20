@@ -51,6 +51,16 @@ describe('buildOrderMessage', () => {
     expect(jpy).toContain('Cookie × 2 — ¥ 1,000')
     expect(jpy).toContain('*Total: ¥ 1,800*')
   })
+
+  it('prints the fulfilment date when the order carries one', () => {
+    const msg = buildOrderMessage({ ...ORDER, fulfil_date: '2026-07-22' })
+    expect(msg).toContain('*Date:* 2026-07-22')
+  })
+
+  it('omits the line entirely for a legacy order with no date', () => {
+    const msg = buildOrderMessage({ ...ORDER, fulfil_date: null })
+    expect(msg).not.toContain('*Date:*')
+  })
 })
 
 describe('notifyOrderPlaced', () => {

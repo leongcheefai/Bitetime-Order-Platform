@@ -10,7 +10,14 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import LanguageSelect from '../components/LanguageSelect'
 
-type Tracking = { status: string; mode: string; courier: string | null; awb: string | null; created_at: string }
+type Tracking = {
+  status: string
+  mode: string
+  courier: string | null
+  awb: string | null
+  created_at: string
+  fulfil_date: string | null
+}
 
 export default function TrackOrder() {
   const { merchant } = useMerchant()
@@ -105,6 +112,13 @@ export default function TrackOrder() {
               {formatOrderDate(result.created_at, lang)}
             </div>
           )}
+          {/* When it was PLACED (above) vs. when the customer WANTS it. A legacy order (placed
+              before #91) reads `—`, not a blank line — this page is a guest's only view of the
+              order, so a missing date must not look like data we lost. */}
+          <div className="text-[13px] text-ink">
+            <span className="text-rose-muted">{t('For', '取货日期')}: </span>
+            {result.fulfil_date ? formatOrderDate(result.fulfil_date, lang) : '—'}
+          </div>
           {result.courier && (
             <div className="text-[13px] text-ink">
               <span className="text-rose-muted">{t('Courier', '快递公司')}: </span>
