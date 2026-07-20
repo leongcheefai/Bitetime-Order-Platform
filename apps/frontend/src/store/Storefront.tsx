@@ -77,7 +77,7 @@ const VOUCHER_REFUSALS = {
 } as const
 
 export default function Storefront() {
-  const { merchant: merchantNullable } = useMerchant()
+  const { merchant: merchantNullable, refresh: refreshMerchant } = useMerchant()
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
   const { lang, t, account, profile, refreshProfile } = useSession()
   const viewVariants = usePageVariants()
@@ -413,13 +413,17 @@ export default function Storefront() {
   }
 
   /**
-   * Re-read everything the quote is built from: the products AND the applied voucher.
+   * Re-read everything the quote is built from: the products, the applied voucher, AND the
+   * merchant row.
    *
-   * Both are inputs to `priceOrder`, and the backend prices from its own fresh copy of both, so
-   * a refusal that refreshed only the products left the other half of the quote stale — and a
-   * stale input re-quotes to the same refused number on the next tap. A voucher that has since
-   * been deleted comes back null and is dropped, said out loud rather than silently: the
-   * customer can re-apply a code, but not one that no longer exists.
+   * All three are inputs to `priceOrder` (the merchant row carries shipping rates, tax and the
+   * promo config), and the backend prices from its own fresh copy of all of them, so a refusal
+   * that refreshed only some left the rest of the quote stale — and a stale input re-quotes to
+   * the same refused number on the next tap. A voucher that has since been deleted comes back
+   * null and is dropped, said out loud rather than silently: the customer can re-apply a code,
+   * but not one that no longer exists. The merchant refresh (`useMerchant().refresh`) applies
+   * itself internally and only ever adopts a real answer — see `MerchantContext.refresh` for why
+   * a failed fetch there must never blank the storefront.
    *
    * IT ASKS WITH `lookupProducts`/`lookupMerchantVoucher`, AND THAT IS THE LOAD-BEARING PART.
    * This runs on the RECOVERY path — the one moment a connection is most likely to be flaky —
@@ -452,6 +456,10 @@ export default function Storefront() {
       lookupProducts(merchant.id).catch(() => null),
       code ? lookupMerchantVoucher(merchant.id, code).catch(() => ({ ok: false as const })) : null,
       serverNow ? Promise.resolve(adoptClock(serverNow)) : resyncClock(),
+      // Tax/shipping/config all live on this row. Self-contained: unlike the other two fetches,
+      // it applies its own result (or nothing, on failure) rather than returning data for us to
+      // adopt below — see MerchantContext.refresh for why a dropped packet here changes nothing.
+      refreshMerchant().catch(() => null),
     ])
     // `[]` is an ANSWER — the shop really sells nothing, and pruning the whole cart is right.
     // `null` is the absence of one, and prunes nothing.

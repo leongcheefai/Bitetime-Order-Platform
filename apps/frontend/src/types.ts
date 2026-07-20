@@ -162,6 +162,11 @@ export interface MerchantState {
   merchant: Merchant | null
   loading: boolean
   notFound: boolean
+  // Re-fetch the CURRENT slug's merchant row without disturbing `loading`/`notFound`. Distinct
+  // from `SessionValue.refreshMerchant`, which re-reads the SIGNED-IN user's own shop for the
+  // merchant dashboard — this one re-reads whatever shop `/s/:slug` is pointed at, which any
+  // visitor (including a guest) can be looking at. A failed refresh leaves `merchant` untouched.
+  refresh: () => Promise<void>
 }
 
 // One row of merchant platform feedback (#89). shop_name / shop_slug are joined in by the
