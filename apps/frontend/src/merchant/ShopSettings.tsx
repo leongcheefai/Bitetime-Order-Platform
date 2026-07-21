@@ -233,8 +233,8 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             {/* Says what a blank field does, because a blank field DOES something: it charges the
                 West Malaysia rate. Free shipping to East Malaysia has to be typed as a 0. */}
             <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
-              {t('Leave blank to charge your West Malaysia rate. Enter 0 for free delivery.',
-                 '留空则按西马运费收取。填 0 表示免运费。')}
+              {t('Blank East Malaysia charges the same as West Malaysia. Enter 0 for free East Malaysia delivery.',
+                 '东马留空则按西马运费收取。填 0 表示东马免运费。')}
             </p>
           </div>
         </div>
