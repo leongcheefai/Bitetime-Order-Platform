@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { motion, useReducedMotion } from 'motion/react'
+import { useReducedMotion } from 'motion/react'
 import type { Variants } from 'motion/react'
 
 // ── The rule this file exists to enforce ──────────────────────────────────────
@@ -18,10 +18,20 @@ import type { Variants } from 'motion/react'
 //      That is why no content swap in this app is wrapped in AnimatePresence, and why the
 //      page variants below have no `exit` half: the outgoing view is simply replaced.
 //
-//   2. Nothing may DEPEND on an animation to become visible. An entry that starts at
-//      opacity 0 stays at 0 for as long as the tab is hidden — a blank page, which is what a
-//      storefront link opened in a background tab would have rendered. `useEnterTransition`
-//      below is the seam for that: hidden at mount means no entry animation at all.
+//   2. Nothing may DEPEND on an animation to become visible — which is why the route/section
+//      entry is not a Motion animation at all. It is the `.page-enter` CSS keyframe in
+//      `index.css`, attached by `useEnterTransition` below.
+//      A JS `initial: { opacity: 0 }` is a STYLE the element keeps until an animation arrives
+//      to clear it, so every way an animation can fail to arrive is a blank page. A paused rAF
+//      is only the most obvious one: React hides a tree that suspends AFTER mount with
+//      `display: none !important` and destroys its layout effects, and on reveal Motion
+//      re-applied `initial` and never re-animated, because the `animate` target had not
+//      changed. That stranded the storefront at `opacity: 0` with its whole DOM built —
+//      every time the lazy route chunk landed after the shell had swapped in its content,
+//      which on a cold cache is every time.
+//      A CSS keyframe inverts the failure: the resting style IS the final state and the
+//      keyframe only borrows it on the way in, so an animation that never runs — or gets torn
+//      down halfway — leaves the content on screen.
 //
 // Exit animations remain fine for things whose ABSENCE is the point (a toast, an overlay):
 // worst case the element lingers in a tab nobody is looking at. They are never fine as a
@@ -36,30 +46,20 @@ export function useMotionSafe(): boolean {
   return !useReducedMotion()
 }
 
-// Page/route/section transition: fade + small upward slide in. Distance is 0 when reduced.
-// Enter only, by the rule above — pair it with `useEnterTransition`, never with an
-// AnimatePresence exit.
-export function usePageVariants(): Variants {
-  const safe = useMotionSafe()
-  const d = safe ? 8 : 0
-  return {
-    initial: { opacity: 0, y: d },
-    animate: { opacity: 1, y: 0, transition: { duration: DUR.base, ease: EASE } },
-  }
-}
-
-// Motion props for a keyed view that fades in as it mounts. Spread onto the `motion.div` that
-// carries the key the swap is driven by (route path, dashboard section, storefront view).
+// Props for a keyed view that fades and slides in as it mounts: put them on the plain `div`
+// that carries the key the swap is driven by (route path, dashboard section, storefront view),
+// merging `className` if the element already has one. A changed key replaces the element, which
+// is what restarts the keyframe.
 //
-// Hidden at mount means `initial: false` — motion renders the `animate` values straight away
-// and animates nothing, so the content is on screen whether or not a frame ever arrives.
-// Decided once, at mount, because that is the moment the choice has to be made; a tab shown
-// later simply gets no entry animation, which is the right trade against a blank page.
-export function useEnterTransition(variants: Variants) {
+// Hidden at mount means no class at all. Not because a blank page is possible any more — the
+// keyframe's resting state is the final one — but because a fade nobody can see is a fade worth
+// skipping, and the element should not be mid-animation when the tab is first looked at.
+// Decided once, at mount: a tab shown later simply gets no entry animation.
+export function useEnterTransition() {
   const [animateIn] = useState(
     () => typeof document === 'undefined' || document.visibilityState !== 'hidden',
   )
-  return { variants, initial: animateIn ? 'initial' : false, animate: 'animate' } as const
+  return { className: animateIn ? 'page-enter' : undefined } as const
 }
 
 // Backdrop / overlay: opacity only.
@@ -95,6 +95,5 @@ export function useListItemVariants(): Variants {
 
 // Wraps a route element so it fades/slides in on mount. Give it the route path as its `key`.
 export function PageTransition({ children }: { children: ReactNode }) {
-  const enter = useEnterTransition(usePageVariants())
-  return <motion.div {...enter}>{children}</motion.div>
+  return <div {...useEnterTransition()}>{children}</div>
 }

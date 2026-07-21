@@ -1,6 +1,5 @@
-import { motion } from 'motion/react'
 import { useSession } from '../SessionContext'
-import { usePageVariants, useEnterTransition } from '../motion'
+import { useEnterTransition } from '../motion'
 import { LayoutDashboard, ReceiptText, Cake, Ticket, Users, Settings } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import BillingBanner from './BillingBanner'
@@ -36,7 +35,7 @@ function DashboardInner() {
   const { t, merchant, role } = useSession()
   const { guard } = useNavGuard()
   const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
-  const enter = useEnterTransition(usePageVariants())
+  const enter = useEnterTransition()
 
   const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
 
@@ -54,14 +53,14 @@ function DashboardInner() {
       backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
     >
       <BillingBanner />
-      <motion.div key={section} {...enter}>
+      <div key={section} {...enter}>
         {section === 'overview'  && <Overview />}
         {section === 'orders'    && <OrdersView />}
         {section === 'products'  && <ProductsManager />}
         {section === 'vouchers'  && <VouchersManager />}
         {section === 'customers' && <CustomersView />}
         {section === 'settings'  && <ShopSettings />}
-      </motion.div>
+      </div>
       <FeedbackFab />
     </DashboardShell>
   )

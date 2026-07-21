@@ -1,6 +1,5 @@
-import { motion } from 'motion/react'
 import { useSession } from '../SessionContext'
-import { usePageVariants, useEnterTransition } from '../motion'
+import { useEnterTransition } from '../motion'
 import { useDashboardSection } from '../useDashboardSection'
 import { LayoutDashboard, Store, MessageSquare } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
@@ -18,7 +17,7 @@ const SECTIONS = [
 export default function AdminHome() {
   const { t } = useSession()
   const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
-  const enter = useEnterTransition(usePageVariants())
+  const enter = useEnterTransition()
 
   const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
 
@@ -30,11 +29,11 @@ export default function AdminHome() {
       active={section}
       onSelect={setSection}
     >
-      <motion.div key={section} {...enter}>
+      <div key={section} {...enter}>
         {section === 'overview'  && <AdminOverview />}
         {section === 'merchants' && <AdminMerchants />}
         {section === 'feedback'  && <AdminFeedback />}
-      </motion.div>
+      </div>
     </DashboardShell>
   )
 }

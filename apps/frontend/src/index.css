@@ -152,6 +152,23 @@ html { scroll-behavior: smooth; }
 
 @keyframes shimmer { 0% { background-position: -468px 0; } 100% { background-position: 468px 0; } }
 
+/* Entry fade for a route/section wrapper. Deliberately CSS and deliberately fill-mode `none`
+   (the default): the element's RESTING opacity is 1, and the keyframe only borrows it on the
+   way in. An animation that never starts, gets interrupted, or is torn down therefore leaves
+   the content VISIBLE — the opposite failure mode to a JS `initial: { opacity: 0 }`, which is
+   a style the element keeps until an animation arrives to clear it.
+   That difference is not academic: React hides a tree that suspends AFTER mount with
+   `display: none !important` and destroys its layout effects, so the storefront's lazy route
+   chunk landing a beat late re-applied Motion's `initial` on reveal and never re-animated —
+   a fully-built page stuck at `opacity: 0`. See the rule at the top of `motion.tsx`.
+   Reduced motion is handled by the global media query below (0.01ms), which lands on the
+   resting value immediately. */
+@keyframes page-enter { from { opacity: 0; transform: translateY(8px); } }
+
+/* Duration and easing are DUR.base and EASE from `motion.tsx`, where the rest of the app's
+   motion tokens live. */
+.page-enter { animation: page-enter 0.22s cubic-bezier(0.4, 0, 0.2, 1); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
