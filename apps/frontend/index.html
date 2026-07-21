@@ -14,16 +14,25 @@
     <meta http-equiv="Expires" content="0" />
     <title>TinyOrder</title>
     <meta name="description" content="Sell your food online — without the DM chaos. TinyOrder gives home kitchens and small food businesses one branded storefront link and order management, all in one place." />
-    <!-- Link previews on Instagram / WhatsApp / Facebook -->
+    <!-- Link previews on Instagram / WhatsApp / Facebook.
+         og:image and og:url must be absolute — most scrapers silently drop
+         relative URLs. The card itself is built by scripts/og-cover.ts. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="TinyOrder" />
+    <meta property="og:url" content="https://bitetime-order-platform.vercel.app/" />
     <meta property="og:title" content="TinyOrder — Sell your food online" />
     <meta property="og:description" content="One branded storefront link for home kitchens and small food businesses — so every order lands in one place and you look the part." />
     <meta property="og:image" content="https://bitetime-order-platform.vercel.app/og-cover.jpg" />
+    <!-- Declared dimensions let a scraper reserve the card's space before the
+         image itself has finished downloading. -->
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="A printed receipt reading: Sell your food online — without the DM chaos. One storefront link, every order in one place, bilingual. Total: 7 days free." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="TinyOrder — Sell your food online" />
     <meta name="twitter:description" content="One branded storefront link for home kitchens and small food businesses — every order in one place." />
     <meta name="twitter:image" content="https://bitetime-order-platform.vercel.app/og-cover.jpg" />
+    <meta name="twitter:image:alt" content="A printed receipt reading: Sell your food online — without the DM chaos. One storefront link, every order in one place, bilingual. Total: 7 days free." />
   </head>
   <body>
     <div id="root"></div>
