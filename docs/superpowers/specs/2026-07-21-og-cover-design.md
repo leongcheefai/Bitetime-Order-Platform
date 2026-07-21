@@ -39,9 +39,11 @@ Centred on it, a receipt ≈760px wide, tilted `-1.5°`, with
 not cream — the sheet has to separate from the ground or the tilt reads as an accident.
 
 The receipt's top and bottom edges are zigzag perforations cut with a CSS `clip-path`
-polygon, at the same tooth pitch as the logo mark's torn edge. That silhouette is the
-load-bearing idea: it is the brand mark's own shape, so the card cannot be reproduced
-by anyone who is not TinyOrder.
+polygon — a torn-receipt idiom, not a literal trace of the logo mark's edge (the mark
+has roughly 4 deep teeth and a flat top; the card has 8 on both edges). That
+silhouette is still the load-bearing idea: the receipt form is the brand's own object,
+and the card reads as TinyOrder through the lockup, palette and paper together, not
+through pitch-matching a shape no one would notice at a glance.
 
 The receipt's left edge carries nothing — no icon column, no rail. Print discipline.
 
@@ -57,9 +59,14 @@ The receipt's left edge carries nothing — no icon column, no rail. Print disci
 | rule | dotted | `--color-clay-border` |
 | `TOTAL` … `7 DAYS FREE` | DM Sans 500, 20px, justified to both edges | `--color-oxblood` `#7A1028` |
 
-Every string is lifted verbatim from the live landing page — the `h1`, the three value
-props, and the `7-day free trial — no card required` line under the pricing heading.
-Nothing is invented for the card, so the card cannot drift from the site.
+The headline is lifted verbatim from the live landing page's `h1`. The other three
+lines are condensed from it to receipt length rather than quoted verbatim: the landing
+page's *Simple order management* (`Landing.tsx:246`) and *Bilingual, out of the box*
+(`:250`) become the tighter "Every order in one place" and "Bilingual · 中英双语", and
+its *7-day free trial — no card required* (`:264`) becomes "7 days free". Nothing on
+the card asserts a claim the landing page doesn't make, but the wording is not pinned
+to it — a copy edit on either side will not be caught automatically, so re-check this
+card by eye whenever the landing page's claims change.
 
 `中英双语` on the third line makes the bilingual claim demonstrate itself rather than
 assert itself.

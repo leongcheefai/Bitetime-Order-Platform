@@ -58,37 +58,31 @@
       .paper {
         width: 760px;
         background: #FFFFFF;
-        /* 56px vertical, not more. The content stack is ~464px; at 74px
-           padding the paper is ~612px tall, and rotating a 760px-wide box by
-           1.5° adds another ~20px to its bounding height — which does not fit
-           in 630. Step 4 of this task checks for exactly that clipping. */
+        /* 56px vertical, not more. The content stack is ~410px; at 56px
+           padding the paper is ~522px tall, and rotating a 760px-wide box by
+           1.5° adds another ~20px to its bounding height, for ~542px total —
+           well under 630, with headroom left for the 32px-deep perforation
+           teeth below. Step 4 of this task checks for exactly that clipping. */
         padding: 56px 60px;
-        /* Zigzag perforation, top and bottom — the silhouette of the receipt
-           mark in the logo. 20 teeth across 760px = one tooth per 5%; each
-           tooth is 18px deep. The polygon runs clockwise: down the top edge's
-           teeth left-to-right, down the right side, back along the bottom
-           edge's teeth right-to-left, up the left side. */
+        /* Zigzag perforation, top and bottom — a torn-receipt silhouette
+           echoing the logo mark. 8 teeth across 760px = one tooth per
+           12.5%, 32px deep. Fewer, deeper teeth than a finer pitch because
+           the card is consumed at ~200px WhatsApp-thumbnail scale, where a
+           shallow tooth downscales to a few pixels and reads as edge fuzz
+           rather than a tear. The polygon runs clockwise: down the top
+           edge's teeth left-to-right, down the right side, back along the
+           bottom edge's teeth right-to-left, up the left side. */
         clip-path: polygon(
-          0% 18px,   2.5% 0px,   5% 18px,   7.5% 0px,  10% 18px,
-          12.5% 0px, 15% 18px,  17.5% 0px,  20% 18px,  22.5% 0px,
-          25% 18px,  27.5% 0px, 30% 18px,   32.5% 0px, 35% 18px,
-          37.5% 0px, 40% 18px,  42.5% 0px,  45% 18px,  47.5% 0px,
-          50% 18px,  52.5% 0px, 55% 18px,   57.5% 0px, 60% 18px,
-          62.5% 0px, 65% 18px,  67.5% 0px,  70% 18px,  72.5% 0px,
-          75% 18px,  77.5% 0px, 80% 18px,   82.5% 0px, 85% 18px,
-          87.5% 0px, 90% 18px,  92.5% 0px,  95% 18px,  97.5% 0px,
-          100% 18px,
-          100% calc(100% - 18px), 97.5% 100%, 95% calc(100% - 18px),
-          92.5% 100%, 90% calc(100% - 18px), 87.5% 100%, 85% calc(100% - 18px),
-          82.5% 100%, 80% calc(100% - 18px), 77.5% 100%, 75% calc(100% - 18px),
-          72.5% 100%, 70% calc(100% - 18px), 67.5% 100%, 65% calc(100% - 18px),
-          62.5% 100%, 60% calc(100% - 18px), 57.5% 100%, 55% calc(100% - 18px),
-          52.5% 100%, 50% calc(100% - 18px), 47.5% 100%, 45% calc(100% - 18px),
-          42.5% 100%, 40% calc(100% - 18px), 37.5% 100%, 35% calc(100% - 18px),
-          32.5% 100%, 30% calc(100% - 18px), 27.5% 100%, 25% calc(100% - 18px),
-          22.5% 100%, 20% calc(100% - 18px), 17.5% 100%, 15% calc(100% - 18px),
-          12.5% 100%, 10% calc(100% - 18px), 7.5% 100%, 5% calc(100% - 18px),
-          2.5% 100%, 0% calc(100% - 18px)
+          0% 32px,     6.25% 0px,   12.5% 32px,  18.75% 0px,
+          25% 32px,    31.25% 0px,  37.5% 32px,  43.75% 0px,
+          50% 32px,    56.25% 0px,  62.5% 32px,  68.75% 0px,
+          75% 32px,    81.25% 0px,  87.5% 32px,  93.75% 0px,
+          100% 32px,
+          100% calc(100% - 32px), 93.75% 100%, 87.5% calc(100% - 32px),
+          81.25% 100%, 75% calc(100% - 32px), 68.75% 100%, 62.5% calc(100% - 32px),
+          56.25% 100%, 50% calc(100% - 32px), 43.75% 100%, 37.5% calc(100% - 32px),
+          31.25% 100%, 25% calc(100% - 32px), 18.75% 100%, 12.5% calc(100% - 32px),
+          6.25% 100%, 0% calc(100% - 32px)
         );
       }
 
@@ -98,7 +92,7 @@
          weight; radial-gradient gives round perforation dots instead. */
       .rule {
         height: 2px;
-        margin: 26px 0;
+        margin: 20px 0;
         background-image: radial-gradient(
           circle, #C9A090 1px, transparent 1px    /* --color-clay-border */
         );
@@ -109,7 +103,7 @@
       h1 {
         font-family: 'Lora', serif;
         font-weight: 500;
-        font-size: 60px;
+        font-size: 52px;
         line-height: 1.14;
         letter-spacing: -0.01em;
         color: #2B0A10;                    /* --color-ink */
