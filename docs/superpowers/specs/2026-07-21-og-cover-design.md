@@ -83,11 +83,20 @@ establishes: a `.ts` one-off, run by hand via `pnpm dlx tsx`, with its output co
 and its invocation documented in a header comment. No `package.json` script, because a
 script entry implies something CI might run.
 
-- **`apps/frontend/scripts/og-cover.html`** — self-contained. Lora and DM Sans are
-  inlined as base64 `woff2` and the logo as a base64 PNG, so rendering touches the
-  network zero times and the same input always produces the same pixels. Colour values
-  are hardcoded hex with a comment pointing back at `src/tokens.css`; the render has no
-  Tailwind or Vite in front of it, so it cannot read the tokens at build time.
+- **`apps/frontend/scripts/og-cover.html`** — the page, as a readable template with
+  `{{FONT_FACES}}` and `{{LOGO}}` placeholders. Colour values are hardcoded hex with a
+  comment pointing back at `src/tokens.css`; the render has no Tailwind or Vite in
+  front of it, so it cannot read the tokens at build time.
+- **Fonts.** The card needs Lora 500, DM Sans 500, *and* a CJK face for `中英双语`.
+  A full Noto Sans SC is ~8MB, which is not going in the repo for four glyphs. The
+  script instead asks Google Fonts for exactly the glyphs the card prints, via the
+  `text=` parameter on the `css2` endpoint — a request that returns a woff2 of a few
+  kilobytes — then inlines each one as a base64 `@font-face` into the template.
+
+  So there is one network call at **generate** time and none at **render** time: by the
+  time Chrome sees the HTML, every byte it needs is in the string. This also means a
+  copy change can never silently produce tofu, because the subset is derived from the
+  copy on every run rather than from a stale committed binary.
 - **`apps/frontend/scripts/og-cover.ts`** — viewport `1200×630`,
   `deviceScaleFactor: 2`, `screenshot({ type: 'jpeg', quality: 92 })` →
   `public/og-cover.jpg`. Run with
@@ -132,3 +141,9 @@ Per `CLAUDE.md`, UI is verified by running the app. For this change that means:
 
 No unit tests. The asset has no logic to test, and asserting on a screenshot's bytes
 would fail on every font-rendering difference without catching a single real defect.
+
+The generator asserts its own output instead, and throws rather than writing a bad
+file: the JPEG must decode to exactly 1200×630, and must be under the 300KB scraper
+ceiling. Following `gen-postcodes.ts`, which throws on an unmappable state name rather
+than silently dropping data, the failure mode to design out is a broken asset that
+looks like a successful run.
