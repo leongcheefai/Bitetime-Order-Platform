@@ -146,6 +146,10 @@ export interface SessionValue {
   role: Role
   merchant: Merchant | null
   ownMerchant: Merchant | null
+  // The own-shop lookup never landed (backend unreachable, CORS, 5xx), so `ownMerchant: null`
+  // here means "we don't know", not "owns no shop". Anything that would turn a user away on
+  // that null must check this first (#98).
+  merchantUnknown: boolean
   impersonating: boolean
   impersonate: (slug: string) => Promise<Merchant | null>
   stopImpersonating: () => void

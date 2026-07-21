@@ -183,10 +183,21 @@ export async function fetchMerchantBySlug(slug: string | undefined) {
   return found.ok ? found.merchant : null
 }
 
-export async function fetchMyMerchant(userId: string) {
-  if (!userId) return null
+// The signed-in user's own shop — same "could not ask" vs "the answer is empty" shape as
+// `lookupMerchantBySlug` above, and for a sharper reason. `{ ok: true, merchant: null }` is a
+// real answer: this user owns no shop, so they are a customer. `{ ok: false }` means the
+// request never landed, and the caller knows NOTHING about what they own.
+//
+// There is deliberately no collapsing `fetchMyMerchant` wrapper. Collapsing the two is what
+// broke #98: `SessionContext` derives `role` from this row, so a backend it could not reach
+// read as "owns no shop" → role `customer` → `RequireRole` bounced the merchant to the
+// landing page. In production every /api/* call was CORS-blocked (the backend's FRONTEND_URL
+// did not match the deployed origin), so every merchant login ended on the marketing page
+// with no error shown anywhere.
+export async function lookupMyMerchant(userId: string): Promise<{ ok: true; merchant: any | null } | { ok: false }> {
+  if (!userId) return { ok: true, merchant: null }
   const r = await apiTry<any>('/api/me/merchant', { auth: true })
-  return r.ok ? r.data : null
+  return r.ok ? { ok: true, merchant: r.data } : { ok: false }
 }
 
 export async function createMerchant({ name, plan = 'basic', billing = 'monthly', referredByCode }: { name: string; plan?: string; billing?: string; referredByCode?: string }) {

@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { onAuthChange, fetchProfileByUserId, fetchMyMerchant, fetchMerchantBySlug, getCurrentUser } from './store'
+import { onAuthChange, fetchProfileByUserId, lookupMyMerchant, fetchMerchantBySlug, getCurrentUser } from './store'
 import type { Lang, Merchant, Profile, Role, SessionValue } from './types'
 
 // TODO(P3): remove this transitional fallback once superadmin role is seeded in DB.
@@ -14,6 +14,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [ownMerchant, setOwnMerchant] = useState<Merchant | null>(null)
   const [merchantLoaded, setMerchantLoaded] = useState(false)
+  // True when the last shop lookup never landed (backend down, CORS, 5xx). Distinct from
+  // `ownMerchant === null`, which is the real answer "this user owns no shop". Consumers that
+  // would otherwise TURN A USER AWAY on that null must check this first — see RequireRole.
+  const [merchantUnknown, setMerchantUnknown] = useState(false)
   // Superadmin "view as shop": when set, the dashboard subtree reads this merchant
   // instead of the signed-in user's own. RLS already grants is_superadmin() full access.
   const [impersonatedMerchant, setImpersonatedMerchant] = useState<Merchant | null>(null)
@@ -29,15 +33,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     catch { setProfile(null) }
   }, [])
 
+  // The one seam that reads the signed-in user's own shop. A lookup that never landed leaves
+  // `ownMerchant` null AND raises `merchantUnknown` — never silently reads as "owns no shop".
+  const loadOwnMerchant = useCallback(async (userId: string | null | undefined) => {
+    if (!userId) { setOwnMerchant(null); setMerchantUnknown(false); setMerchantLoaded(true); return }
+    const found = await lookupMyMerchant(userId)
+    setOwnMerchant(found.ok ? found.merchant : null)
+    setMerchantUnknown(!found.ok)
+    setMerchantLoaded(true)
+  }, [])
+
   useEffect(() => {
     const unsubscribe = onAuthChange((user) => {
       setAccount(user ?? null)
       loadProfile(user)
-      if (user) fetchMyMerchant(user.id).then(m => { setOwnMerchant(m); setMerchantLoaded(true) })
-      else { setOwnMerchant(null); setMerchantLoaded(true) }
+      loadOwnMerchant(user?.id)
     })
     return unsubscribe
-  }, [loadProfile])
+  }, [loadProfile, loadOwnMerchant])
 
   const isSuper = profile?.app_role === 'superadmin' || account?.email === USER_EMAIL // TODO(P3): drop email fallback
   const role: Role = isSuper ? 'superadmin' : (ownMerchant ? 'merchant' : 'customer')
@@ -63,12 +76,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return
     }
     const user = await getCurrentUser()
-    if (!user) { setOwnMerchant(null); setMerchantLoaded(true); return }
-    const m = await fetchMyMerchant(user.id)
-    setOwnMerchant(m); setMerchantLoaded(true)
+    await loadOwnMerchant(user?.id)
   }
 
-  const value: SessionValue = { account, profile, role, merchant, ownMerchant, impersonating: !!impersonatedMerchant, impersonate, stopImpersonating, loading: account === undefined || !merchantLoaded, lang, setLang, t, refreshProfile, refreshMerchant }
+  const value: SessionValue = { account, profile, role, merchant, ownMerchant, merchantUnknown, impersonating: !!impersonatedMerchant, impersonate, stopImpersonating, loading: account === undefined || !merchantLoaded, lang, setLang, t, refreshProfile, refreshMerchant }
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
 }
 

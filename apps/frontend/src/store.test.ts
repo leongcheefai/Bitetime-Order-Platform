@@ -86,7 +86,7 @@ import {
   fetchMerchantBySlug,
   fetchProfileByUserId,
   signUp,
-  fetchMyMerchant,
+  lookupMyMerchant,
   createMerchant,
   updateMerchantSlug,
   fetchAllMerchants,
@@ -226,9 +226,9 @@ describe('fetchMerchantBySlug', () => {
   })
 })
 
-// ── fetchMyMerchant (Task 2.2) ────────────────────────────────────────────────
+// ── lookupMyMerchant (Task 2.2, #98) ──────────────────────────────────────────
 
-describe('fetchMyMerchant', () => {
+describe('lookupMyMerchant', () => {
   afterEach(() => vi.unstubAllGlobals())
 
   it('GETs /api/me/merchant with a bearer token and returns the row', async () => {
@@ -237,24 +237,39 @@ describe('fetchMyMerchant', () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => row })
     vi.stubGlobal('fetch', fetchMock)
 
-    const result = await fetchMyMerchant('u1')
+    const result = await lookupMyMerchant('u1')
 
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toMatch(/\/api\/me\/merchant$/)
     expect(init.headers.Authorization).toBe('Bearer tok')
-    expect(result).toEqual(row)
+    expect(result).toEqual({ ok: true, merchant: row })
   })
 
-  it('returns null on a failed request', async () => {
+  it('answers "you own no shop" when the API says so', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => null }))
+    expect(await lookupMyMerchant('u1')).toEqual({ ok: true, merchant: null })
+  })
+
+  // The distinction #98 turned on: a request that never landed is NOT the answer
+  // "you own no shop". Collapsing the two demoted a merchant to a customer and
+  // bounced them off their own dashboard.
+  it('reports "could not ask" on a non-2xx', async () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: false, json: async () => ({}) }))
-    expect(await fetchMyMerchant('u1')).toBeNull()
+    expect(await lookupMyMerchant('u1')).toEqual({ ok: false })
   })
 
-  it('returns null immediately for null userId without hitting the network', async () => {
+  it('reports "could not ask" when the request is blocked outright (CORS/offline)', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')))
+    expect(await lookupMyMerchant('u1')).toEqual({ ok: false })
+  })
+
+  it('answers "no shop" immediately for null userId without hitting the network', async () => {
     const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
-    expect(await fetchMyMerchant(null as any)).toBeNull()
+    expect(await lookupMyMerchant(null as any)).toEqual({ ok: true, merchant: null })
     expect(fetchMock).not.toHaveBeenCalled()
   })
 })
