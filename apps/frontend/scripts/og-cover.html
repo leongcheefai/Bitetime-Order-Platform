@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      The TinyOrder share card (1200×630) — see
+      docs/superpowers/specs/2026-07-21-og-cover-design.md
+
+      Rendered to public/og-cover.jpg by scripts/og-cover.ts. Do NOT open the
+      expectation that this file is styled by Tailwind: it is screenshotted by
+      a bare Chrome with no Vite in front of it, so every colour below is a
+      hardcoded copy of a token in src/tokens.css. If a token changes there,
+      change it here too — nothing enforces the link.
+
+      {{FONT_FACES}} and {{LOGO}} are substituted by the script. Keep the
+      spelling exact.
+    -->
+    <style>
+      {{FONT_FACES}}
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        position: relative;
+        display: grid;
+        place-items: center;
+        background: #F2EAE0;               /* --color-cream */
+        font-kerning: normal;
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Paper grain — the same feTurbulence the landing page paints via
+         GrainOverlay in src/marketing/LandingMotion.tsx. Kept at that
+         component's desktop opacity (0.035) and blend mode. */
+      .grain {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.035;
+        mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'140'%20height%3D'140'%3E%3Cfilter%20id%3D'n'%3E%3CfeTurbulence%20type%3D'fractalNoise'%20baseFrequency%3D'0.85'%20numOctaves%3D'2'%20stitchTiles%3D'stitch'%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D'100%25'%20height%3D'100%25'%20filter%3D'url(%23n)'%2F%3E%3C%2Fsvg%3E");
+      }
+
+      /* The receipt. `.tilt` carries the rotation and the shadow; `.paper`
+         carries the clip-path. They must stay separate elements — a clip-path
+         crops its own element's box-shadow away, so a single element would
+         render the paper with no shadow at all. */
+      .tilt {
+        position: relative;
+        transform: rotate(-1.5deg);
+        filter: drop-shadow(0 24px 40px rgba(43, 10, 16, 0.28));
+      }
+
+      .paper {
+        width: 760px;
+        background: #FFFFFF;
+        /* 56px vertical, not more. The content stack is ~464px; at 74px
+           padding the paper is ~612px tall, and rotating a 760px-wide box by
+           1.5° adds another ~20px to its bounding height — which does not fit
+           in 630. Step 4 of this task checks for exactly that clipping. */
+        padding: 56px 60px;
+        /* Zigzag perforation, top and bottom — the silhouette of the receipt
+           mark in the logo. 20 teeth across 760px = one tooth per 5%; each
+           tooth is 18px deep. The polygon runs clockwise: down the top edge's
+           teeth left-to-right, down the right side, back along the bottom
+           edge's teeth right-to-left, up the left side. */
+        clip-path: polygon(
+          0% 18px,   2.5% 0px,   5% 18px,   7.5% 0px,  10% 18px,
+          12.5% 0px, 15% 18px,  17.5% 0px,  20% 18px,  22.5% 0px,
+          25% 18px,  27.5% 0px, 30% 18px,   32.5% 0px, 35% 18px,
+          37.5% 0px, 40% 18px,  42.5% 0px,  45% 18px,  47.5% 0px,
+          50% 18px,  52.5% 0px, 55% 18px,   57.5% 0px, 60% 18px,
+          62.5% 0px, 65% 18px,  67.5% 0px,  70% 18px,  72.5% 0px,
+          75% 18px,  77.5% 0px, 80% 18px,   82.5% 0px, 85% 18px,
+          87.5% 0px, 90% 18px,  92.5% 0px,  95% 18px,  97.5% 0px,
+          100% 18px,
+          100% calc(100% - 18px), 97.5% 100%, 95% calc(100% - 18px),
+          92.5% 100%, 90% calc(100% - 18px), 87.5% 100%, 85% calc(100% - 18px),
+          82.5% 100%, 80% calc(100% - 18px), 77.5% 100%, 75% calc(100% - 18px),
+          72.5% 100%, 70% calc(100% - 18px), 67.5% 100%, 65% calc(100% - 18px),
+          62.5% 100%, 60% calc(100% - 18px), 57.5% 100%, 55% calc(100% - 18px),
+          52.5% 100%, 50% calc(100% - 18px), 47.5% 100%, 45% calc(100% - 18px),
+          42.5% 100%, 40% calc(100% - 18px), 37.5% 100%, 35% calc(100% - 18px),
+          32.5% 100%, 30% calc(100% - 18px), 27.5% 100%, 25% calc(100% - 18px),
+          22.5% 100%, 20% calc(100% - 18px), 17.5% 100%, 15% calc(100% - 18px),
+          12.5% 100%, 10% calc(100% - 18px), 7.5% 100%, 5% calc(100% - 18px),
+          2.5% 100%, 0% calc(100% - 18px)
+        );
+      }
+
+      .logo { display: block; height: 34px; width: auto; }
+
+      /* Dotted rule. A real border-style: dotted renders as squares at this
+         weight; radial-gradient gives round perforation dots instead. */
+      .rule {
+        height: 2px;
+        margin: 26px 0;
+        background-image: radial-gradient(
+          circle, #C9A090 1px, transparent 1px    /* --color-clay-border */
+        );
+        background-size: 8px 2px;
+        background-repeat: repeat-x;
+      }
+
+      h1 {
+        font-family: 'Lora', serif;
+        font-weight: 500;
+        font-size: 60px;
+        line-height: 1.14;
+        letter-spacing: -0.01em;
+        color: #2B0A10;                    /* --color-ink */
+      }
+
+      .items { list-style: none; }
+
+      .items li {
+        display: flex;
+        gap: 22px;
+        font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
+        font-weight: 500;
+        font-size: 17px;
+        line-height: 2.1;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7A4F55;                    /* --color-rose-muted */
+      }
+
+      .items .qty { width: 14px; flex: none; }
+
+      .total {
+        display: flex;
+        justify-content: space-between;
+        font-family: 'DM Sans', sans-serif;
+        font-weight: 500;
+        font-size: 20px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #7A1028;                    /* --color-oxblood */
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grain"></div>
+
+    <div class="tilt">
+      <div class="paper">
+        <img class="logo" src="{{LOGO}}" alt="TinyOrder" />
+
+        <div class="rule"></div>
+
+        <h1>Sell your food online — without the DM chaos.</h1>
+
+        <div class="rule"></div>
+
+        <ul class="items">
+          <li><span class="qty">1</span><span>Your own storefront link</span></li>
+          <li><span class="qty">1</span><span>Every order in one place</span></li>
+          <li><span class="qty">1</span><span>Bilingual · 中英双语</span></li>
+        </ul>
+
+        <div class="rule"></div>
+
+        <div class="total"><span>Total</span><span>7 days free</span></div>
+      </div>
+    </div>
+  </body>
+</html>
