@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      The TinyOrder share card (1200×630) — see
+      docs/superpowers/specs/2026-07-21-og-cover-design.md
+
+      Rendered to public/og-cover.jpg by scripts/og-cover.ts. Do NOT open the
+      expectation that this file is styled by Tailwind: it is screenshotted by
+      a bare Chrome with no Vite in front of it, so every colour below is a
+      hardcoded copy of a token in src/tokens.css. If a token changes there,
+      change it here too — nothing enforces the link.
+
+      The script replaces two placeholders here: FONT_FACES in the style
+      element, and LOGO in the image tag. Spelling must be exact.
+    -->
+    <style>
+      {{FONT_FACES}}
+
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+
+      body {
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+        position: relative;
+        display: grid;
+        place-items: center;
+        background: #F2EAE0;               /* --color-cream */
+        font-kerning: normal;
+        text-rendering: geometricPrecision;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* Paper grain — the same feTurbulence the landing page paints via
+         GrainOverlay in src/marketing/LandingMotion.tsx. Kept at that
+         component's desktop opacity (0.035) and blend mode. */
+      .grain {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.035;
+        mix-blend-mode: multiply;
+        background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20width%3D'140'%20height%3D'140'%3E%3Cfilter%20id%3D'n'%3E%3CfeTurbulence%20type%3D'fractalNoise'%20baseFrequency%3D'0.85'%20numOctaves%3D'2'%20stitchTiles%3D'stitch'%2F%3E%3C%2Ffilter%3E%3Crect%20width%3D'100%25'%20height%3D'100%25'%20filter%3D'url(%23n)'%2F%3E%3C%2Fsvg%3E");
+      }
+
+      /* The receipt. `.tilt` carries the rotation and the shadow; `.paper`
+         carries the clip-path. They must stay separate elements — a clip-path
+         crops its own element's box-shadow away, so a single element would
+         render the paper with no shadow at all. */
+      .tilt {
+        position: relative;
+        transform: rotate(-1.5deg);
+        filter: drop-shadow(0 24px 40px rgba(43, 10, 16, 0.28));
+      }
+
+      .paper {
+        width: 760px;
+        background: #FFFFFF;
+        /* 56px vertical, not more. The content stack is ~410px; at 56px
+           padding the paper is ~522px tall, and rotating a 760px-wide box by
+           1.5° adds another ~20px to its bounding height, for ~542px total —
+           well under 630, with headroom left for the 32px-deep perforation
+           teeth below. Step 4 of this task checks for exactly that clipping. */
+        padding: 56px 60px;
+        /* Zigzag perforation, top and bottom — a torn-receipt silhouette
+           echoing the logo mark. 8 teeth across 760px = one tooth per
+           12.5%, 32px deep. Fewer, deeper teeth than a finer pitch because
+           the card is consumed at ~200px WhatsApp-thumbnail scale, where a
+           shallow tooth downscales to a few pixels and reads as edge fuzz
+           rather than a tear. The polygon runs clockwise: down the top
+           edge's teeth left-to-right, down the right side, back along the
+           bottom edge's teeth right-to-left, up the left side. */
+        clip-path: polygon(
+          0% 32px,     6.25% 0px,   12.5% 32px,  18.75% 0px,
+          25% 32px,    31.25% 0px,  37.5% 32px,  43.75% 0px,
+          50% 32px,    56.25% 0px,  62.5% 32px,  68.75% 0px,
+          75% 32px,    81.25% 0px,  87.5% 32px,  93.75% 0px,
+          100% 32px,
+          100% calc(100% - 32px), 93.75% 100%, 87.5% calc(100% - 32px),
+          81.25% 100%, 75% calc(100% - 32px), 68.75% 100%, 62.5% calc(100% - 32px),
+          56.25% 100%, 50% calc(100% - 32px), 43.75% 100%, 37.5% calc(100% - 32px),
+          31.25% 100%, 25% calc(100% - 32px), 18.75% 100%, 12.5% calc(100% - 32px),
+          6.25% 100%, 0% calc(100% - 32px)
+        );
+      }
+
+      .logo { display: block; height: 34px; width: auto; }
+
+      /* Dotted rule. A real border-style: dotted renders as squares at this
+         weight; radial-gradient gives round perforation dots instead. */
+      .rule {
+        height: 2px;
+        margin: 20px 0;
+        background-image: radial-gradient(
+          circle, #C9A090 1px, transparent 1px    /* --color-clay-border */
+        );
+        background-size: 8px 2px;
+        background-repeat: repeat-x;
+      }
+
+      h1 {
+        font-family: 'Lora', serif;
+        font-weight: 500;
+        font-size: 52px;
+        line-height: 1.14;
+        letter-spacing: -0.01em;
+        color: #2B0A10;                    /* --color-ink */
+      }
+
+      .items { list-style: none; }
+
+      .items li {
+        display: flex;
+        gap: 22px;
+        font-family: 'DM Sans', 'Noto Sans SC', sans-serif;
+        font-weight: 500;
+        font-size: 17px;
+        line-height: 2.1;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7A4F55;                    /* --color-rose-muted */
+      }
+
+      .items .qty { width: 14px; flex: none; }
+
+      .total {
+        display: flex;
+        justify-content: space-between;
+        font-family: 'DM Sans', sans-serif;
+        font-weight: 500;
+        font-size: 20px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #7A1028;                    /* --color-oxblood */
+      }
+    </style>
+  </head>
+  <body>
+    <div class="grain"></div>
+
+    <div class="tilt">
+      <div class="paper">
+        <img class="logo" src="{{LOGO}}" alt="TinyOrder" />
+
+        <div class="rule"></div>
+
+        <h1>Sell your food online — without the DM chaos.</h1>
+
+        <div class="rule"></div>
+
+        <ul class="items">
+          <li><span class="qty">1</span><span>Your own storefront link</span></li>
+          <li><span class="qty">1</span><span>Every order in one place</span></li>
+          <li><span class="qty">1</span><span>Bilingual · 中英双语</span></li>
+        </ul>
+
+        <div class="rule"></div>
+
+        <div class="total"><span>Total</span><span>7 days free</span></div>
+      </div>
+    </div>
+  </body>
+</html>
