@@ -1,9 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
 import { Link } from 'react-router-dom'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
-import { usePageVariants } from '../motion'
+import { usePageVariants, useEnterTransition } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
 import { priceOrder, voucherError, shopRates, shopTax, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
@@ -80,7 +80,10 @@ export default function Storefront() {
   const { merchant: merchantNullable, refresh: refreshMerchant } = useMerchant()
   const merchant = merchantNullable as NonNullable<typeof merchantNullable>
   const { lang, t, account, profile, refreshProfile } = useSession()
-  const viewVariants = usePageVariants()
+  // Enter-only, and deliberately not inside an AnimatePresence: an exit-gated swap between the
+  // form and the success view would never complete in a backgrounded tab — a customer who
+  // switched to their banking app to pay would come back to a storefront frozen mid-order.
+  const enterView = useEnterTransition(usePageVariants())
 
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }
@@ -658,10 +661,10 @@ export default function Storefront() {
   }
 
   return (
-    <AnimatePresence mode="wait">
+    <>
       {success ? (
         // ── Success view ──────────────────────────────────────────────────────
-        <motion.div key="success" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
+        <motion.div key="success" className="form-wrap" {...enterView}>
           {/* Header */}
           <div className="flex items-start justify-between gap-4 mb-8 max-[480px]:flex-col max-[480px]:gap-2">
             <div>
@@ -763,7 +766,7 @@ export default function Storefront() {
         </motion.div>
       ) : (
         // ── Order form ──────────────────────────────────────────────────────
-        <motion.div key="form" className="form-wrap" variants={viewVariants} initial="initial" animate="animate" exit="exit">
+        <motion.div key="form" className="form-wrap" {...enterView}>
           {/* Header with lang switch */}
           <div className="flex items-start justify-between gap-4 mb-8 max-[480px]:flex-col max-[480px]:gap-2">
             <div>
@@ -1206,6 +1209,6 @@ export default function Storefront() {
           )}
         </motion.div>
       )}
-    </AnimatePresence>
+    </>
   )
 }

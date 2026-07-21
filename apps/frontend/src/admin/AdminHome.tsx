@@ -1,6 +1,6 @@
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
 import { useSession } from '../SessionContext'
-import { usePageVariants } from '../motion'
+import { usePageVariants, useEnterTransition } from '../motion'
 import { useDashboardSection } from '../useDashboardSection'
 import { LayoutDashboard, Store, MessageSquare } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
@@ -18,7 +18,7 @@ const SECTIONS = [
 export default function AdminHome() {
   const { t } = useSession()
   const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
-  const variants = usePageVariants()
+  const enter = useEnterTransition(usePageVariants())
 
   const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
 
@@ -30,13 +30,11 @@ export default function AdminHome() {
       active={section}
       onSelect={setSection}
     >
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={section} variants={variants} initial="initial" animate="animate" exit="exit">
-          {section === 'overview'  && <AdminOverview />}
-          {section === 'merchants' && <AdminMerchants />}
-          {section === 'feedback'  && <AdminFeedback />}
-        </motion.div>
-      </AnimatePresence>
+      <motion.div key={section} {...enter}>
+        {section === 'overview'  && <AdminOverview />}
+        {section === 'merchants' && <AdminMerchants />}
+        {section === 'feedback'  && <AdminFeedback />}
+      </motion.div>
     </DashboardShell>
   )
 }

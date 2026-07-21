@@ -1,6 +1,5 @@
 import { lazy, Suspense } from 'react'
 import { Routes, Route, useLocation } from 'react-router-dom'
-import { AnimatePresence } from 'motion/react'
 import { PageTransition } from './motion'
 import { SessionProvider, useSession } from './SessionContext'
 import { Toaster } from './components/ui/sonner'
@@ -95,24 +94,25 @@ function AnimatedRoutes() {
   const location = useLocation()
   return (
     <Suspense fallback={<RouteFallback />}>
-      <AnimatePresence mode="wait" initial={false}>
-        <PageTransition key={location.pathname}>
-          <Routes location={location}>
-            <Route path="/" element={<Landing />} />
-            {/* Top-level on purpose, NOT nested under /s/:slug: the storefront shell's status gate
-                would swallow it, and a suspended shop must never lock a customer out of their own
-                account. Role-blind — `?shop=` decides where they land afterwards. */}
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-            <Route path="/s/:slug/*" element={<MerchantProvider><StorefrontShell /></MerchantProvider>} />
-            <Route path="/merchant/signup" element={<SignupScreen />} />
-            <Route path="/merchant/login" element={<LoginScreen />} />
-            <Route path="/merchant" element={<RequireRole role="merchant"><MerchantHome /></RequireRole>} />
-            <Route path="/merchant/:slug" element={<RequireRole role="superadmin"><MerchantHome /></RequireRole>} />
-            <Route path="/admin/merchants" element={<RequireRole role="superadmin"><AdminHome /></RequireRole>} />
-            <Route path="/admin" element={<RequireRole role="superadmin"><AdminHome /></RequireRole>} />
-          </Routes>
-        </PageTransition>
-      </AnimatePresence>
+      {/* Keyed on the path so each route fades in, and NOT wrapped in AnimatePresence: an
+          exit-gated swap never completes in a backgrounded tab, which froze the app on
+          whatever route it was showing. See the rule at the top of motion.tsx. */}
+      <PageTransition key={location.pathname}>
+        <Routes location={location}>
+          <Route path="/" element={<Landing />} />
+          {/* Top-level on purpose, NOT nested under /s/:slug: the storefront shell's status gate
+              would swallow it, and a suspended shop must never lock a customer out of their own
+              account. Role-blind — `?shop=` decides where they land afterwards. */}
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/s/:slug/*" element={<MerchantProvider><StorefrontShell /></MerchantProvider>} />
+          <Route path="/merchant/signup" element={<SignupScreen />} />
+          <Route path="/merchant/login" element={<LoginScreen />} />
+          <Route path="/merchant" element={<RequireRole role="merchant"><MerchantHome /></RequireRole>} />
+          <Route path="/merchant/:slug" element={<RequireRole role="superadmin"><MerchantHome /></RequireRole>} />
+          <Route path="/admin/merchants" element={<RequireRole role="superadmin"><AdminHome /></RequireRole>} />
+          <Route path="/admin" element={<RequireRole role="superadmin"><AdminHome /></RequireRole>} />
+        </Routes>
+      </PageTransition>
     </Suspense>
   )
 }

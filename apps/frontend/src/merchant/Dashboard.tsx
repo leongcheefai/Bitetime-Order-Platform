@@ -1,6 +1,6 @@
-import { motion, AnimatePresence } from 'motion/react'
+import { motion } from 'motion/react'
 import { useSession } from '../SessionContext'
-import { usePageVariants } from '../motion'
+import { usePageVariants, useEnterTransition } from '../motion'
 import { LayoutDashboard, ReceiptText, Cake, Ticket, Users, Settings } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import BillingBanner from './BillingBanner'
@@ -36,7 +36,7 @@ function DashboardInner() {
   const { t, merchant, role } = useSession()
   const { guard } = useNavGuard()
   const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
-  const variants = usePageVariants()
+  const enter = useEnterTransition(usePageVariants())
 
   const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
 
@@ -54,16 +54,14 @@ function DashboardInner() {
       backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
     >
       <BillingBanner />
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={section} variants={variants} initial="initial" animate="animate" exit="exit">
-          {section === 'overview'  && <Overview />}
-          {section === 'orders'    && <OrdersView />}
-          {section === 'products'  && <ProductsManager />}
-          {section === 'vouchers'  && <VouchersManager />}
-          {section === 'customers' && <CustomersView />}
-          {section === 'settings'  && <ShopSettings />}
-        </motion.div>
-      </AnimatePresence>
+      <motion.div key={section} {...enter}>
+        {section === 'overview'  && <Overview />}
+        {section === 'orders'    && <OrdersView />}
+        {section === 'products'  && <ProductsManager />}
+        {section === 'vouchers'  && <VouchersManager />}
+        {section === 'customers' && <CustomersView />}
+        {section === 'settings'  && <ShopSettings />}
+      </motion.div>
       <FeedbackFab />
     </DashboardShell>
   )
