@@ -35,8 +35,16 @@ company's OG card with the logo swapped out has failed the brief.
 landing page uses (`GrainOverlay`), at roughly 3% opacity.
 
 Centred on it, a receipt ≈760px wide, tilted `-1.5°`, with
-`box-shadow: 0 24px 60px -20px rgba(43, 10, 16, 0.28)`. The paper is white `#FFFFFF`,
-not cream — the sheet has to separate from the ground or the tilt reads as an accident.
+`drop-shadow(0 24px 40px rgba(43, 10, 16, 0.28))` on the tilt wrapper. The paper is
+white `#FFFFFF`, not cream — the sheet has to separate from the ground or the tilt
+reads as an accident.
+
+The shadow is a `drop-shadow` filter rather than a `box-shadow`, and it lives on a
+parent rather than on the paper itself, because a `clip-path` crops its own element's
+`box-shadow` away — the perforated edge would have left the paper with no shadow at
+all. `drop-shadow` follows the clipped child's alpha silhouette instead, so the shadow
+is torn in the same shape as the paper. It has no spread parameter, so the blur is
+tuned down from 60px to 40px to compensate for the missing `-20px`.
 
 The receipt's top and bottom edges are zigzag perforations cut with a CSS `clip-path`
 polygon — a torn-receipt idiom, not a literal trace of the logo mark's edge (the mark
@@ -53,7 +61,7 @@ The receipt's left edge carries nothing — no icon column, no rail. Print disci
 |---|---|---|
 | `TINYORDER` lockup | the real `tinyorder-logo.png`, h ≈ 34px | oxblood |
 | rule | dotted, 2px dash / 6px gap | `--color-clay-border` `#C9A090` |
-| `Sell your food online — without the DM chaos.` | Lora 500, 60px, `line-height: 1.14`, `letter-spacing: -0.01em` | `--color-ink` `#2B0A10` |
+| `Sell your food online — without the DM chaos.` | Lora 500, 52px, `line-height: 1.14`, `letter-spacing: -0.01em` | `--color-ink` `#2B0A10` |
 | rule | dotted | `--color-clay-border` |
 | `1  YOUR OWN STOREFRONT LINK`<br>`1  EVERY ORDER IN ONE PLACE`<br>`1  BILINGUAL · 中英双语` | DM Sans 500, 17px, uppercase, `letter-spacing: 0.08em`; qty column left, label right | `--color-rose-muted` `#7A4F55` |
 | rule | dotted | `--color-clay-border` |
@@ -125,14 +133,22 @@ WhatsApp's ~300KB scraper ceiling, which PNG would not once the grain is in.
 
 `apps/frontend/index.html` gains, alongside the existing tags:
 
-- `og:url` — `https://bitetime-order-platform.vercel.app/`, matching the origin
-  `og:image` already points at
 - `og:image:width` `1200`, `og:image:height` `630` — lets a scraper lay out the card
   before it has finished fetching the image
+- `og:image:type` `image/jpeg` — lets a scraper skip a HEAD request
 - `og:image:alt` and `twitter:image:alt`
 
 `og:image` is already absolute, which is required — relative URLs are silently dropped
 by most scrapers.
+
+**No `og:url`, deliberately.** It was in an earlier draft of this spec and was removed
+before merge. `vercel.json` rewrites `/(.*)` to `/index.html` and nothing in `src/`
+writes meta at runtime, so every tag in this file is served on *every* route — including
+the `/s/:slug` storefronts that `src/merchant/ShareStorefront.tsx` exists to get
+merchants pasting into chat. Facebook and LinkedIn canonicalise on `og:url`, so one
+hardcoded value would have made every merchant's shop link display and dedupe as the
+platform's homepage. With no `og:url` at all, scrapers fall back to the URL they
+fetched, which is correct on every route. Do not add it back without per-route meta.
 
 ## Verification
 
