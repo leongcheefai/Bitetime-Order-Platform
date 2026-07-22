@@ -26,9 +26,32 @@ describe('savedDetailsFromOrder', () => {
       .toEqual({ whatsapp: '60123456789' })
   })
 
-  it('does not save a half-typed address from a delivery order', () => {
+  it('does not save a half-typed address with no place id from a delivery order', () => {
+    // This is the REGION ground specifically — no `place_id`, so all four parts are required:
+    // that address is remembered because it can be PRINTED, and a printed address missing a part
+    // is useless to the merchant reading it. The DISTANCE ground (below) is a SEPARATE case, not
+    // a relaxation of this one.
     const partial: AddressParts = { line1: '12 Jalan Bukit', postcode: '', city: '', state: '' }
     expect(savedDetailsFromOrder({ mode: 'delivery', wa: '60123456789', address: partial }))
+      .toEqual({ whatsapp: '60123456789' })
+  })
+
+  it('saves an address with a confirmed place id even with no postcode/city/state', () => {
+    // The DISTANCE ground (#101 review, Finding 4): a confirmed `place_id` makes the address
+    // ROUTABLE on its own. Google returns no `postal_code` component for plenty of real,
+    // deliverable places (POIs, rural addresses) — demanding one anyway meant a picked, routable
+    // address was silently never saved.
+    const routed: AddressParts = { line1: '12 Jalan Bukit', postcode: '', city: '', state: '', place_id: 'ChIJ123' }
+    expect(savedDetailsFromOrder({ mode: 'delivery', wa: '60123456789', address: routed }))
+      .toEqual({ whatsapp: '60123456789', delivery_address: routed })
+  })
+
+  it('does not save that same address once its place id is gone', () => {
+    // Strip `place_id` from the routed address above and it falls back to the REGION ground,
+    // which the first test in this pair already proved refuses it — this is the same object,
+    // one field short.
+    const { place_id: _placeId, ...unrouted } = { line1: '12 Jalan Bukit', postcode: '', city: '', state: '', place_id: 'ChIJ123' }
+    expect(savedDetailsFromOrder({ mode: 'delivery', wa: '60123456789', address: unrouted as AddressParts }))
       .toEqual({ whatsapp: '60123456789' })
   })
 
