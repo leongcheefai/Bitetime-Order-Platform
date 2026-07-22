@@ -43,32 +43,73 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
   // -1 = no option highlighted. Index-based so ArrowUp/Down can move it with plain arithmetic;
   // resolved back to a suggestion (and its stable id) at render and on Enter.
   const [activeIndex, setActiveIndex] = useState(-1)
+  // The query that `fetched` is the answer to. State (not a ref) because the live region below
+  // reads it during render, and tracked explicitly rather than inferred from `fetched.length` so
+  // a reopen with the same text can tell "these results still apply" from "no fetch has run yet"
+  // — see the debounce effect and the live region below.
+  const [fetchedFor, setFetchedFor] = useState<string | null>(null)
+  // Bumped once a composed IME entry commits, to nudge the debounce effect below to run even
+  // though `value` itself didn't change on this render (see the composition handlers on <Input>).
+  const [composeTick, setComposeTick] = useState(0)
   // One token per burst of typing, reset after a pick: it is what makes a burst of keystrokes
-  // bill as a single lookup.
-  const session = useRef(newPlaceSession())
+  // bill as a single lookup. Lazy init — a plain `useRef(newPlaceSession())` would call
+  // `crypto.randomUUID()` on every render and throw away all but the first.
+  const session = useRef<string | undefined>(undefined)
+  if (session.current === undefined) session.current = newPlaceSession()
+  // True while an IME composition (e.g. pinyin) is in progress. A ref, not state: it must be
+  // readable synchronously inside the debounce effect without itself being a reactive trigger.
+  const composing = useRef(false)
+  // Synchronous, unlike `busy`: guards `pick()` itself against a second invocation landing before
+  // React has re-rendered with `busy = true` (state updates aren't visible to a still-in-flight
+  // closure the instant they're scheduled).
+  const picking = useRef(false)
   const listboxId = `${id}-listbox`
 
-  const eligible = open && value.trim().length >= 3
+  const query = value.trim()
+  const eligible = open && query.length >= 3
   const suggestions = eligible ? fetched : []
+  // True the instant a query becomes eligible and stays true until a fetch actually resolves FOR
+  // THAT query — this is what keeps the live region from ever announcing "no suggestions" before
+  // a search for the current text has actually run (see the live region below).
+  const searching = eligible && fetchedFor !== query
 
   useEffect(() => {
     if (!eligible) return
+    // Reopening a list whose query hasn't changed (e.g. Escape then ArrowDown) means the held
+    // results are still the correct answer — refetching would both spend a request the platform
+    // pays for and, worse, resolve mid-navigation and stomp a highlight the user just set with no
+    // keystroke of theirs causing it.
+    if (query === fetchedFor) return
+    // Suppress paid lookups on intermediate IME fragments; onCompositionEnd below bumps
+    // `composeTick` to re-run this effect once the composed text is final.
+    if (composing.current) return
     // Debounced: every keystroke that reaches the proxy is a request the platform pays for.
     let live = true
     const timer = setTimeout(async () => {
-      const hits = await suggestPlaces(value, session.current)
-      if (live) { setFetched(hits); setActiveIndex(-1) }
+      const hits = await suggestPlaces(query, session.current!)
+      if (!live) return
+      setFetched(hits)
+      setFetchedFor(query)
+      setActiveIndex(-1)
     }, 300)
     return () => { live = false; clearTimeout(timer) }
-  }, [value, eligible])
+  }, [query, eligible, composeTick, fetchedFor])
 
   async function pick(s: PlaceSuggestion) {
+    // A pick already in flight wins. Without this the listbox stays clickable across the await,
+    // so a second click starts a second `placeDetail` on the SAME session token — billed as a
+    // second lookup — and both calls reach `onPick`, leaving the caller holding whichever
+    // address happened to resolve last.
+    if (picking.current) return
+    picking.current = true
     setBusy(true)
     // The SAME session token as the suggests — that is what closes the billable session.
-    const detail = await placeDetail(s.placeId, session.current)
+    const detail = await placeDetail(s.placeId, session.current!)
+    picking.current = false
     setBusy(false)
     setOpen(false)
     setFetched([])
+    setFetchedFor(null)
     setActiveIndex(-1)
     session.current = newPlaceSession()
     // A details call that failed must NOT be turned into an address: the caller would then hold
@@ -78,7 +119,7 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      if (value.trim().length < 3) return // nothing to open or navigate — leave the key alone
+      if (query.length < 3) return // nothing to open or navigate — leave the key alone
       e.preventDefault()
       // Reopens even after Escape closed it: a keyboard user's only way back into a list they
       // dismissed is the same key that first opened one, not more typing.
@@ -104,7 +145,9 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
   }
 
   const activeOption = activeIndex >= 0 ? suggestions[activeIndex] : undefined
-  const showList = open && suggestions.length > 0
+  // Hidden (not just visually, but from the DOM) while a pick is in flight, so the options are
+  // not clickable across the await — the other half of the concurrent-pick guard above.
+  const showList = open && !busy && suggestions.length > 0
 
   return (
     <div className="flex flex-col gap-[6px] relative">
@@ -123,6 +166,8 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
         onFocus={() => setOpen(true)}
         onChange={e => { setOpen(true); onTextChange?.(e.target.value) }}
         onKeyDown={onKeyDown}
+        onCompositionStart={() => { composing.current = true }}
+        onCompositionEnd={() => { composing.current = false; setComposeTick(v => v + 1) }}
         // A blur that closes immediately eats the click on a suggestion.
         onBlur={() => setTimeout(() => { setOpen(false); setActiveIndex(-1) }, 150)}
       />
@@ -157,17 +202,23 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
           })}
         </ul>
       )}
-      {/* Announces arrivals for screen-reader users, who cannot see the list render. */}
+      {/* Announces state for screen-reader users, who cannot see the list render. Three real
+          states, not two: searching must be its own case, or "no suggestions" gets announced
+          during every debounce window (the instant a 3rd character lands) and then contradicted
+          ~300ms later — which is worse than saying nothing. "No suggestions" is only reachable
+          once a fetch has actually completed for the CURRENT query (`fetchedFor === query`), and
+          this doubles as the only busy indicator — a duplicate plain-text one was removed. */}
       <div role="status" aria-live="polite" className="sr-only">
         {busy
           ? t('Looking up that address…', '正在查询地址…')
-          : eligible
-            ? suggestions.length > 0
-              ? t(`${suggestions.length} suggestions available`, `找到 ${suggestions.length} 个建议地址`)
-              : t('No suggestions found', '未找到建议地址')
-            : ''}
+          : !eligible
+            ? ''
+            : searching
+              ? t('Searching for addresses…', '正在搜索地址…')
+              : suggestions.length > 0
+                ? t(`${suggestions.length} suggestions available`, `找到 ${suggestions.length} 个建议地址`)
+                : t('No suggestions found', '未找到建议地址')}
       </div>
-      {busy && <p className="text-[12px] text-rose-muted">{t('Looking up that address…', '正在查询地址…')}</p>}
     </div>
   )
 }
