@@ -84,8 +84,10 @@ describe('buildOrderMessage', () => {
       ...ORDER,
       address: { line1: '12 Jalan Test', unit: 'A-3-2', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
     })
-    expect(msg).toContain('A-3-2')
-    expect(msg).toContain('12 Jalan Test')
+    // The whole address line, not two substrings: the unit must come FIRST, where a rider reads
+    // it before the street. Two `toContain`s pass just as happily with the unit appended after
+    // the state, which is the one placement the comment on `formatAddress` rules out.
+    expect(msg).toContain('*Address:* A-3-2, 12 Jalan Test, 50000 Kuala Lumpur, Selangor')
   })
 })
 
