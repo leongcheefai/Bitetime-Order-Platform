@@ -1282,6 +1282,20 @@ Add the limiters beside the signup ones (~line 680):
 // that is its own piece of work (#101 Out of Scope).
 const quoteIpWindow = createSlidingWindow({ limit: 60, windowMs: 60 * 60_000, now: () => Date.now() })
 const quoteMerchantWindow = createSlidingWindow({ limit: 500, windowMs: 24 * 60 * 60_000, now: () => Date.now() })
+
+// Bounds the Places proxy by caller IP. BOTH of its routes draw on this one bucket.
+//
+// 300/hour, deliberately five times `quoteIpWindow`, because the two endpoints are called nothing
+// alike: a quote happens ONCE per address the customer selects, while suggest fires per burst of
+// typing — one address entry is realistically four to eight suggests plus one detail. At 60 this
+// would be about six address entries per hour per IP, and behind carrier-grade NAT or a mall's
+// wifi (most Malaysian mobile traffic, and this is a Malaysian platform) dozens of unrelated
+// customers share one address. They would exhaust it in minutes, and the failure is silent and
+// fatal: the address box returns nothing and the customer cannot place a delivery order at all.
+//
+// Raising a REQUEST ceiling does not raise the bill proportionally, because the billable unit is
+// the SESSION: a burst of keystrokes carrying one session token, ending in a details call, bills
+// as one lookup.
 const placesIpWindow = createSlidingWindow({ limit: 300, windowMs: 60 * 60_000, now: () => Date.now() })
 ```
 
