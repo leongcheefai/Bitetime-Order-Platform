@@ -171,6 +171,18 @@ function ShippingTab({ onDirtyChange }: TabProps) {
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
     try {
+      // Guard against a 0 maximum distance: a blank field is "deliver anywhere with a road", but 0
+      // is "deliver nowhere". The backend refuses it, but this layer can show why in the merchant's
+      // language while they are still looking at the field, rather than a raw developer error string.
+      if (fields.maxKm && Number(fields.maxKm) <= 0) {
+        toast.error(t(
+          'Maximum distance must be greater than zero, or leave blank to deliver anywhere.',
+          '最远配送距离必须大于零，或留空表示只要有路就送。'
+        ))
+        setBusy(false)
+        return
+      }
+
       // shopRates is what READS this column on both sides of the wire, so it is what WRITES it
       // too — the same function, so the form cannot save a row it then reads back differently.
       //
@@ -202,9 +214,12 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         // "deliver nowhere", and the backend refuses it rather than guessing which was meant.
         delivery_max_km: (fields.maxKm ?? '').trim() === '' ? null : Number(fields.maxKm),
         origin_place_id: fields.originPlaceId || null,
-        origin_lat: (fields.originLat ?? '').trim() === '' ? null : Number(fields.originLat),
-        origin_lng: (fields.originLng ?? '').trim() === '' ? null : Number(fields.originLng),
-        origin_address: fields.originAddress || null,
+        // An unmatched string is not an origin. Save address and coords only when place_id is
+        // confirmed by autocomplete; otherwise store null. This prevents a merchant from seeing
+        // a stale, unmatched string on reload and believing a place was confirmed when none was.
+        origin_lat: fields.originPlaceId && (fields.originLat ?? '').trim() !== '' ? Number(fields.originLat) : null,
+        origin_lng: fields.originPlaceId && (fields.originLng ?? '').trim() !== '' ? Number(fields.originLng) : null,
+        origin_address: fields.originPlaceId ? (fields.originAddress || null) : null,
       })
       await refreshMerchant()
       // Show back the rates that were actually SAVED, not the blank that was typed — a merchant
@@ -234,6 +249,12 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         baseFee: String(distance.base),
         ratePerKm: String(distance.ratePerKm),
         maxKm: distance.maxKm === null ? '' : String(distance.maxKm),
+        // Show what was actually SAVED for origin fields, not what was typed. If an unconfirmed
+        // address was cleared from storage, the display must reflect that too.
+        originPlaceId: merchant!.origin_place_id ?? '',
+        originAddress: merchant!.origin_address ?? '',
+        originLat: merchant!.origin_lat != null ? String(merchant!.origin_lat) : '',
+        originLng: merchant!.origin_lng != null ? String(merchant!.origin_lng) : '',
       }
       setFields(applied)
       setSaved(applied)
@@ -387,7 +408,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             </div>
             <div className="flex flex-col gap-[6px]">
               <Label htmlFor="shop-max-km">{t('Maximum distance (km)', '最远配送距离 (公里)')}</Label>
-              <Input id="shop-max-km" type="number" step="0.1" min="0" value={fields.maxKm}
+              <Input id="shop-max-km" type="number" step="0.1" min="0.1" value={fields.maxKm}
                 onChange={e => setFields(f => ({ ...f, maxKm: e.target.value }))} variant="compact" />
               {/* Says what a blank field DOES, the same reason the East-Malaysia hint does. */}
               <p className="text-[12px] text-rose-muted leading-[1.5]">
