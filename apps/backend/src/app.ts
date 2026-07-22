@@ -23,6 +23,8 @@ import { notifyOrderPlaced, telegramSend } from './notify.js'
 import { signUpCustomer, isDuplicateEmailError } from './customerSignup.js'
 import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
+import { resolveDistance, CACHE_TTL_MS } from './distance.js'
+import { liveDistanceDeps } from './distanceCache.js'
 import { detectCountry } from './region.js'
 import { fetchBasePricing, createPricingCache, type PricingPayload } from './pricing.js'
 import { estimateFor } from './fx.js'
@@ -31,7 +33,7 @@ import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { insertFeedback, listFeedback, updateFeedbackStatus } from './feedback.js'
-import { isCart, validateFeedback, isFeedbackStatus } from '@bitetime/shared'
+import { isCart, validateFeedback, isFeedbackStatus, shopDistance, routedKm, distanceFee, exceedsMaxKm } from '@bitetime/shared'
 import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode, RESERVED_SLUGS } from './slug.js'
 import { pickMerchantConfig, pickProfileFields, pickProductFields, pickOrderFields, ORDER_STATUSES } from './writes.js'
 
@@ -680,6 +682,33 @@ app.post('/api/billing/portal', async (c) => {
 const signupIpWindow = createSlidingWindow({ limit: 10, windowMs: 60 * 60_000, now: () => Date.now() })
 const signupEmailWindow = createSlidingWindow({ limit: 3, windowMs: 60 * 60_000, now: () => Date.now() })
 
+// The quote endpoint SPENDS MONEY per cache miss (see docs/adr/0001), so it is bounded twice
+// over, and the two bounds guard different things:
+//
+//   * `quoteIpWindow` bounds REQUESTS by caller IP — cheap flood protection, applied to hits
+//     and misses alike.
+//   * `quoteMerchantWindow` bounds PROVIDER CALLS per shop per day — the runaway stop. It is
+//     checked only when the cache missed, because a cache hit costs nothing and must never eat
+//     a shop's ceiling.
+//
+// Both inherit the in-memory limiter's known weaknesses KNOWINGLY, exactly as customer signup
+// does: they reset on redeploy and stop protecting anything past one backend instance. Fixing
+// that is its own piece of work (#101 Out of Scope).
+const quoteIpWindow = createSlidingWindow({ limit: 60, windowMs: 60 * 60_000, now: () => Date.now() })
+const quoteMerchantWindow = createSlidingWindow({ limit: 500, windowMs: 24 * 60 * 60_000, now: () => Date.now() })
+// `placesIpWindow` (Places autocomplete/details proxy) belongs to Task 6, alongside the routes
+// that would actually use it — declaring it here unused would fail lint and is scope this task
+// was not asked to carry.
+
+/** The caller's IP, from the proxy headers with the socket as the local-dev fallback. */
+function ipOf(c: { req: { header: (n: string) => string | undefined }; env: unknown }): string {
+  const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming
+  return clientIp(
+    { 'x-forwarded-for': c.req.header('x-forwarded-for'), 'cf-connecting-ip': c.req.header('cf-connecting-ip') },
+    incoming?.socket?.remoteAddress,
+  )
+}
+
 // ── Referred shops ────────────────────────────────────────────────────────────
 // Replaces the my_referred_shops SECURITY DEFINER function. That function could read
 // across tenants — it had to, since a referrer's shops are not their own — and was safe
@@ -938,6 +967,66 @@ app.post('/api/orders/track', async (c) => {
     console.error('Order tracking failed:', err instanceof Error ? err.message : String(err))
     return c.json(null)
   }
+})
+
+// ── Distance delivery quote ───────────────────────────────────────────────────
+// Unauthenticated on purpose: a guest checkout must be able to see its delivery fee, and guest
+// checkout is a first-class path.
+//
+// It takes a PLACE ID AND NEVER FREE TEXT. That is not input hygiene — free text would let a
+// caller mint unlimited distinct destinations, and every distinct destination is a billable
+// lookup on the platform's own Maps account (docs/adr/0001).
+//
+// A hit on `distance_quotes` is the normal case and costs nothing; the same row is what order
+// intake reads a moment later, which is what makes the quote and the charge the same number.
+app.post('/api/shipping/quote', async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const b = (body ?? {}) as Record<string, unknown>
+  if (typeof b.merchantId !== 'string' || !b.merchantId || typeof b.placeId !== 'string' || !b.placeId) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+
+  if (!quoteIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+
+  const { data: merchant } = await admin
+    .from('merchants')
+    .select('id, currency, status, shipping_mode, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id')
+    .eq('id', b.merchantId)
+    .maybeSingle()
+  if (!merchant) return c.json({ error: 'merchant_not_found' }, 404)
+  if (merchant.status !== 'active') return c.json({ error: 'merchant_inactive' }, 409)
+
+  // `shopDistance`, not a local read of these columns: the storefront quotes from this exact
+  // function and order intake charges from it, and a third reading here is a third rule the
+  // customer meets as a `price_changed` refusal.
+  const policy = shopDistance(merchant)
+  if (policy.mode !== 'distance' || !policy.usable) return c.json({ error: 'not_distance_priced' }, 409)
+
+  // The ceiling is checked against PROVIDER CALLS, so a cache hit is free. Peek at the cache
+  // first for exactly that reason.
+  const cached = await liveDistanceDeps.readCache(
+    policy.originPlaceId!, b.placeId, new Date(Date.now() - CACHE_TTL_MS),
+  )
+  if (cached === null && !quoteMerchantWindow.allow(merchant.id)) {
+    return c.json({ error: 'quota_exceeded' }, 429)
+  }
+
+  const outcome = cached !== null
+    ? ({ status: 'ok', metres: cached } as const)
+    : await resolveDistance(liveDistanceDeps, {
+        originPlaceId: policy.originPlaceId!,
+        destinationPlaceId: b.placeId,
+      })
+
+  // NO ROUTE AND OUT-OF-RANGE ARE THE SAME ANSWER to the customer — "this shop does not deliver
+  // there" — because they are the same fact. Only `failed` invites a retry.
+  if (outcome.status === 'no_route') return c.json({ error: 'out_of_range' }, 409)
+  if (outcome.status === 'failed') return c.json({ error: 'lookup_failed' }, 409)
+
+  const km = routedKm(outcome.metres)
+  if (exceedsMaxKm(policy, km)) return c.json({ error: 'out_of_range' }, 409)
+
+  return c.json({ km, fee: distanceFee(policy, km), currency: merchant.currency ?? 'MYR' })
 })
 
 // ── Stripe webhook — authoritative subscription state ──────────────────────────
