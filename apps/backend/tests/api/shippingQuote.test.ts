@@ -9,7 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { app } from '../../src/app.js'
 import { makeUser, resetMerchant, seedMerchant, serviceClient } from '../rls/helpers.js'
 
-const SLUGS = ['q-distance', 'q-region']
+const SLUGS = ['q-distance', 'q-region', 'q-suspended']
 const ORIGIN = 'ChIJq-origin'
 const DEST = 'ChIJq-dest'
 const FAR = 'ChIJq-far'
@@ -19,6 +19,7 @@ const svc = () => serviceClient()
 
 let distanceId = ''
 let regionId = ''
+let suspendedId = ''
 
 function post(payload: unknown) {
   return app.request('/api/shipping/quote', {
@@ -38,18 +39,27 @@ async function seedQuote(destination: string, metres: number) {
 }
 
 beforeAll(async () => {
-  // Two owners, not one — `merchants.owner_id` is UNIQUE (one shop per owner), so the
-  // distance-priced and region-priced fixtures each need their own.
+  // Three owners, not one — `merchants.owner_id` is UNIQUE (one shop per owner), so the
+  // distance-priced, region-priced and suspended fixtures each need their own.
   const distanceOwner = await makeUser('quote-owner-distance@test.local', 'password123')
   const regionOwner = await makeUser('quote-owner-region@test.local', 'password123')
+  const suspendedOwner = await makeUser('quote-owner-suspended@test.local', 'password123')
   const distanceOwnerId = (await distanceOwner.auth.getUser()).data.user!.id
   const regionOwnerId = (await regionOwner.auth.getUser()).data.user!.id
+  const suspendedOwnerId = (await suspendedOwner.auth.getUser()).data.user!.id
   distanceId = await seedMerchant({
     slug: 'q-distance', owner_id: distanceOwnerId, order_prefix: 'QD',
     shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
     delivery_max_km: 30, origin_place_id: ORIGIN,
   })
   regionId = await seedMerchant({ slug: 'q-region', owner_id: regionOwnerId, order_prefix: 'QR' })
+  suspendedId = await seedMerchant({
+    slug: 'q-suspended', owner_id: suspendedOwnerId, order_prefix: 'QS', status: 'suspended',
+    // A suspended shop still needs `origin_place_id` set, or the distance-mode CHECK constraint
+    // rejects the row (shipping_mode <> 'distance' or origin_place_id is not null).
+    shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+    delivery_max_km: 30, origin_place_id: ORIGIN,
+  })
   await seedQuote(DEST, 25216)
   await seedQuote(FAR, 45000)
 })
@@ -70,12 +80,32 @@ describe('POST /api/shipping/quote', () => {
     expect(await res.json()).toMatchObject({ km: 25.2, fee: 31.2 })
   })
 
-  it('refuses a free-text destination — a place id is the only accepted input', async () => {
+  it('refuses a body with no place id at all', async () => {
     // Free text would let a caller mint unlimited DISTINCT destinations, and every distinct
     // destination is a billable lookup on the platform's own Maps account.
     const res = await post({ merchantId: distanceId, address: '12 Jalan Example, Kuala Lumpur' })
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: 'invalid_body' })
+  })
+
+  it('takes free text in the placeId field at face value — the ceiling is what bounds the cost', async () => {
+    // NOT a hole, and NOT an invitation to add format validation. Google place ids have no
+    // stable public shape (`ChIJ…`, `Eh…`, `GhIJ…` are all real), so a shape check would refuse
+    // legitimate addresses — a customer told their own address is invalid. What actually bounds
+    // "mint unlimited billable destinations" is the per-merchant daily ceiling and the IP window,
+    // and they bound it whether the input is a real place id or not.
+    //
+    // With no cache row and no Maps key in this suite's env, the lookup cannot happen, so this
+    // arrives at the retryable refusal rather than a fee.
+    const res = await post({ merchantId: distanceId, placeId: '12 Jalan Example, Kuala Lumpur' })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'lookup_failed' })
+  })
+
+  it('refuses a quote at a suspended shop', async () => {
+    const res = await post({ merchantId: suspendedId, placeId: DEST })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'merchant_inactive' })
   })
 
   it('refuses a destination beyond the shop maximum, with the out-of-range reason', async () => {

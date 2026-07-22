@@ -973,9 +973,12 @@ app.post('/api/orders/track', async (c) => {
 // Unauthenticated on purpose: a guest checkout must be able to see its delivery fee, and guest
 // checkout is a first-class path.
 //
-// It takes a PLACE ID AND NEVER FREE TEXT. That is not input hygiene — free text would let a
-// caller mint unlimited distinct destinations, and every distinct destination is a billable
-// lookup on the platform's own Maps account (docs/adr/0001).
+// It takes a PLACE ID rather than an address, and that is an API-shape decision with a cost
+// behind it: a free-text field invites a caller to mint unlimited distinct destinations, and
+// every distinct destination is a billable lookup on the platform's own Maps account. Note the
+// shape is the deterrent, not a validation — any non-empty string is accepted, because place ids
+// have no stable public format and a shape check would refuse legitimate addresses. What
+// actually bounds the spend is the pair of limits below. (docs/adr/0001)
 //
 // A hit on `distance_quotes` is the normal case and costs nothing; the same row is what order
 // intake reads a moment later, which is what makes the quote and the charge the same number.
@@ -1004,9 +1007,19 @@ app.post('/api/shipping/quote', async (c) => {
 
   // The ceiling is checked against PROVIDER CALLS, so a cache hit is free. Peek at the cache
   // first for exactly that reason.
-  const cached = await liveDistanceDeps.readCache(
-    policy.originPlaceId!, b.placeId, new Date(Date.now() - CACHE_TTL_MS),
-  )
+  //
+  // A cache read that throws degrades to a MISS, exactly as `resolveDistance` does with its own
+  // read. The peek exists only to decide whether this request should cost the shop a slot of its
+  // daily ceiling, so a database blip must not turn a quotable address into a 500 — it just means
+  // this one is metered like any other miss.
+  let cached: number | null = null
+  try {
+    cached = await liveDistanceDeps.readCache(
+      policy.originPlaceId!, b.placeId, new Date(Date.now() - CACHE_TTL_MS),
+    )
+  } catch (err) {
+    console.error('Distance cache peek failed:', err instanceof Error ? err.message : String(err))
+  }
   if (cached === null && !quoteMerchantWindow.allow(merchant.id)) {
     return c.json({ error: 'quota_exceeded' }, 429)
   }
