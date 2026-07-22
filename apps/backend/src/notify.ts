@@ -37,9 +37,11 @@ export function formatMoney(amount: number | null | undefined, code?: string | n
 export function formatAddress(addr: unknown): string {
   if (!addr) return ''
   if (typeof addr === 'string') return addr
-  const a = addr as { line1?: string; postcode?: string; city?: string; state?: string }
+  const a = addr as { line1?: string; unit?: string; postcode?: string; city?: string; state?: string }
   const cityLine = [a.postcode, a.city].filter(Boolean).join(' ')
-  return [a.line1, cityLine, a.state].filter(Boolean).join(', ')
+  // The unit/floor/landmark rides in front of the street line, where a rider reads it first. It
+  // is never routed and never moved the fee — it exists so the drop can actually be completed.
+  return [a.unit, a.line1, cityLine, a.state].filter(Boolean).join(', ')
 }
 
 // Pure: render the Telegram message from an order row, in the order's own
@@ -64,6 +66,9 @@ export function buildOrderMessage(order: any, merchantName?: string): string {
   // nothing after it reads as data we lost.
   if (order.fulfil_date) msg += `*Date:* ${order.fulfil_date}\n`
   if (order.address) msg += `*Address:* ${formatAddress(order.address)}\n`
+  // Distance-priced orders only; a region-priced order has no distance and must not print an
+  // empty label. `delivery_distance_km` is null for every order placed before #101.
+  if (order.delivery_distance_km != null) msg += `*Distance:* ${Number(order.delivery_distance_km).toFixed(1)} km\n`
   msg += `\n*Items:*\n${lines}\n`
   if (order.shipping_fee) msg += `*Shipping:* ${formatMoney(order.shipping_fee, cur)}\n`
   msg += `\n*Total: ${formatMoney(order.total ?? 0, cur)}*`

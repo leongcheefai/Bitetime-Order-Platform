@@ -61,6 +61,32 @@ describe('buildOrderMessage', () => {
     const msg = buildOrderMessage({ ...ORDER, fulfil_date: null })
     expect(msg).not.toContain('*Date:*')
   })
+
+  it('carries the delivery distance so a rider can be dispatched without opening the dashboard', () => {
+    const msg = buildOrderMessage({ ...ORDER, delivery_distance_km: 25.2, shipping_fee: 31.2 }, 'Cookie Corner')
+    expect(msg).toContain('*Distance:* 25.2 km')
+    expect(msg).toContain('*Shipping:* RM 31.20')
+  })
+
+  it('omits the distance line entirely for a region-priced order', () => {
+    expect(buildOrderMessage(ORDER, 'Cookie Corner')).not.toContain('Distance')
+  })
+
+  // ORDER has no delivery_distance_km key at all (the absent shape a plain object gives you).
+  // A real Postgres row instead returns the column as an explicit SQL null — a different shape
+  // in JS (`null` vs `undefined`) that must be excluded the same way, not just the absent one.
+  it('omits the distance line for an explicit null, not just a missing key', () => {
+    expect(buildOrderMessage({ ...ORDER, delivery_distance_km: null }, 'Cookie Corner')).not.toContain('Distance')
+  })
+
+  it('carries the unit/floor so the rider can complete the drop', () => {
+    const msg = buildOrderMessage({
+      ...ORDER,
+      address: { line1: '12 Jalan Test', unit: 'A-3-2', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
+    })
+    expect(msg).toContain('A-3-2')
+    expect(msg).toContain('12 Jalan Test')
+  })
 })
 
 describe('notifyOrderPlaced', () => {
