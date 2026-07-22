@@ -4,8 +4,8 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { useEnterTransition } from '../motion'
 import { toast } from 'sonner'
-import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails } from '../store'
-import { priceOrder, voucherError, shopRates, shopTax, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails, quoteDelivery, DeliveryQuoteError } from '../store'
+import { priceOrder, voucherError, shopRates, shopTax, shopDistance, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
 import { formatMoney } from '../currency'
 import { formatTaxRate } from '../receipt'
@@ -19,6 +19,8 @@ import ImageLightbox from '../components/ImageLightbox'
 import SignInDialog from './SignInDialog'
 import CheckoutGate, { GuestStrip } from './CheckoutGate'
 import FulfilDatePicker from './FulfilDatePicker'
+import AddressAutocomplete from './AddressAutocomplete'
+import MoneyLine from './MoneyLine'
 import { checkoutStep, readGuestChoice, rememberGuestChoice } from '../checkoutGate'
 import { cn } from '@/lib/utils'
 import { formatCalendarDate } from '../orderDate'
@@ -111,6 +113,43 @@ export default function Storefront() {
   // while it was in flight.
   const patchAddress = (patch: Partial<AddressParts>) => setAddressInput(prev => ({ ...prev, ...patch }))
 
+  // Fires on a SELECTION, never on a keystroke: every quote is a request the platform pays for,
+  // and a free-text address cannot be routed anyway.
+  async function pickDestination(detail: { placeId: string; formatted: string; postcode: string; city: string; state: string }) {
+    patchAddress({
+      line1: detail.formatted,
+      postcode: detail.postcode,
+      city: detail.city,
+      state: detail.state,
+      place_id: detail.placeId,
+    })
+    if (!distancePriced) return
+    setQuoting(true)
+    setQuoteError(null)
+    try {
+      const q = await quoteDelivery(merchant.id, detail.placeId)
+      setQuote({ placeId: detail.placeId, ...q })
+    } catch (err) {
+      setQuote(null)
+      const code = err instanceof DeliveryQuoteError ? err.code : 'lookup_failed'
+      setQuoteError(
+        // Out-of-range and no-route are ONE message because they are one fact. Only a lookup
+        // failure invites a retry, and pickup is offered either way so the shop does not lose
+        // the order over a fee it could not calculate.
+        code === 'out_of_range'
+          ? t('Sorry, this shop does not deliver to that address. You can still choose pickup.',
+              '抱歉，本店不配送到该地址。您仍可选择自取。')
+          : code === 'rate_limited'
+            ? t('Too many address lookups just now. Please wait a moment and try again.',
+                '地址查询过于频繁，请稍候再试。')
+            : t('We could not work out the delivery fee just now. Please try again, or choose pickup.',
+                '暂时无法计算运费，请重试或选择自取。'),
+      )
+    } finally {
+      setQuoting(false)
+    }
+  }
+
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<SuccessState | null>(null)
@@ -158,6 +197,25 @@ export default function Storefront() {
   // The SAME mapper the order transaction charges with — see the comment on the `priceOrder`
   // call below.
   const tax = shopTax(merchant)
+
+  // The SAME mapper the order transaction charges with — a second reading of these columns here
+  // is a second rule, and the customer meets it as a refused checkout.
+  const distance = shopDistance(merchant)
+  const distancePriced = distance.mode === 'distance' && distance.usable
+
+  // The quote for the address currently selected. `null` means "not calculated" — which is a
+  // state the UI must SAY, never a 0 it can show as a fee.
+  const [quote, setQuote] = useState<{ placeId: string; km: number; fee: number } | null>(null)
+  const [quoteError, setQuoteError] = useState<string | null>(null)
+  const [quoting, setQuoting] = useState(false)
+
+  // A saved address that predates #101 has no place id and cannot be routed. It still PREFILLS,
+  // and the fee simply stays uncalculated until the customer picks it from the list once — the
+  // identifier is then saved back with the order, so this costs each customer once, ever.
+  // Silently geocoding an old string into a fee they never confirmed was rejected.
+  const routedPlaceId = address.place_id ?? ''
+  const quotedForThisAddress = quote !== null && quote.placeId === routedPlaceId && routedPlaceId !== ''
+
   // The voucher's one-per-customer key — the account email, and nothing else. It must match
   // what the SERVER keys on (the JWT's email), or this pre-flight green-lights a claim the
   // server then refuses. A voucher requires an account: there is no guest key (#72).
@@ -310,7 +368,15 @@ export default function Storefront() {
     // quote here would say WM, the backend derives its region from `address.state` and would
     // find none, and it refuses such an order outright (`delivery_state_required`) rather than
     // shipping it for free. Weaken the gate and the two sides diverge.
-    resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
+    //
+    // The region placeholder is for REGION shops only. A distance shop shows no fee at all until
+    // one is calculated: an estimate the customer might mistake for their fee is the invented
+    // number this feature exists to never produce.
+    resolvedShipping: !distancePriced && mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
+    distance,
+    // `quote.km` is already the rounded km the backend derived, so `km × 1000` re-enters
+    // `routedKm` unchanged (`routedKm(25200) === 25.2`) and reproduces the same fee.
+    routedMetres: quotedForThisAddress ? quote!.km * 1000 : null,
     voucher: appliedVoucher,
     // The SAME mapper the order transaction charges with. A second reading of these columns
     // here is a second rule, and the customer meets it as a refused checkout (`price_changed`).
@@ -325,10 +391,15 @@ export default function Storefront() {
   const taxRate = bd.taxRate
   const deliveryReady =
     mode !== 'delivery' ||
-    (address.line1.trim() !== '' &&
-      address.postcode.length === 5 &&
-      address.city.trim() !== '' &&
-      address.state.trim() !== '')
+    (distancePriced
+      // At a distance shop the address must have been SELECTED (so it has a place id) and a fee
+      // must have come back. This gate is load-bearing for the PRICE, not just form validity:
+      // it is the only thing stopping an order the shop would have to cancel (story 38).
+      ? quotedForThisAddress && address.line1.trim() !== ''
+      : address.line1.trim() !== '' &&
+        address.postcode.length === 5 &&
+        address.city.trim() !== '' &&
+        address.state.trim() !== '')
   const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady && chosenDate !== null
 
   // The one decision that says whether this customer is ever asked to sign in. `account` is
@@ -578,6 +649,10 @@ export default function Storefront() {
         // re-fetching `/api/time`, which is exactly the request that can be persistently
         // unreachable in the scenario this whole mechanism exists to fix.
         await refreshQuoteSources(err?.now)
+        // The DISTANCE can be part of what moved (a merchant editing the rate mid-checkout prices
+        // exactly like an edited product). Drop the stale quote so the customer re-picks the
+        // address and re-quotes, rather than resubmitting a distance that may no longer be right.
+        setQuote(null)
         const msg = t(
           'Prices at this shop just changed. Please review your order and place it again.',
           '本店价格刚刚有所调整，请确认订单后重新下单。',
@@ -605,6 +680,24 @@ export default function Storefront() {
           'Please choose the state you are delivering to.',
           '请选择送货的州属。',
         )
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'delivery_out_of_range') {
+        const msg = t('Sorry, this shop does not deliver to that address. Please choose pickup instead.',
+                   '抱歉，本店不配送到该地址，请改选自取。')
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'distance_lookup_failed') {
+        const msg = t('We could not work out the delivery fee just now. Please try again in a moment.',
+                   '暂时无法计算运费，请稍后再试。')
+        setError(msg)
+        toast.error(msg)
+      } else if (code === 'delivery_place_required') {
+        // Unreachable from this form — `deliveryReady` will not let an unselected address be
+        // submitted — and messaged anyway, because the alternative is the customer reading the
+        // literal string `delivery_place_required` on the checkout screen.
+        const msg = t('Please pick your delivery address from the suggestions.',
+                   '请从建议列表中选择您的配送地址。')
         setError(msg)
         toast.error(msg)
       } else if (code === 'fulfil_date_unavailable' || code === 'fulfil_date_required') {
@@ -958,7 +1051,12 @@ export default function Storefront() {
                 aria-pressed={mode === 'delivery'}
                 onClick={() => setMode('delivery')}
               >
-                {t('Delivery', '送货')} (+{formatMoney(baseDeliveryFee, currency)})
+                {/* States the rule BEFORE the customer types an address — a distance shop's fee
+                    formula, not the region shop's flat rate, is what they're committing to. */}
+                {distancePriced
+                  ? t(`Delivery — ${formatMoney(distance.base, currency)} + ${formatMoney(distance.ratePerKm, currency)}/km`,
+                       `配送 — ${formatMoney(distance.base, currency)} + ${formatMoney(distance.ratePerKm, currency)}/公里`)
+                  : t(`Delivery — ${formatMoney(baseDeliveryFee, currency)}`, `配送 — ${formatMoney(baseDeliveryFee, currency)}`)}
               </button>
             </div>
             {mode === 'pickup' && merchant?.pickup_address && (
@@ -976,51 +1074,81 @@ export default function Storefront() {
             )}
             {mode === 'delivery' && (
               <div className="flex flex-col gap-3 mt-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sf-line1">{t('Address line', '地址')}</Label>
-                  <Input
-                    id="sf-line1"
-                    value={address.line1}
-                    onChange={e => patchAddress({ line1: e.target.value })}
-                    placeholder={t('Street, building, unit…', '街道、建筑、单位…')}
-                  />
-                </div>
-                <div className="flex gap-3">
-                  <div className="flex flex-col gap-1.5 w-1/3">
-                    <Label htmlFor="sf-postcode">{t('Postcode', '邮编')}</Label>
-                    <Input
-                      id="sf-postcode"
-                      value={address.postcode}
-                      onChange={e => onPostcodeChange(e.target.value)}
-                      inputMode="numeric"
-                      maxLength={5}
-                      placeholder="43000"
+                {distancePriced ? (
+                  <>
+                    <AddressAutocomplete
+                      id="sf-address"
+                      t={t}
+                      label={t('Delivery address', '配送地址')}
+                      value={address.line1}
+                      placeholder={t('Start typing your address…', '输入您的地址…')}
+                      onTextChange={text => { patchAddress({ line1: text, place_id: undefined }); setQuote(null); setQuoteError(null) }}
+                      onPick={pickDestination}
                     />
-                  </div>
-                  <div className="flex flex-col gap-1.5 flex-1">
-                    <Label htmlFor="sf-city">{t('City', '城市')}</Label>
-                    <Input
-                      id="sf-city"
-                      value={address.city}
-                      onChange={e => patchAddress({ city: e.target.value })}
-                      placeholder={t('City', '城市')}
-                    />
-                  </div>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="sf-state">{t('State', '州属')}</Label>
-                  <select
-                    id="sf-state"
-                    value={address.state}
-                    onChange={e => patchAddress({ state: e.target.value })}
-                    className="w-full min-w-0 rounded-md border border-clay-border bg-surface-raised px-[13px] py-2.5 text-[16px] text-ink transition-colors outline-none focus-visible:border-oxblood focus-visible:ring-3 focus-visible:ring-oxblood/10"
-                  >
-                    <option value="">{t('Select state…', '选择州属…')}</option>
-                    {MY_STATES.map(s => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
+                    <div className="flex flex-col gap-[6px]">
+                      <Label htmlFor="sf-unit">{t('Unit / floor / landmark (optional)', '单位 / 楼层 / 地标（选填）')}</Label>
+                      <Input id="sf-unit" value={address.unit ?? ''}
+                        onChange={e => patchAddress({ unit: e.target.value })}
+                        placeholder={t('e.g. A-3-2, next to the surau', '例如：A-3-2，祈祷室旁')} />
+                      {/* Says it plainly, because the customer's worry is that it will cost them
+                          money: it is passed to the rider and never routed (story 21). */}
+                      <p className="text-[12px] text-rose-muted leading-[1.5]">
+                        {t('Passed to the rider. It does not change your delivery fee.',
+                           '仅提供给骑手，不影响运费。')}
+                      </p>
+                    </div>
+                    {quoting && <p className="text-[13px] text-rose-muted">{t('Calculating delivery fee…', '正在计算运费…')}</p>}
+                    {quoteError && <p className="text-[13px] text-oxblood">{quoteError}</p>}
+                  </>
+                ) : (
+                  <>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="sf-line1">{t('Address line', '地址')}</Label>
+                      <Input
+                        id="sf-line1"
+                        value={address.line1}
+                        onChange={e => patchAddress({ line1: e.target.value })}
+                        placeholder={t('Street, building, unit…', '街道、建筑、单位…')}
+                      />
+                    </div>
+                    <div className="flex gap-3">
+                      <div className="flex flex-col gap-1.5 w-1/3">
+                        <Label htmlFor="sf-postcode">{t('Postcode', '邮编')}</Label>
+                        <Input
+                          id="sf-postcode"
+                          value={address.postcode}
+                          onChange={e => onPostcodeChange(e.target.value)}
+                          inputMode="numeric"
+                          maxLength={5}
+                          placeholder="43000"
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5 flex-1">
+                        <Label htmlFor="sf-city">{t('City', '城市')}</Label>
+                        <Input
+                          id="sf-city"
+                          value={address.city}
+                          onChange={e => patchAddress({ city: e.target.value })}
+                          placeholder={t('City', '城市')}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="sf-state">{t('State', '州属')}</Label>
+                      <select
+                        id="sf-state"
+                        value={address.state}
+                        onChange={e => patchAddress({ state: e.target.value })}
+                        className="w-full min-w-0 rounded-md border border-clay-border bg-surface-raised px-[13px] py-2.5 text-[16px] text-ink transition-colors outline-none focus-visible:border-oxblood focus-visible:ring-3 focus-visible:ring-oxblood/10"
+                      >
+                        <option value="">{t('Select state…', '选择州属…')}</option>
+                        {MY_STATES.map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1166,10 +1294,18 @@ export default function Storefront() {
                   <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(subtotal, currency)}</span>
                 </div>
                 {mode === 'delivery' && (
-                  <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                    <span className="min-w-0">{t('Delivery fee', '送货费')}</span>
-                    <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(fee, currency)}</span>
-                  </div>
+                  // The distance LABELS the line, and the two reconcile on a calculator: the km
+                  // shown is the km the fee was derived from.
+                  <MoneyLine
+                    label={
+                      bd.shippingPending
+                        ? t('Delivery Fee (not calculated yet)', '运费（尚未计算）')
+                        : quotedForThisAddress
+                          ? t(`Delivery Fee (${quote!.km.toFixed(1)} km)`, `运费（${quote!.km.toFixed(1)} 公里）`)
+                          : t('Delivery Fee', '运费')
+                    }
+                    value={bd.shippingPending ? t('—', '—') : formatMoney(fee, currency)}
+                  />
                 )}
                 {discount > 0 && (
                   <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
@@ -1187,6 +1323,12 @@ export default function Storefront() {
                   <span className="min-w-0">{t('Total', '总计')}</span>
                   <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(total, currency)}</span>
                 </div>
+                {bd.shippingPending && (
+                  <p className="text-[12px] text-rose-muted leading-[1.5] mt-2">
+                    {t('This total does not include delivery yet. Pick your address to see the fee.',
+                       '此金额尚未包含运费。请选择地址以查看运费。')}
+                  </p>
+                )}
               </>
             )}
           </div>
