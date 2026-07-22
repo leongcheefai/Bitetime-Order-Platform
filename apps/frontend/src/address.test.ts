@@ -21,4 +21,9 @@ describe('formatAddress', () => {
     expect(formatAddress(null)).toBe('')
     expect(formatAddress(undefined)).toBe('')
   })
+
+  it('puts the unit in front of the street line', () => {
+    expect(formatAddress({ line1: '12 Jalan Test', unit: 'A-3-2', postcode: '50000', city: 'KL', state: 'Selangor' }))
+      .toBe('A-3-2, 12 Jalan Test, 50000 KL, Selangor')
+  })
 })
