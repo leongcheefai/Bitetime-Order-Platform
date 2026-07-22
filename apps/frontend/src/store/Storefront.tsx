@@ -781,9 +781,17 @@ export default function Storefront() {
         // unreachable in the scenario this whole mechanism exists to fix.
         await refreshQuoteSources(err?.now)
         // The DISTANCE can be part of what moved (a merchant editing the rate mid-checkout prices
-        // exactly like an edited product). Drop the stale quote so the customer re-picks the
-        // address and re-quotes, rather than resubmitting a distance that may no longer be right.
+        // exactly like an edited product). Drop the stale quote so the customer does not place an
+        // order against a number that is no longer trustworthy.
         setQuote(null)
+        // Re-quote immediately rather than waiting for an effect that cannot re-fire: the auto-quote
+        // effect is guarded on `requestedPlaceIdRef` (already stamped with this exact place id) AND
+        // a dependency array that does not change here, so without this call the customer is left
+        // holding a disabled Place Order button and an instruction to "place it again" that they
+        // have no way to act on (#101 review, Finding — price_changed strands a distance customer).
+        // A re-quote moments after the original is a cache HIT, which consumes no ceiling — see the
+        // quote endpoint's peek.
+        if (distancePriced && address.place_id) void fetchQuote(address.place_id)
         const msg = t(
           'Prices at this shop just changed. Please review your order and place it again.',
           '本店价格刚刚有所调整，请确认订单后重新下单。',
