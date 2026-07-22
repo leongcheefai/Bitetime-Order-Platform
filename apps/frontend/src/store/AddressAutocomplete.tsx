@@ -103,14 +103,26 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
     if (picking.current) return
     picking.current = true
     setBusy(true)
+    // Cleared in the SAME render that hides the list. `busy` unmounts the listbox, so an
+    // `activeIndex` left pointing at a gone option would leave `aria-activedescendant` naming an
+    // id that no longer exists — an ARIA-invalid state a screen reader reads mid-selection.
+    setActiveIndex(-1)
     // The SAME session token as the suggests — that is what closes the billable session.
-    const detail = await placeDetail(s.placeId, session.current!)
-    picking.current = false
+    let detail: PlaceDetail | null
+    try {
+      detail = await placeDetail(s.placeId, session.current!)
+    } finally {
+      // `finally`, not a bare assignment: this guard is the only thing standing between a second
+      // click and a second billed session, and `placeDetail`'s never-throw contract is the only
+      // reason a bare assignment would do. If that contract is ever loosened, a latched `true`
+      // here disables every future pick for the life of the component, recoverable only by
+      // remounting — the customer simply cannot choose an address any more.
+      picking.current = false
+    }
     setBusy(false)
     setOpen(false)
     setFetched([])
     setFetchedFor(null)
-    setActiveIndex(-1)
     session.current = newPlaceSession()
     // A details call that failed must NOT be turned into an address: the caller would then hold
     // a place the fee cannot be measured to.
