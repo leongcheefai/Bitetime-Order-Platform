@@ -27,6 +27,14 @@ export const env = {
   resendApiKey: process.env.RESEND_API_KEY || '',
   emailFrom: process.env.EMAIL_FROM || 'TinyOrder <onboarding@resend.dev>',
 
+  // Google Maps Platform — Routes (distance) and Places (address autocomplete), on the
+  // PLATFORM's account, never a merchant's: zero setup for a merchant is the whole point of the
+  // dependency (see docs/adr/0001). Deliberately OPTIONAL, not `required()`: every existing
+  // deployment, every dev machine and the DB test suites run without it, and a region-priced
+  // shop never touches it. Unset simply means distance lookups fail — which is a refusal, and
+  // failing closed is the house rule.
+  googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+
   // Stripe Price IDs (MYR), keyed by `${plan}_${cycle}`. We charge MYR for every
   // subscription, so there is one set and all four are required. Point these at
   // your MYR Prices.
