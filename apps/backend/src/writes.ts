@@ -16,6 +16,11 @@ export const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancel
 const MERCHANT_CONFIG_FIELDS = [
   'currency', 'shipping', 'pickup_address', 'payment_bank', 'payment_note', 'config', 'timezone',
   'tax_enabled', 'tax_rate',
+  // Distance pricing (#101). `pickup_address` deliberately stays a SEPARATE, free-text field:
+  // it is the merchant's own directions for pickup customers and is never routed, so an
+  // autocomplete result must never overwrite it.
+  'shipping_mode', 'delivery_base_fee', 'delivery_rate_per_km', 'delivery_max_km',
+  'origin_place_id', 'origin_lat', 'origin_lng', 'origin_address',
 ] as const
 
 // `undefined` means "not being written" and passes through untouched; a present-but-invalid
@@ -69,6 +74,40 @@ export function pickMerchantConfig(body: any): PickResult {
   if (out.tax_enabled !== undefined && typeof out.tax_enabled !== 'boolean') {
     return { ok: false, error: 'tax_enabled must be a boolean' }
   }
+
+  if (out.shipping_mode !== undefined && out.shipping_mode !== 'region' && out.shipping_mode !== 'distance') {
+    return { ok: false, error: "shipping_mode must be 'region' or 'distance'" }
+  }
+
+  // A negative fee is a delivery that PAYS the customer. Refused at the door, where the merchant
+  // is present to see it, rather than as a bare 500 out of the column's own CHECK.
+  for (const key of ['delivery_base_fee', 'delivery_rate_per_km'] as const) {
+    if (out[key] === undefined) continue
+    // Same trap as tax_rate above: Number('') and Number('   ') are both 0, so a blank string
+    // must be refused explicitly rather than falling through to the finite-number check below,
+    // which would happily accept the coerced 0.
+    if (typeof out[key] === 'string' && (out[key] as string).trim() === '') {
+      return { ok: false, error: `${key} must be a number of 0 or more` }
+    }
+    const n = typeof out[key] === 'string' ? Number(out[key]) : out[key]
+    if (typeof n !== 'number' || !Number.isFinite(n) || n < 0) {
+      return { ok: false, error: `${key} must be a number of 0 or more` }
+    }
+    out[key] = n
+  }
+
+  // null is the ONLY way to say "no limit". A 0 is an honest "deliver nowhere" and the two must
+  // not collide, so 0 is refused rather than quietly read as unlimited. Unlike the fee fields
+  // above, a blank string needs no separate check: Number('') coerces to 0, and 0 is refused by
+  // the `n <= 0` test below anyway — coercing '' would never slip a false "no limit" through.
+  if (out.delivery_max_km !== undefined && out.delivery_max_km !== null) {
+    const n = typeof out.delivery_max_km === 'string' ? Number(out.delivery_max_km) : out.delivery_max_km
+    if (typeof n !== 'number' || !Number.isFinite(n) || n <= 0) {
+      return { ok: false, error: 'delivery_max_km must be a positive number, or null for no limit' }
+    }
+    out.delivery_max_km = n
+  }
+
   return { ok: true, patch: out }
 }
 

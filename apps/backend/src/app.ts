@@ -146,6 +146,16 @@ app.patch('/api/merchants/:id', requireMerchantOwns, async (c) => {
   if (!picked.ok) return c.json({ error: picked.error }, 400)
   const patch = picked.patch
   if (Object.keys(patch).length === 0) return c.json({ error: 'No updatable fields' }, 400)
+  // Distance mode REQUIRES an origin, and the check has to see the row's CURRENT origin as well
+  // as the patch's: a merchant switching mode in one save and setting their origin in another
+  // must not be able to land in a state where the shop quotes nothing. `c.get('merchant')` is
+  // the same row `requireMerchantOwns` already loaded for the ownership check above, so this is
+  // a fallback to already-fetched data, not a second query. The column's own CHECK constraint
+  // (`merchants_distance_requires_origin`) is the backstop; this is the one that can say WHY.
+  if (patch.shipping_mode === 'distance') {
+    const origin = patch.origin_place_id !== undefined ? patch.origin_place_id : c.get('merchant').origin_place_id
+    if (!origin) return c.json({ error: 'Set your delivery origin before switching on distance pricing' }, 400)
+  }
   const { data, error } = await admin.from('merchants').update(patch).eq('id', id).select().single()
   if (error) return c.json({ error: 'Update failed' }, 500)
   return c.json(data)

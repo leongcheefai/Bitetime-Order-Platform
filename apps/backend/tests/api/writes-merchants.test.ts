@@ -4,7 +4,7 @@
 // (service_role), which BYPASSES guard_merchant_status, so if the handler ever spread a
 // raw client body into .insert() a caller could self-activate their own shop or plant it
 // under someone else's owner_id. See CLAUDE.md → Backend, Global Constraint 1.
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { app } from '../../src/app.js'
 import { makeUser, seedMerchant, serviceClient, resetMerchant } from '../rls/helpers.js'
 
@@ -301,5 +301,110 @@ describe('PATCH /api/merchants/:id/slug', () => {
     expect(res.status).toBe(401)
 
     await serviceClient().from('merchants').delete().eq('id', id)
+  })
+})
+
+// ── Distance shipping policy (#101 Task 9) ──────────────────────────────────────
+// One shop, re-seeded before every test so each case starts from the column defaults
+// (shipping_mode 'region', no origin) regardless of what a prior case in this block saved.
+describe('PATCH /api/merchants/:id (shipping policy)', () => {
+  let merchantId: string
+  let ownerToken: string
+
+  beforeEach(async () => {
+    await resetMerchant('cfg-shipping-shop')
+    const client = await makeUser('cfg-shipping@example.com', 'password123')
+    const { token, userId } = await tokenOf(client)
+    merchantId = await seedMerchant({ slug: 'cfg-shipping-shop', owner_id: userId })
+    ownerToken = token
+  })
+
+  function patchMerchant(id: string, token: string, body: unknown) {
+    return patch(`/api/merchants/${id}`, body, token)
+  }
+
+  describe('shipping policy fields', () => {
+    it('saves a complete distance policy', async () => {
+      const res = await patchMerchant(merchantId, ownerToken, {
+        shipping_mode: 'distance',
+        delivery_base_fee: 6,
+        delivery_rate_per_km: 1,
+        delivery_max_km: 30,
+        origin_place_id: 'ChIJorigin',
+        origin_lat: 3.139003,
+        origin_lng: 101.686855,
+        origin_address: '12 Jalan Example, 50000 Kuala Lumpur',
+      })
+      expect(res.status).toBe(200)
+    })
+
+    it('refuses a negative base fee, rate or maximum — a typo must not make a delivery pay the customer', async () => {
+      for (const patchBody of [{ delivery_base_fee: -1 }, { delivery_rate_per_km: -0.5 }, { delivery_max_km: -3 }]) {
+        const res = await patchMerchant(merchantId, ownerToken, patchBody)
+        expect(res.status).toBe(400)
+      }
+    })
+
+    it('refuses a blank/whitespace string in a numeric field instead of coercing it to 0', async () => {
+      // Number('') and Number('   ') are both 0 — the same trap tax_rate already guards against.
+      // A caller that clears a numeric field and sends '' must not silently save a 0 fee.
+      for (const patchBody of [{ delivery_base_fee: '' }, { delivery_rate_per_km: '   ' }]) {
+        const res = await patchMerchant(merchantId, ownerToken, patchBody)
+        expect(res.status).toBe(400)
+      }
+    })
+
+    it('refuses a maximum of zero, which is not "no limit"', async () => {
+      const res = await patchMerchant(merchantId, ownerToken, { delivery_max_km: 0 })
+      expect(res.status).toBe(400)
+    })
+
+    it('accepts a null maximum as "deliver anywhere with a road"', async () => {
+      const res = await patchMerchant(merchantId, ownerToken, { delivery_max_km: null })
+      expect(res.status).toBe(200)
+    })
+
+    it('refuses an unknown shipping mode', async () => {
+      const res = await patchMerchant(merchantId, ownerToken, { shipping_mode: 'carrier_pigeon' })
+      expect(res.status).toBe(400)
+    })
+
+    it('refuses switching to distance mode with no origin set', async () => {
+      // Story 5: a merchant must not be able to half-configure their shop into quoting nothing.
+      await patchMerchant(merchantId, ownerToken, { origin_place_id: null, shipping_mode: 'region' })
+      const res = await patchMerchant(merchantId, ownerToken, { shipping_mode: 'distance' })
+      expect(res.status).toBe(400)
+    })
+
+    it('refuses switching to distance mode when the patch explicitly nulls the origin in the same save', async () => {
+      // The brief calls out both shapes: omitting origin_place_id (case above, falling back to
+      // the row's current value) AND explicitly nulling it in the SAME patch that flips the mode.
+      // A check that only reads the row's stored origin (and never the patch's own value) would
+      // pass the case above by accident and still let this one through.
+      const res = await patchMerchant(merchantId, ownerToken, { shipping_mode: 'distance', origin_place_id: null })
+      expect(res.status).toBe(400)
+    })
+
+    it('allows switching to distance mode using an origin saved in an EARLIER save, without resending it', async () => {
+      // The other half of "the check has to see the row's CURRENT origin as well as the
+      // patch's": a merchant who sets their origin in one save and flips the mode in a LATER
+      // save (never resending origin_place_id) must succeed — a check that only reads the
+      // patch's own value, and never falls back to the row, would wrongly refuse this.
+      await patchMerchant(merchantId, ownerToken, { origin_place_id: 'ChIJorigin', shipping_mode: 'region' })
+      const res = await patchMerchant(merchantId, ownerToken, { shipping_mode: 'distance' })
+      expect(res.status).toBe(200)
+    })
+
+    it('does not block a distance-mode shop from saving unrelated fields', async () => {
+      // A merchant already on distance mode with an origin set must be able to save something
+      // that has nothing to do with shipping (e.g. a payment note) without tripping the origin
+      // check — it must only fire when the patch is actually TURNING ON distance mode.
+      await patchMerchant(merchantId, ownerToken, {
+        shipping_mode: 'distance',
+        origin_place_id: 'ChIJorigin',
+      })
+      const res = await patchMerchant(merchantId, ownerToken, { payment_note: 'Ring the bell twice' })
+      expect(res.status).toBe(200)
+    })
   })
 })
