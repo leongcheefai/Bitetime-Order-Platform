@@ -17,7 +17,7 @@ Copied from issue #101, `CONTEXT.md → Shipping policy`, and `docs/adr/0001-dis
 - **Fail closed.** No fee is ever invented for an address that could not be routed. Never fall back to the shop's dormant region rate. An unresolvable distance is a *refusal*, never a number.
 - **Out-of-range and no-route are the same fact to the customer** (one message: "this shop does not deliver there"). Only a genuine lookup failure says "try again".
 - **The distance is never read from the request body.** The customer supplies a *place id*; the metres come from the cache/provider.
-- **The quote endpoint accepts a place id, never free text.** Free text mints unlimited billable lookups.
+- **The quote endpoint takes a place id, not an address.** A free-text field invites a caller to mint unlimited distinct destinations, and every distinct destination is a billable lookup. Note this is an API-SHAPE deterrent, not a validation: any non-empty string is accepted, because place ids have no stable public format and a shape check would refuse legitimate addresses. What actually bounds the spend is the IP window plus the per-merchant daily ceiling.
 - **Maps credentials never reach the browser.** Autocomplete and details are proxied by the backend.
 - **The routing call happens outside the order transaction.** The transaction holds the shop's `order_counters` row lock.
 - **Distance cache TTL is exactly 30 days.** Contractual (Google's terms), not a tuning knob. Do not raise it.
@@ -1197,7 +1197,7 @@ describe('POST /api/shipping/quote', () => {
     expect(await res.json()).toMatchObject({ km: 25.2, fee: 31.2 })
   })
 
-  it('refuses a free-text destination — a place id is the only accepted input', async () => {
+  it('refuses a body with no place id at all', async () => {
     // Free text would let a caller mint unlimited DISTINCT destinations, and every distinct
     // destination is a billable lookup on the platform's own Maps account.
     const res = await post({ merchantId: distanceId, address: '12 Jalan Example, Kuala Lumpur' })
@@ -1305,9 +1305,12 @@ Then the route, placed after `/api/orders/track`:
 // Unauthenticated on purpose: a guest checkout must be able to see its delivery fee, and guest
 // checkout is a first-class path.
 //
-// It takes a PLACE ID AND NEVER FREE TEXT. That is not input hygiene — free text would let a
-// caller mint unlimited distinct destinations, and every distinct destination is a billable
-// lookup on the platform's own Maps account (docs/adr/0001).
+// It takes a PLACE ID rather than an address, and that is an API-shape decision with a cost
+// behind it: a free-text field invites a caller to mint unlimited distinct destinations, and
+// every distinct destination is a billable lookup on the platform's own Maps account
+// (docs/adr/0001). Note the shape is the deterrent, not a validation — any non-empty string is
+// accepted, because place ids have no stable public format and a shape check would refuse
+// legitimate addresses. What actually bounds the spend is the pair of limits below.
 //
 // A hit on `distance_quotes` is the normal case and costs nothing; the same row is what order
 // intake reads a moment later, which is what makes the quote and the charge the same number.
