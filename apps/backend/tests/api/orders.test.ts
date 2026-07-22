@@ -27,7 +27,7 @@ import { orderDay } from '../../src/orderNumber.js'
 import { placeOrder, OrderError, type PlaceOrderInput } from '../../src/orders.js'
 import type { DistanceDeps, DistanceOutcome } from '../../src/distance.js'
 import { sqlDistanceCache } from '../../src/distanceCache.js'
-import { quoteMerchantWindow } from '../../src/quotaWindows.js'
+import { quoteMerchantWindow, quoteIpWindow } from '../../src/quotaWindows.js'
 import { MAX_CART_QTY, MAX_CART_LINES, todayInZone, DEFAULT_TIMEZONE } from '@bitetime/shared'
 
 const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended', 'ord-distance']
@@ -1442,6 +1442,12 @@ describe('POST /api/orders', () => {
     // arithmetic depend on execution order (a prior test's manual `.allow()` calls, or this
     // test's own final assertion call, leaking into the next). A fresh merchant per test is
     // what makes "leave exactly one slot" an actual guarantee instead of a hope.
+    //
+    // `createSlidingWindow` has no reset hook, so `ceilHitId` and `ceilMissId` (below) are left
+    // permanently spent in this process once these two tests have run — harmless today, because
+    // each key is touched by exactly one test in this file, but SINGLE-USE: a future test that
+    // reaches for either id inherits a poisoned window with no way to clear it. Give any new
+    // ceiling test its own fresh merchant, the same way these two got theirs.
     describe('the shop’s daily Google-spend ceiling', () => {
       const CEIL_HIT_SLUG = 'ord-ceiling-hit'
       const CEIL_MISS_SLUG = 'ord-ceiling-miss'
@@ -1559,11 +1565,17 @@ describe('POST /api/orders', () => {
         // ever reaching the provider — the behavioural proof the first miss cost exactly one
         // slot, not zero (a ceiling that were never actually consulted would let this one
         // through too, and `second.lookupCalls()` would read 1, not 0).
+        //
+        // Sent with the SAME id in a DIFFERENT SPELLING, and that is the entire assertion. Postgres
+        // matches `550E8400-…` to the same row as `550e8400-…`, so a ceiling keyed on the body's
+        // string would hand this request a fresh, empty bucket and a fresh 500 billable lookups.
+        // Keyed on the row's own id, it is the same bucket and stays refused. Same trap the cart keys
+        // carry a canonical-form rule for (CONTEXT.md → Order pricing).
         const second = fakeLookupDeps({ status: 'ok', metres: 10_000 })
         let err: unknown
         try {
           await placeOrder(
-            ceilInput(ceilMissId, ceilMissProductId, { destinationPlaceId: 'ChIJord-ceiling-miss-2', quotedTotal: 42 }),
+            ceilInput(ceilMissId.toUpperCase(), ceilMissProductId, { destinationPlaceId: 'ChIJord-ceiling-miss-2', quotedTotal: 42 }),
             new Date(),
             second.deps,
           )
@@ -1573,6 +1585,151 @@ describe('POST /api/orders', () => {
         expect(err).toBeInstanceOf(OrderError)
         expect((err as OrderError).code).toBe('distance_lookup_failed')
         expect(second.lookupCalls()).toBe(0)
+      })
+    })
+
+    // ── The per-IP courtesy bound on the miss path (Finding 2, fix wave 3) ─────
+    //
+    // `callerIp` appeared nowhere in this file before this block, so the IP check inside
+    // `resolveRoutedMetres` shipped with zero coverage. That is not decoration to skip: deleting
+    // it, or hoisting it out of the `cached === null` branch so it fires on every delivery order
+    // — the blanket limit on order placement the brief explicitly forbids, because it would
+    // refuse legitimate customers behind carrier-grade NAT — both leave every other test in this
+    // file green.
+    //
+    // Driven through `placeOrder` directly with an explicit `callerIp`, not through
+    // `app.request` with forged `x-forwarded-for`/`cf-connecting-ip` headers: `PlaceOrderInput`
+    // already carries the seam for exactly this (see its doc comment), and using it is the
+    // honest way to pin the property, the same choice the ceiling tests above already made for
+    // `quoteMerchantWindow`.
+    //
+    // TWO DEDICATED merchants and TWO DEDICATED IP strings — never `distanceId`, `ceilHitId` or
+    // `ceilMissId`, and never an IP any other test in this file might touch — so exhausting
+    // `quoteIpWindow` here cannot interact with the ceiling tests' fixtures or any other test's
+    // bucket. `quoteIpWindow` has no reset hook either, so `IP_HIT_CALLER`/`IP_MISS_CALLER` are
+    // left permanently exhausted after this block runs, same single-use caveat as the ceiling
+    // merchants above.
+    describe('the per-IP courtesy bound on the miss path', () => {
+      const IP_HIT_SLUG = 'ord-ip-hit'
+      const IP_MISS_SLUG = 'ord-ip-miss'
+      const IP_HIT_ORIGIN = 'ChIJord-ip-hit-origin'
+      const IP_MISS_ORIGIN = 'ChIJord-ip-miss-origin'
+      const IP_HIT_DEST = 'ChIJord-ip-hit-dest'
+      const IP_HIT_CALLER = '203.0.113.11'
+      const IP_MISS_CALLER = '203.0.113.22'
+      let ipHitId = ''
+      let ipHitProductId = ''
+      let ipMissId = ''
+      let ipMissProductId = ''
+
+      beforeAll(async () => {
+        const hitOwner = await makeUser('ord-ip-hit-owner@test.dev', 'password123')
+        const missOwner = await makeUser('ord-ip-miss-owner@test.dev', 'password123')
+        const hitOwnerId = (await hitOwner.auth.getUser()).data.user!.id
+        const missOwnerId = (await missOwner.auth.getUser()).data.user!.id
+
+        ipHitId = await seedMerchant({
+          slug: IP_HIT_SLUG, owner_id: hitOwnerId, order_prefix: 'IH',
+          shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+          delivery_max_km: 30, origin_place_id: IP_HIT_ORIGIN,
+        })
+        ipHitProductId = await seedProduct({ merchant_id: ipHitId, price: 13 })
+        // Seeded so every request in the hit test is a genuine cache HIT.
+        await svc().from('distance_quotes').upsert({
+          origin_place_id: IP_HIT_ORIGIN, destination_place_id: IP_HIT_DEST, metres: 25216,
+          created_at: new Date().toISOString(),
+        })
+
+        ipMissId = await seedMerchant({
+          slug: IP_MISS_SLUG, owner_id: missOwnerId, order_prefix: 'IM',
+          shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+          delivery_max_km: 30, origin_place_id: IP_MISS_ORIGIN,
+        })
+        ipMissProductId = await seedProduct({ merchant_id: ipMissId, price: 13 })
+        // Deliberately NOTHING seeded for IP_MISS_ORIGIN — every request in the miss test
+        // must be a genuine cache miss.
+      }, 60_000)
+
+      afterAll(async () => {
+        await resetMerchant(IP_HIT_SLUG)
+        await resetMerchant(IP_MISS_SLUG)
+        const { error } = await svc()
+          .from('distance_quotes')
+          .delete()
+          .in('origin_place_id', [IP_HIT_ORIGIN, IP_MISS_ORIGIN])
+        if (error) {
+          throw new Error(`cleaning up distance_quotes for the IP-bound tests: ${error.message}`)
+        }
+      })
+
+      const ipInput = (
+        merchantId: string,
+        productId: string,
+        callerIp: string,
+        extra: Partial<PlaceOrderInput> = {},
+      ): PlaceOrderInput => ({
+        merchantId,
+        userId: null,
+        userEmail: null,
+        customerName: 'Ah Meng',
+        customerWa: '60123456789',
+        mode: 'delivery',
+        address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
+        cart: { [productId]: 2 },
+        quotedTotal: 57.2,
+        voucherCode: null,
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+        destinationPlaceId: null,
+        callerIp,
+        ...extra,
+      })
+
+      /** Spends every remaining slot in `quoteIpWindow` for `key`, however many that is. */
+      function exhaustIpWindow(key: string): void {
+        let guard = 0
+        while (quoteIpWindow.allow(key)) {
+          guard++
+          if (guard > 10_000) throw new Error(`quoteIpWindow for ${key} never exhausted`)
+        }
+      }
+
+      it('a cache hit still commits when that IP’s bucket is exhausted', async () => {
+        exhaustIpWindow(IP_HIT_CALLER)
+        expect(quoteIpWindow.allow(IP_HIT_CALLER)).toBe(false)
+
+        const { deps, lookupCalls } = fakeLookupDeps()
+        const { orderNumber } = await placeOrder(
+          ipInput(ipHitId, ipHitProductId, IP_HIT_CALLER, { destinationPlaceId: IP_HIT_DEST }),
+          new Date(),
+          deps,
+        )
+        expect(orderNumber).toBeTruthy()
+        // The provider was never called — a genuine, unmetered hit. Fails the moment the IP
+        // check is hoisted out of the `cached === null` block: an exhausted bucket would then
+        // refuse this HIT too, and `placeOrder` would throw instead of returning.
+        expect(lookupCalls()).toBe(0)
+      })
+
+      it('a cache miss is refused when that IP’s bucket is exhausted', async () => {
+        exhaustIpWindow(IP_MISS_CALLER)
+        expect(quoteIpWindow.allow(IP_MISS_CALLER)).toBe(false)
+
+        const { deps, lookupCalls } = fakeLookupDeps({ status: 'ok', metres: 10_000 })
+        let err: unknown
+        try {
+          await placeOrder(
+            ipInput(ipMissId, ipMissProductId, IP_MISS_CALLER, { destinationPlaceId: 'ChIJord-ip-miss-1' }),
+            new Date(),
+            deps,
+          )
+        } catch (e) {
+          err = e
+        }
+        // Fails the moment the IP check is deleted outright: with no check at all, this miss
+        // would resolve through the real provider and commit instead of refusing.
+        expect(err).toBeInstanceOf(OrderError)
+        expect((err as OrderError).code).toBe('distance_lookup_failed')
+        expect(lookupCalls()).toBe(0)
       })
     })
 

@@ -21,5 +21,10 @@ import { createSlidingWindow } from './rateLimit.js'
 // Both inherit the in-memory limiter's known weaknesses KNOWINGLY, exactly as customer signup
 // does: they reset on redeploy and stop protecting anything past one backend instance. Fixing
 // that is its own piece of work (#101 Out of Scope).
-export const quoteIpWindow = createSlidingWindow({ limit: 60, windowMs: 60 * 60_000, now: () => Date.now() })
+// 300/hour, for the same reason `placesIpWindow` is: behind carrier-grade NAT or mall wifi —
+// most Malaysian mobile traffic, on a Malaysian platform — dozens of unrelated customers share
+// one address, and at 60 a busy shop's customers would refuse each other. Note ORDER INTAKE's
+// cache-miss path draws on this same bucket, so an over-tight value here does not merely fail a
+// quote, it fails an ORDER. The per-shop ceiling below is what actually bounds the spend.
+export const quoteIpWindow = createSlidingWindow({ limit: 300, windowMs: 60 * 60_000, now: () => Date.now() })
 export const quoteMerchantWindow = createSlidingWindow({ limit: 500, windowMs: 24 * 60 * 60_000, now: () => Date.now() })

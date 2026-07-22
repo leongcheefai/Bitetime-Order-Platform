@@ -407,11 +407,13 @@ async function resolveRoutedMetres(
   // is a real Google call and must. Identical rule to the quote endpoint, deliberately sharing
   // the SAME bucket — it is one bill for one shop, and intake is a second spender on it.
   if (cached === null) {
-    // Bounded per IP as well as per shop, and ONLY on the miss path. A blanket limit on order
-    // placement would refuse legitimate customers behind carrier-grade NAT or mall wifi — most
-    // Malaysian mobile traffic — and a customer who cannot order at all is worse than the abuse
-    // it would prevent. A cache HIT, which is every honest checkout moments after its quote, is
-    // never metered here.
+    // A COURTESY bound, not an abuse control, and worth being precise about: `clientIp` trusts
+    // `cf-connecting-ip` first, and this backend does not sit behind Cloudflare, so a determined
+    // caller rotates that header and mints a fresh key per request. What actually stops a runaway
+    // is the per-shop ceiling below, which is keyed on the row's own id and cannot be re-spelled.
+    // This one stops accidental hammering, and it is on the MISS path only: a blanket limit on
+    // order placement would refuse legitimate customers behind carrier-grade NAT, which is worse
+    // than the abuse it would prevent.
     if (input.callerIp && !quoteIpWindow.allow(input.callerIp)) {
       throw new OrderError('distance_lookup_failed')
     }
