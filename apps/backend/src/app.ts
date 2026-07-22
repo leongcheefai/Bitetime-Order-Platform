@@ -25,6 +25,7 @@ import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
 import { resolveDistance, CACHE_TTL_MS } from './distance.js'
 import { liveDistanceDeps } from './distanceCache.js'
+import { googlePlaceSuggest, googlePlaceDetail } from './maps.js'
 import { detectCountry } from './region.js'
 import { fetchBasePricing, createPricingCache, type PricingPayload } from './pricing.js'
 import { estimateFor } from './fx.js'
@@ -696,9 +697,11 @@ const signupEmailWindow = createSlidingWindow({ limit: 3, windowMs: 60 * 60_000,
 // that is its own piece of work (#101 Out of Scope).
 const quoteIpWindow = createSlidingWindow({ limit: 60, windowMs: 60 * 60_000, now: () => Date.now() })
 const quoteMerchantWindow = createSlidingWindow({ limit: 500, windowMs: 24 * 60 * 60_000, now: () => Date.now() })
-// `placesIpWindow` (Places autocomplete/details proxy) belongs to Task 6, alongside the routes
-// that would actually use it — declaring it here unused would fail lint and is scope this task
-// was not asked to carry.
+
+// The Places proxy (autocomplete + details) spends money per call the same way the quote
+// endpoint does, so it gets the same IP-bounded flood protection — no per-merchant ceiling here,
+// because these routes are unauthenticated and have no merchant to charge the ceiling against.
+const placesIpWindow = createSlidingWindow({ limit: 60, windowMs: 60 * 60_000, now: () => Date.now() })
 
 /** The caller's IP, from the proxy headers with the socket as the local-dev fallback. */
 function ipOf(c: { req: { header: (n: string) => string | undefined }; env: unknown }): string {
@@ -1040,6 +1043,32 @@ app.post('/api/shipping/quote', async (c) => {
   if (exceedsMaxKm(policy, km)) return c.json({ error: 'out_of_range' }, 409)
 
   return c.json({ km, fee: distanceFee(policy, km), currency: merchant.currency ?? 'MYR' })
+})
+
+// ── Address autocomplete proxy ────────────────────────────────────────────────
+// Proxied for ONE reason above all: the Maps credential must never reach the browser, where a
+// key can be lifted off a page and spent elsewhere (#101, story 49).
+//
+// `session` is money, not hygiene: a burst of keystrokes carrying one token bills as a single
+// lookup when it ends in a details call. The browser mints it and passes the SAME one to
+// /api/places/detail.
+//
+// Unauthenticated, because a guest picking a delivery address has no session. Bounded by IP for
+// the same reason the quote endpoint is: these calls cost the platform money.
+app.get('/api/places/suggest', async (c) => {
+  if (!placesIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  const input = c.req.query('input') ?? ''
+  const session = c.req.query('session') ?? ''
+  // A short prefix is noise that still bills. Empty results, no call.
+  if (input.trim().length < 3) return c.json({ suggestions: [] })
+  return c.json({ suggestions: await googlePlaceSuggest(input, session) })
+})
+
+app.get('/api/places/detail/:placeId', async (c) => {
+  if (!placesIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  const detail = await googlePlaceDetail(c.req.param('placeId'), c.req.query('session') ?? '')
+  if (!detail) return c.json({ error: 'place_not_found' }, 404)
+  return c.json(detail)
 })
 
 // ── Stripe webhook — authoritative subscription state ──────────────────────────
