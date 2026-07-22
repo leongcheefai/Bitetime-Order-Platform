@@ -147,7 +147,7 @@ comment on column orders.delivery_distance_km is
 -- The distance cache: one row per (origin, destination) place-id pair.
 --
 -- Rows expire after 30 days. That TTL is GOOGLE''S TERMS, not a tuning knob — do not raise it.
--- Expiry is enforced by the reader (`created_at > now() - interval '30 days'`), not by a sweep:
+-- Expiry is enforced by the reader (`created_at >= now() - interval '30 days'`), not by a sweep:
 -- a stale row is simply a miss, and re-resolving overwrites it.
 create table distance_quotes (
   origin_place_id      text        not null,
@@ -161,6 +161,12 @@ create table distance_quotes (
 -- owner and is RLS-exempt; RLS-with-no-policies plus zero browser grants is the backstop.
 alter table distance_quotes enable row level security;
 revoke all on public.distance_quotes from anon, authenticated;
+
+-- The application path (`src/db.ts`) connects as the database owner and needs no grant. This
+-- one is for the service-role REST client: the DB-backed suites seed and clear cache rows
+-- through it, and a table created after 20260718130000 inherits no DML grants at all. Same
+-- reason 20260720120000_merchant_feedback.sql carries an explicit grant.
+grant select, insert, update, delete on table public.distance_quotes to service_role;
 
 comment on table distance_quotes is
   'Cached (origin, destination) -> metres routes. Written by the quote endpoint, read by order intake, so the quote and the charge are the same number without asking Google twice. 30-day TTL is contractual.';
