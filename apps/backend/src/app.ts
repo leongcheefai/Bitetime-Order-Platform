@@ -923,6 +923,12 @@ app.post('/api/orders', async (c) => {
       quotedTotal,
       voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
       fulfilDate,
+      // Lifted off the ADDRESS, not a sibling body field: it is a property of where the parcel
+      // goes, and keeping the two together is what stops an address and a place id from
+      // disagreeing. The distance itself is never read from the body — see placeOrder.
+      destinationPlaceId: typeof (b.address as Record<string, unknown> | null)?.place_id === 'string'
+        ? ((b.address as Record<string, unknown>).place_id as string)
+        : null,
     })
     return c.json(result)
   } catch (err) {

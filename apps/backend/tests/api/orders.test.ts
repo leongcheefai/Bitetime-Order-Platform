@@ -26,7 +26,7 @@ import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } fro
 import { orderDay } from '../../src/orderNumber.js'
 import { MAX_CART_QTY, MAX_CART_LINES, todayInZone, DEFAULT_TIMEZONE } from '@bitetime/shared'
 
-const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended']
+const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended', 'ord-distance']
 const DAY = orderDay(new Date())
 
 /** A cart of 2 × RM13 = 26, shaped like the one the storefront now sends. */
@@ -1094,6 +1094,105 @@ describe('POST /api/orders', () => {
       const [order] = await ordersOf(taxShop)
       expect(Number(order.tax)).toBe(1.2)
       expect(Number(order.tax_rate)).toBe(6)
+    })
+  })
+
+  // ── Distance-priced intake (#101 Task 7) ────────────────────────────────────
+  //
+  // A distance shop's fee is `base + rate x km`, and the km comes from a routed lookup the
+  // customer's destination place id names — never from the request body. `distance_quotes` is
+  // SEEDED here rather than hit over the network: it is the exact row order intake reads, and
+  // it is what keeps this suite from calling Google at all (GOOGLE_MAPS_API_KEY is force-emptied
+  // in vitest.db.config.ts).
+  describe('distance-priced intake', () => {
+    const ORIGIN = 'ChIJord-origin'
+    const NEAR = 'ChIJord-near'
+    const FAR = 'ChIJord-far'
+    let distanceId = ''
+    let distanceProductId = ''
+
+    const deliveryBody = (extra: Record<string, unknown> = {}) => ({
+      merchantId: distanceId,
+      customerName: 'Ah Meng',
+      customerWa: '60123456789',
+      mode: 'delivery',
+      address: { line1: '12 Jalan Test', unit: 'A-3-2', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor', place_id: NEAR },
+      cart: { [distanceProductId]: 2 },
+      // 2 x 13 = 26 subtotal, plus 6.00 + 1.00 x 25.2 = 31.20 shipping.
+      quotedTotal: 57.2,
+      fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+      ...extra,
+    })
+
+    beforeAll(async () => {
+      // Its own owner — merchants.owner_id is uniquely indexed, so the shared 'ord-owner' account
+      // above cannot also own this shop.
+      const owner = await makeUser('ord-distance-owner@test.dev', 'password123')
+      const ownerId = (await owner.auth.getUser()).data.user!.id
+      distanceId = await seedMerchant({
+        slug: 'ord-distance', owner_id: ownerId, order_prefix: 'OD',
+        shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+        delivery_max_km: 30, origin_place_id: ORIGIN,
+      })
+      distanceProductId = await seedProduct({ merchant_id: distanceId, price: 13 })
+      for (const [dest, metres] of [[NEAR, 25216], [FAR, 45000]] as const) {
+        await svc().from('distance_quotes').upsert({
+          origin_place_id: ORIGIN, destination_place_id: dest, metres,
+          created_at: new Date().toISOString(),
+        })
+      }
+    }, 60_000)
+
+    it('prices a delivery from the seeded cache row and snapshots the rule on the order', async () => {
+      const res = await post(deliveryBody())
+      expect(res.status).toBe(200)
+      const { orderNumber } = (await res.json()) as { orderNumber: string }
+      const rows = await ordersOf(distanceId)
+      const order = rows.find(o => o.order_number === orderNumber)!
+      expect(Number(order.shipping_fee)).toBe(31.2)
+      expect(Number(order.total)).toBe(57.2)
+      expect(Number(order.delivery_distance_km)).toBe(25.2)
+      expect(Number(order.delivery_base_fee)).toBe(6)
+      expect(Number(order.delivery_rate_per_km)).toBe(1)
+      // The unit rides along on the address so the rider can complete the drop, and it never
+      // touched the fee.
+      expect(order.address.unit).toBe('A-3-2')
+    })
+
+    it('refuses a delivery whose destination cannot be resolved, and writes nothing', async () => {
+      const before = (await ordersOf(distanceId)).length
+      const res = await post(deliveryBody({ address: { line1: '12 Jalan Test', postcode: '50000', city: 'KL', state: 'Selangor' } }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('delivery_place_required')
+      expect((await ordersOf(distanceId)).length).toBe(before)
+    })
+
+    it('refuses a destination beyond the shop maximum', async () => {
+      const res = await post(deliveryBody({
+        address: { line1: 'Far away', postcode: '86000', city: 'Kluang', state: 'Johor', place_id: FAR },
+        quotedTotal: 77,
+      }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('delivery_out_of_range')
+    })
+
+    it('rolls the whole transaction back when the derived distance disagrees with the quote', async () => {
+      const before = (await ordersOf(distanceId)).length
+      const counterBefore = await counterOf(distanceId)
+      const res = await post(deliveryBody({ quotedTotal: 40 }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('price_changed')
+      expect((await ordersOf(distanceId)).length).toBe(before)
+      // Not even a counter slot is burnt — the same rollback assertion the voucher cases make.
+      expect(await counterOf(distanceId)).toEqual(counterBefore)
+    })
+
+    it('leaves the distance columns null on a region-priced shop', async () => {
+      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
+      expect(res.status).toBe(200)
+      const rows = await ordersOf(shop)
+      expect(rows[rows.length - 1].delivery_distance_km).toBeNull()
+      expect(rows[rows.length - 1].delivery_base_fee).toBeNull()
     })
   })
 })
