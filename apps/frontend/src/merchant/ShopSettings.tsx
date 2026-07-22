@@ -174,7 +174,10 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       // Guard against a 0 maximum distance: a blank field is "deliver anywhere with a road", but 0
       // is "deliver nowhere". The backend refuses it, but this layer can show why in the merchant's
       // language while they are still looking at the field, rather than a raw developer error string.
-      if (fields.maxKm && Number(fields.maxKm) <= 0) {
+      // TRIMMED, so this agrees with the blank test the save itself makes a few lines below. The
+      // two must use one notion of "blank" or a stray space would be refused here as "not greater
+      // than zero" while the save one screen down reads it as "no limit".
+      if ((fields.maxKm ?? '').trim() !== '' && Number(fields.maxKm) <= 0) {
         toast.error(t(
           'Maximum distance must be greater than zero, or leave blank to deliver anywhere.',
           '最远配送距离必须大于零，或留空表示只要有路就送。'
