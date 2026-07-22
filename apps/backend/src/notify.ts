@@ -37,7 +37,11 @@ export function formatMoney(amount: number | null | undefined, code?: string | n
 export function formatAddress(addr: unknown): string {
   if (!addr) return ''
   if (typeof addr === 'string') return addr
-  const a = addr as { line1?: string; unit?: string; postcode?: string; city?: string; state?: string }
+  const a = addr as { line1?: string; unit?: string; postcode?: string; city?: string; state?: string; place_id?: string }
+  // A `place_id` marks `line1` as Google's OWN formatted address string, which already contains
+  // the postcode, city and state — appending them again printed every distance order's address
+  // twice in the Telegram message (#101 review, Finding 3). Mirrors the frontend twin exactly.
+  if (a.place_id) return [a.unit, a.line1].filter(Boolean).join(', ')
   const cityLine = [a.postcode, a.city].filter(Boolean).join(' ')
   // The unit/floor/landmark rides in front of the street line, where a rider reads it first. It
   // is never routed and never moved the fee — it exists so the drop can actually be completed.
