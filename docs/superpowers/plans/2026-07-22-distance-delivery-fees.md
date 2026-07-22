@@ -40,7 +40,8 @@ Copied from issue #101, `CONTEXT.md → Shipping policy`, and `docs/adr/0001-dis
 |---|---|
 | `apps/backend/supabase/migrations/20260722120000_distance_shipping.sql` | Merchant policy columns + order snapshot columns + `distance_quotes` cache table |
 | `apps/backend/src/maps.ts` | The ONLY place that talks to Google — Routes v2 and Places (New) adapters |
-| `apps/backend/src/distance.ts` | Distance-resolution policy: cache read → provider on miss → cache write. Adapters injected |
+| `apps/backend/src/distance.ts` | Distance-resolution policy: cache read → provider on miss → cache write. Adapters injected. **No runtime imports** — a type-only reference to `RouteLookup` and nothing else, so the unit suite loads it with no env vars |
+| `apps/backend/src/distanceCache.ts` | The live wiring: the real Postgres cache and the real router, assembled into `DistanceDeps`. Separate because `db.ts`/`maps.ts` reach `env.ts`, which throws at import |
 | `apps/backend/tests/unit/distance.test.ts` | Policy unit tests with a fake adapter and a fake cache. No network, no DB |
 | `apps/backend/tests/api/shippingQuote.test.ts` | Wire contract for `POST /api/shipping/quote`, against real Postgres |
 | `apps/frontend/src/store/AddressAutocomplete.tsx` | The place-picker input, shared by the storefront and Shop Settings |
@@ -880,7 +881,7 @@ git commit -m "feat(backend): Google Routes and Places adapters behind one modul
   - `interface DistanceDeps { lookup: RouteLookup; readCache: (o: string, d: string, notBefore: Date) => Promise<number | null>; writeCache: (o: string, d: string, metres: number) => Promise<void> }`
   - `CACHE_TTL_MS`
   - `resolveDistance(deps: DistanceDeps, input: { originPlaceId: string; destinationPlaceId: string }, now?: Date): Promise<DistanceOutcome>`
-  - `sqlDistanceCache: Pick<DistanceDeps, 'readCache' | 'writeCache'>`
+  - `distanceCache.ts`: `sqlDistanceCache: Pick<DistanceDeps, 'readCache' | 'writeCache'>`, `liveDistanceDeps: DistanceDeps`
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -993,8 +994,12 @@ Expected: FAIL — `Cannot find module '../../src/distance.js'`.
 // The three outcomes must stay distinct all the way to the customer: `no_route` is an answer
 // about the world and is refused permanently; `failed` is our problem and is the ONLY one worth
 // retrying. See CONTEXT.md -> "Shipping policy".
-import { sql } from './db.js'
-import { googleRouteLookup, type RouteLookup } from './maps.js'
+// TYPE-ONLY, and that is load-bearing: `maps.ts` imports `env.ts`, which THROWS at import on a
+// missing var. `import type` is erased at compile time, so this module has NO runtime imports at
+// all and the backend unit suite can load it with no env vars set — which is the documented
+// property of that suite. The live wiring lives next door in `distanceCache.ts`, the same seam
+// as app.ts (exports the app) / index.ts (calls serve()).
+import type { RouteLookup } from './maps.js'
 
 export type DistanceOutcome =
   | { status: 'ok'; metres: number }
@@ -1042,6 +1047,26 @@ export async function resolveDistance(
   }
   return outcome
 }
+
+```
+
+- [ ] **Step 3b: The live wiring, in its own module**
+
+Create `apps/backend/src/distanceCache.ts`. It is separate from `distance.ts` on purpose, and that
+separation is load-bearing rather than tidiness — see the header comment.
+
+```ts
+// The live wiring for distance resolution: the real Postgres cache and the real router,
+// assembled into the deps `resolveDistance` takes.
+//
+// SEPARATE FROM distance.ts ON PURPOSE. `db.ts` and `maps.ts` both reach `env.ts`, which THROWS
+// at import time on a missing var — so a policy module that imported them could not be
+// unit-tested without a full env var set, and the backend unit suite is documented as needing
+// none. Same seam as app.ts (exports the app) / index.ts (calls serve()): the rule is
+// importable, the I/O is assembled next door.
+import { sql } from './db.js'
+import { googleRouteLookup } from './maps.js'
+import type { DistanceDeps } from './distance.js'
 
 /**
  * The real cache, on the RLS-exempt `db.ts` connection.
@@ -1097,7 +1122,7 @@ git commit -m "feat(backend): cache-backed distance resolution with an injected 
 - Test: Create `apps/backend/tests/api/shippingQuote.test.ts`
 
 **Interfaces:**
-- Consumes: `resolveDistance`, `liveDistanceDeps`, `DistanceDeps` (Task 4); `shopDistance`, `routedKm`, `distanceFee`, `exceedsMaxKm` (Task 2).
+- Consumes: `resolveDistance`, `CACHE_TTL_MS`, `DistanceDeps` from `distance.js` and `liveDistanceDeps` from `distanceCache.js` (Task 4); `shopDistance`, `routedKm`, `distanceFee`, `exceedsMaxKm` (Task 2).
 - Produces: `POST /api/shipping/quote` with body `{ merchantId: string, placeId: string }` → `200 { km: number, fee: number, currency: string }`, or `409 { error: 'out_of_range' | 'lookup_failed' | 'not_distance_priced' }`, `400 { error: 'invalid_body' }`, `404 { error: 'merchant_not_found' }`, `429 { error: 'rate_limited' | 'quota_exceeded' }`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1233,7 +1258,8 @@ Expected: FAIL — every case 404s (route does not exist).
 Add imports near the existing ones:
 
 ```ts
-import { resolveDistance, liveDistanceDeps } from './distance.js'
+import { resolveDistance, CACHE_TTL_MS } from './distance.js'
+import { liveDistanceDeps } from './distanceCache.js'
 import { shopDistance, routedKm, distanceFee, exceedsMaxKm } from '@bitetime/shared'
 ```
 
@@ -1434,7 +1460,7 @@ git commit -m "feat(backend): proxy Places autocomplete so no Maps key reaches t
 - Test: `apps/backend/tests/api/orders.test.ts`
 
 **Interfaces:**
-- Consumes: `resolveDistance`, `liveDistanceDeps` (Task 4); `shopDistance`, `routedKm` (Task 2).
+- Consumes: `resolveDistance` and `DistanceDeps` from `distance.js`, `liveDistanceDeps` from `distanceCache.js` (Task 4); `shopDistance`, `routedKm`, `exceedsMaxKm` (Task 2).
 - Produces: `OrderErrorCode` gains `'delivery_place_required' | 'delivery_out_of_range' | 'distance_lookup_failed'`; `orders` rows carry `delivery_distance_km`, `delivery_base_fee`, `delivery_rate_per_km`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -1547,7 +1573,8 @@ Add to the imports:
 import { priceOrder, voucherFromRow, shopRates, shopTax, shopDistance, routedKm, exceedsMaxKm, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
 import type { PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax, ShopDistance } from '@bitetime/shared'
 import { sql } from './db.js'
-import { resolveDistance, liveDistanceDeps, type DistanceDeps } from './distance.js'
+import { resolveDistance, type DistanceDeps } from './distance.js'
+import { liveDistanceDeps } from './distanceCache.js'
 ```
 
 Extend `OrderErrorCode`:
