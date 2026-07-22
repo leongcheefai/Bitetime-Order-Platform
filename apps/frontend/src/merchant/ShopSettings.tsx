@@ -344,9 +344,13 @@ function ShippingTab({ onDirtyChange }: TabProps) {
           placeholder={t('Start typing your shop address…', '输入店铺地址…')}
           onTextChange={text => setFields(f => (
             // Typing invalidates any prior pick: a place id must never survive its own text
-            // changing under it, and a shop with no usable origin cannot stay in distance mode
-            // (see the radio's `disabled` above).
-            { ...f, originAddress: text, originPlaceId: '', originLat: '', originLng: '', shippingMode: 'region' }
+            // changing under it. It does NOT also flip `shippingMode` back to 'region' — that is
+            // the live pricing policy, and demoting the whole shop over one stray keystroke plus
+            // an absent-minded Save would silently change every customer's fee with no other
+            // signal (#101 review, Finding 5). Leaving the mode alone is safe: the radio stays
+            // disabled without a usable origin, and the backend/DB CHECK both refuse a save of
+            // distance mode with no origin id — see those refusals for why.
+            { ...f, originAddress: text, originPlaceId: '', originLat: '', originLng: '' }
           ))}
           onPick={d => setFields(f => ({
             ...f,
