@@ -560,7 +560,13 @@ Replace the `const shipping = …` line in `priceOrder` with:
   // thing this module exists to prevent.
   const distancePriced = input.mode === 'delivery' && input.distance?.mode === 'distance'
   const canPriceDistance =
-    distancePriced && input.distance!.usable && input.routedMetres != null && Number.isFinite(input.routedMetres)
+    distancePriced && input.distance!.usable &&
+    // `>= 0`, not merely finite: a NEGATIVE distance would price the delivery DOWNWARDS — a
+    // reduced fee derived from a number nobody chose, which is the exact failure direction this
+    // module refuses in. Unreachable today (metres come from the distance cache, whose column is
+    // `check (metres >= 0)`, never from a request body) and guarded anyway, because the fee is
+    // money and the guard costs nothing.
+    input.routedMetres != null && Number.isFinite(input.routedMetres) && input.routedMetres >= 0
   const shippingPending = distancePriced && !canPriceDistance
   const shipping = input.resolvedShipping ?? (
     canPriceDistance
