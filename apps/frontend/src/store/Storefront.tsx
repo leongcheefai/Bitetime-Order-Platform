@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
@@ -51,6 +51,14 @@ interface SuccessState {
   taxAmount: number
   taxRate: number
   total: number
+  /**
+   * The distance the fee above was actually derived from — the SAME value the live summary
+   * labelled its own fee with a tap earlier, so the confirmation the customer keeps reconciles
+   * with what they agreed to instead of naming no distance at all (#101 review, Finding 7).
+   * `null` for a pickup order, a region-priced order, or a distance order the summary never
+   * priced (which `canSubmit` already refuses).
+   */
+  feeKm: number | null
   /**
    * The date they asked for, echoed back. `null` only defensively — `canSubmit` will not let a
    * dateless order be submitted, so a placed order always has one.
@@ -113,23 +121,32 @@ export default function Storefront() {
   // while it was in flight.
   const patchAddress = (patch: Partial<AddressParts>) => setAddressInput(prev => ({ ...prev, ...patch }))
 
-  // Fires on a SELECTION, never on a keystroke: every quote is a request the platform pays for,
-  // and a free-text address cannot be routed anyway.
-  async function pickDestination(detail: { placeId: string; formatted: string; postcode: string; city: string; state: string }) {
-    patchAddress({
-      line1: detail.formatted,
-      postcode: detail.postcode,
-      city: detail.city,
-      state: detail.state,
-      place_id: detail.placeId,
-    })
-    if (!distancePriced) return
+  // The LAST place id a quote was started for — a ref, not state, because it must be readable
+  // synchronously from inside an async response handler without itself causing a re-render.
+  //
+  // It is the one piece of sequencing this whole quote flow needs: a response — success OR
+  // failure — is only applied if it is still the answer for the CURRENTLY selected address.
+  // Pick A (slow), then pick B (fast): B's success overwrites the ref before A ever resolves, so
+  // when A finally lands — success or failure — `requestedPlaceIdRef.current !== A` and it is
+  // dropped. The FAILURE branch is the one that actually bites: a stale success is already
+  // rejected downstream by `quotedForThisAddress`'s own `placeId` check, but the failure branch
+  // unconditionally wiped the quote and stamped a refusal — onto an address that had quoted
+  // fine a moment later (#101 review, Finding 5).
+  //
+  // It also doubles as the auto-quote effect's loop guard (Finding 3, below): once a place id has
+  // been requested — in flight, succeeded, or failed — the effect will not request it again.
+  const requestedPlaceIdRef = useRef<string | null>(null)
+
+  const fetchQuote = async (placeId: string) => {
+    requestedPlaceIdRef.current = placeId
     setQuoting(true)
     setQuoteError(null)
     try {
-      const q = await quoteDelivery(merchant.id, detail.placeId)
-      setQuote({ placeId: detail.placeId, ...q })
+      const q = await quoteDelivery(merchant.id, placeId)
+      if (requestedPlaceIdRef.current !== placeId) return // superseded — see the ref's own comment
+      setQuote({ placeId, ...q })
     } catch (err) {
+      if (requestedPlaceIdRef.current !== placeId) return // superseded — see the ref's own comment
       setQuote(null)
       const code = err instanceof DeliveryQuoteError ? err.code : 'lookup_failed'
       setQuoteError(
@@ -146,8 +163,22 @@ export default function Storefront() {
                 '暂时无法计算运费，请重试或选择自取。'),
       )
     } finally {
-      setQuoting(false)
+      if (requestedPlaceIdRef.current === placeId) setQuoting(false)
     }
+  }
+
+  // Fires on a SELECTION, never on a keystroke: every quote is a request the platform pays for,
+  // and a free-text address cannot be routed anyway.
+  async function pickDestination(detail: { placeId: string; formatted: string; postcode: string; city: string; state: string }) {
+    patchAddress({
+      line1: detail.formatted,
+      postcode: detail.postcode,
+      city: detail.city,
+      state: detail.state,
+      place_id: detail.placeId,
+    })
+    if (!distancePriced) return
+    await fetchQuote(detail.placeId)
   }
 
   const [busy, setBusy] = useState(false)
@@ -201,7 +232,19 @@ export default function Storefront() {
   // The SAME mapper the order transaction charges with — a second reading of these columns here
   // is a second rule, and the customer meets it as a refused checkout.
   const distance = shopDistance(merchant)
-  const distancePriced = distance.mode === 'distance' && distance.usable
+  // Which policy is LIVE — matches `priceOrder`'s OWN internal `distancePriced` (mode ===
+  // 'distance', usable or not), the same predicate that decides its `shippingPending`. Gating the
+  // storefront on the NARROWER `&& usable` below is exactly how the region form's fee leaked into
+  // a distance shop whose configuration cannot price (#101 review, Finding 1): `resolvedShipping`
+  // tested the narrow flag, saw it false, and quietly filled in the region estimate.
+  const distanceMode = distance.mode === 'distance'
+  // Distance mode AND priceable. `!distance.usable` is a REFUSAL of delivery at this shop, not a
+  // fallback to the region form or its rate — see `ShopDistance.usable`'s own contract ("FALSE IS
+  // A REFUSAL, NOT A FALLBACK"). Unreachable today (DB constraints and the backend's allowlist
+  // make it unconstructible) and honoured anyway: that contract is the layered defence for
+  // exactly this case, and every rendering decision below reads `distanceMode` for "is this shop
+  // on the distance path at all" and `distancePriced` only for "can it actually price right now".
+  const distancePriced = distanceMode && distance.usable
 
   // The quote for the address currently selected. `null` means "not calculated" — which is a
   // state the UI must SAY, never a 0 it can show as a fee.
@@ -215,6 +258,39 @@ export default function Storefront() {
   // Silently geocoding an old string into a fee they never confirmed was rejected.
   const routedPlaceId = address.place_id ?? ''
   const quotedForThisAddress = quote !== null && quote.placeId === routedPlaceId && routedPlaceId !== ''
+
+  // Makes "costs each customer once, ever" (above) actually true. Without this, a RETURNING
+  // customer whose profile already carries a routable place id (Finding 4 is what lets that
+  // survive a save) still saw "not calculated yet" on every fresh load, because nothing ever
+  // quoted from a place id that arrived via prefill rather than a live pick.
+  //
+  // Deliberately narrow: only fires for a distance shop, in delivery mode, for a place id that
+  // has never been requested (`requestedPlaceIdRef` — the SAME token Finding 5 uses to sequence
+  // manual picks). That one guard does three jobs at once: it stops this effect from re-firing on
+  // every render (the id it just requested is now "seen"), it stops it from looping after a
+  // failure (a failed id stays "seen" — the customer must actively re-pick to try again, same as
+  // any other quote failure), and it stops it from double-firing alongside a manual pick, since
+  // `pickDestination` sets the SAME ref synchronously before this effect's dependency (the address
+  // it just wrote) is even committed.
+  //
+  // The cost objection this answers is weak besides: the quote endpoint peeks the distance cache
+  // before metering, so a cache hit — the normal case for a saved, previously-quoted address —
+  // consumes no quota at all.
+  useEffect(() => {
+    if (!distancePriced || mode !== 'delivery') return
+    const placeId = address.place_id
+    if (!placeId || requestedPlaceIdRef.current === placeId) return
+    fetchQuote(placeId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distancePriced, mode, address.place_id])
+
+  // A refusal belongs to the address it was raised against, not to "delivery mode" in general.
+  // Left uncleared, switching Pickup → Delivery → Pickup → Delivery brought back a stale "does
+  // not deliver to that address" over a field the customer may since have emptied or changed
+  // (#101 review, Finding 8).
+  useEffect(() => {
+    setQuoteError(null)
+  }, [mode])
 
   // The voucher's one-per-customer key — the account email, and nothing else. It must match
   // what the SERVER keys on (the JWT's email), or this pre-flight green-lights a claim the
@@ -369,10 +445,11 @@ export default function Storefront() {
     // find none, and it refuses such an order outright (`delivery_state_required`) rather than
     // shipping it for free. Weaken the gate and the two sides diverge.
     //
-    // The region placeholder is for REGION shops only. A distance shop shows no fee at all until
-    // one is calculated: an estimate the customer might mistake for their fee is the invented
-    // number this feature exists to never produce.
-    resolvedShipping: !distancePriced && mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
+    // The region placeholder is for REGION shops only — gated on `distanceMode`, not the
+    // narrower `distancePriced`, so an unusable distance shop never falls back to it either. A
+    // distance shop shows no fee at all until one is calculated: an estimate the customer might
+    // mistake for their fee is the invented number this feature exists to never produce.
+    resolvedShipping: !distanceMode && mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     distance,
     // `quote.km` is already the rounded km the backend derived, so `km × 1000` re-enters
     // `routedKm` unchanged (`routedKm(25200) === 25.2`) and reproduces the same fee.
@@ -391,11 +468,13 @@ export default function Storefront() {
   const taxRate = bd.taxRate
   const deliveryReady =
     mode !== 'delivery' ||
-    (distancePriced
-      // At a distance shop the address must have been SELECTED (so it has a place id) and a fee
-      // must have come back. This gate is load-bearing for the PRICE, not just form validity:
-      // it is the only thing stopping an order the shop would have to cancel (story 38).
-      ? quotedForThisAddress && address.line1.trim() !== ''
+    (distanceMode
+      // `!distance.usable` refuses outright — no address form is even rendered in that state
+      // (see the Delivery section below), so there is nothing here that could become "ready".
+      // At a PRICEABLE distance shop the address must have been SELECTED (so it has a place id)
+      // and a fee must have come back. This gate is load-bearing for the PRICE, not just form
+      // validity: it is the only thing stopping an order the shop would have to cancel (story 38).
+      ? distance.usable && quotedForThisAddress && address.line1.trim() !== ''
       : address.line1.trim() !== '' &&
         address.postcode.length === 5 &&
         address.city.trim() !== '' &&
@@ -614,7 +693,14 @@ export default function Storefront() {
       }
       // Best-effort server-side Telegram notify; never blocks a placed order.
       await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
-      setSuccess({ orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, taxAmount, taxRate, total, fulfilDate: chosenDate })
+      setSuccess({
+        orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, taxAmount, taxRate, total,
+        // The SAME value the summary just labelled the fee with — `quotedForThisAddress` is what
+        // gated submission in the first place, so at this point it can only be true or this was
+        // never a distance order at all.
+        feeKm: quotedForThisAddress ? quote!.km : null,
+        fulfilDate: chosenDate,
+      })
       toast.success(t('Order placed!', '订单已提交！'))
     } catch (err: any) {
       // A refused order wrote NOTHING — the transaction rolled back. So for the three voucher
@@ -688,8 +774,13 @@ export default function Storefront() {
         setError(msg)
         toast.error(msg)
       } else if (code === 'distance_lookup_failed') {
-        const msg = t('We could not work out the delivery fee just now. Please try again in a moment.',
-                   '暂时无法计算运费，请稍后再试。')
+        // Matches the quote-path copy verbatim (`fetchQuote`'s own 'lookup_failed' branch,
+        // above) — and NOT the old submit-path wording, which promised "in a moment". This code
+        // is also what a QUOTA-exhausted shop throws, and quota does not clear for up to 24
+        // hours: a time promise is a lie for that shop, and neither wording offered pickup as an
+        // escape (#101 review, Finding 2).
+        const msg = t('We could not work out the delivery fee just now. Please try again, or choose pickup.',
+                   '暂时无法计算运费，请重试或选择自取。')
         setError(msg)
         toast.error(msg)
       } else if (code === 'delivery_place_required') {
@@ -810,7 +901,14 @@ export default function Storefront() {
               ))}
               {success.fee > 0 && (
                 <div className="flex justify-between items-start gap-2 text-sm text-rose-muted py-[3px]">
-                  <span className="min-w-0">{t('Delivery fee', '送货费')}</span>
+                  {/* Same house term as the summary and every other surface, with the distance
+                      that priced it named in parentheses when there is one — the confirmation
+                      the customer keeps must name what a tap earlier already did (Finding 7). */}
+                  <span className="min-w-0">
+                    {success.feeKm != null
+                      ? t(`Delivery fee (${success.feeKm.toFixed(1)} km)`, `送货费（${success.feeKm.toFixed(1)} 公里）`)
+                      : t('Delivery fee', '送货费')}
+                  </span>
                   <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(success.fee, currency)}</span>
                 </div>
               )}
@@ -1052,11 +1150,16 @@ export default function Storefront() {
                 onClick={() => setMode('delivery')}
               >
                 {/* States the rule BEFORE the customer types an address — a distance shop's fee
-                    formula, not the region shop's flat rate, is what they're committing to. */}
-                {distancePriced
+                    formula, not the region shop's flat rate, is what they're committing to.
+                    Gated on `distanceMode`, not `distancePriced`: an unusable distance shop must
+                    still see ITS OWN (incomplete) formula here, never the region shop's dormant
+                    rate — the exact fallback direction `ShopDistance.usable` forbids.
+                    A REGION shop's copy is restored to its pre-#101 form verbatim — a shop that
+                    never opted into distance pricing must look untouched (#101 review, Finding 6). */}
+                {distanceMode
                   ? t(`Delivery — ${formatMoney(distance.base, currency)} + ${formatMoney(distance.ratePerKm, currency)}/km`,
                        `配送 — ${formatMoney(distance.base, currency)} + ${formatMoney(distance.ratePerKm, currency)}/公里`)
-                  : t(`Delivery — ${formatMoney(baseDeliveryFee, currency)}`, `配送 — ${formatMoney(baseDeliveryFee, currency)}`)}
+                  : (<>{t('Delivery', '送货')} (+{formatMoney(baseDeliveryFee, currency)})</>)}
               </button>
             </div>
             {mode === 'pickup' && merchant?.pickup_address && (
@@ -1074,32 +1177,53 @@ export default function Storefront() {
             )}
             {mode === 'delivery' && (
               <div className="flex flex-col gap-3 mt-3">
-                {distancePriced ? (
-                  <>
-                    <AddressAutocomplete
-                      id="sf-address"
-                      t={t}
-                      label={t('Delivery address', '配送地址')}
-                      value={address.line1}
-                      placeholder={t('Start typing your address…', '输入您的地址…')}
-                      onTextChange={text => { patchAddress({ line1: text, place_id: undefined }); setQuote(null); setQuoteError(null) }}
-                      onPick={pickDestination}
-                    />
-                    <div className="flex flex-col gap-[6px]">
-                      <Label htmlFor="sf-unit">{t('Unit / floor / landmark (optional)', '单位 / 楼层 / 地标（选填）')}</Label>
-                      <Input id="sf-unit" value={address.unit ?? ''}
-                        onChange={e => patchAddress({ unit: e.target.value })}
-                        placeholder={t('e.g. A-3-2, next to the surau', '例如：A-3-2，祈祷室旁')} />
-                      {/* Says it plainly, because the customer's worry is that it will cost them
-                          money: it is passed to the rider and never routed (story 21). */}
-                      <p className="text-[12px] text-rose-muted leading-[1.5]">
-                        {t('Passed to the rider. It does not change your delivery fee.',
-                           '仅提供给骑手，不影响运费。')}
-                      </p>
-                    </div>
-                    {quoting && <p className="text-[13px] text-rose-muted">{t('Calculating delivery fee…', '正在计算运费…')}</p>}
-                    {quoteError && <p className="text-[13px] text-oxblood">{quoteError}</p>}
-                  </>
+                {distanceMode ? (
+                  distance.usable ? (
+                    <>
+                      <AddressAutocomplete
+                        id="sf-address"
+                        t={t}
+                        label={t('Delivery address', '配送地址')}
+                        value={address.line1}
+                        placeholder={t('Start typing your address…', '输入您的地址…')}
+                        onTextChange={text => {
+                          patchAddress({ line1: text, place_id: undefined })
+                          setQuote(null)
+                          setQuoteError(null)
+                          // Invalidates any request still in flight for the address just left —
+                          // its eventual answer (success or failure) must never land on a field
+                          // the customer has since edited away from (Finding 5's own mechanism).
+                          requestedPlaceIdRef.current = null
+                        }}
+                        onPick={pickDestination}
+                      />
+                      <div className="flex flex-col gap-[6px]">
+                        <Label htmlFor="sf-unit">{t('Unit / floor / landmark (optional)', '单位 / 楼层 / 地标（选填）')}</Label>
+                        <Input id="sf-unit" value={address.unit ?? ''}
+                          onChange={e => patchAddress({ unit: e.target.value })}
+                          placeholder={t('e.g. A-3-2, next to the surau', '例如：A-3-2，祈祷室旁')} />
+                        {/* Says it plainly, because the customer's worry is that it will cost them
+                            money: it is passed to the rider and never routed (story 21). */}
+                        <p className="text-[12px] text-rose-muted leading-[1.5]">
+                          {t('Passed to the rider. It does not change your delivery fee.',
+                             '仅提供给骑手，不影响运费。')}
+                        </p>
+                      </div>
+                      {quoting && <p className="text-[13px] text-rose-muted">{t('Calculating delivery fee…', '正在计算运费…')}</p>}
+                      {quoteError && <p className="text-[13px] text-oxblood">{quoteError}</p>}
+                    </>
+                  ) : (
+                    // `usable === false`: no address field at all, in either shape — offering one
+                    // would invite a pick that can never quote, and a region form here is the
+                    // exact fallback `ShopDistance.usable`'s contract forbids. Say so, and point
+                    // at pickup, which is unaffected. Unreachable today (see the comment on
+                    // `distancePriced` above) — the DB/backend cannot construct this state, but
+                    // the storefront must not silently invent a fee if they ever could.
+                    <p className="text-[13px] text-oxblood">
+                      {t('Delivery is not available at this shop right now. Please choose pickup instead.',
+                         '本店目前暂不提供配送服务，请改选自取。')}
+                    </p>
+                  )
                 ) : (
                   <>
                     <div className="flex flex-col gap-1.5">
@@ -1107,7 +1231,19 @@ export default function Storefront() {
                       <Input
                         id="sf-line1"
                         value={address.line1}
-                        onChange={e => patchAddress({ line1: e.target.value })}
+                        onChange={e =>
+                          // `place_id: undefined` too, ALWAYS — not only when one happens to be
+                          // set. A region shop's form has no field to confirm a place id with, but
+                          // `address` can still carry one here: profiles are GLOBAL, so a place id
+                          // this same account confirmed at a DISTANCE shop rides along as a
+                          // prefill. Left uncleared, hand-editing this text would leave that id
+                          // attached to whatever the customer now types, and a LATER distance
+                          // shop's return-visit quote (the auto-fetch effect, above) would
+                          // silently price to the OLD place while this line names a different
+                          // one. Same rule the distance form's own `onTextChange` already applies
+                          // to itself — typing invalidates the pick, on either form.
+                          patchAddress({ line1: e.target.value, place_id: undefined })
+                        }
                         placeholder={t('Street, building, unit…', '街道、建筑、单位…')}
                       />
                     </div>
@@ -1294,15 +1430,20 @@ export default function Storefront() {
                   <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(subtotal, currency)}</span>
                 </div>
                 {mode === 'delivery' && (
-                  // The distance LABELS the line, and the two reconcile on a calculator: the km
-                  // shown is the km the fee was derived from.
+                  // The house term and casing — 'Delivery fee' / '送货费' — matching the success
+                  // view, ReceiptDialog and OrderHistory verbatim: those three never changed for
+                  // #101, so a fourth spelling here ('Delivery Fee' / '运费') left one order
+                  // showing the customer two different terms for the same line on two screens
+                  // (#101 review, Finding 6). The distance still LABELS the line — in parentheses,
+                  // after the house term — and the two reconcile on a calculator: the km shown is
+                  // the km the fee was derived from.
                   <MoneyLine
                     label={
                       bd.shippingPending
-                        ? t('Delivery Fee (not calculated yet)', '运费（尚未计算）')
+                        ? t('Delivery fee (not calculated yet)', '送货费（尚未计算）')
                         : quotedForThisAddress
-                          ? t(`Delivery Fee (${quote!.km.toFixed(1)} km)`, `运费（${quote!.km.toFixed(1)} 公里）`)
-                          : t('Delivery Fee', '运费')
+                          ? t(`Delivery fee (${quote!.km.toFixed(1)} km)`, `送货费（${quote!.km.toFixed(1)} 公里）`)
+                          : t('Delivery fee', '送货费')
                     }
                     value={bd.shippingPending ? t('—', '—') : formatMoney(fee, currency)}
                   />
