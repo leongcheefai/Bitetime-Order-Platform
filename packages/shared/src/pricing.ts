@@ -62,6 +62,15 @@ export interface PriceBreakdown {
    *  Stored on the order and used to LABEL the line, because `tax` alone cannot say "6%". */
   taxRate: number
   total: number
+  /**
+   * TRUE when this shop prices by distance, the mode is delivery, and no fee could be derived —
+   * either no routed distance is known yet or the shop's distance configuration cannot price.
+   *
+   * `shipping` is 0 in that state and IS NOT A FEE. The storefront must say the fee is not yet
+   * calculated and block submission; the backend refuses before it ever prices in this state.
+   * Reading the 0 as a fee is precisely the invented number this feature must never produce.
+   */
+  shippingPending: boolean
 }
 
 export interface PriceInput {
@@ -75,6 +84,19 @@ export interface PriceInput {
   voucher?: PricedVoucher | null
   /** The shop's tax, mapped through `shopTax`. Absent means no tax. */
   tax?: ShopTax
+  /**
+   * The shop's shipping policy, mapped through `shopDistance`. Absent = region pricing, which is
+   * every shop today.
+   */
+  distance?: ShopDistance
+  /**
+   * The routed road distance for THIS delivery, in metres. NEVER read from a request body — it
+   * is resolved from the distance cache (see the backend's `resolveDistance`).
+   *
+   * `null`/absent on a distance-priced delivery is NOT zero shipping: the breakdown comes back
+   * with `shippingPending: true` and no fee, and the caller refuses rather than pricing.
+   */
+  routedMetres?: number | null
   extraLines?: PriceLine[]
   // NO promoSold input. The count is a column on the product row, and a second channel for it is
   // a second thing to diverge — the browser quotes and the backend charges from the same row.
@@ -162,6 +184,85 @@ export function shopTax(row: unknown): ShopTax {
   return { enabled: r.tax_enabled === true, rate }
 }
 
+export interface ShopDistance {
+  /** Which shipping policy is LIVE. The other policy's configuration stays stored but dormant. */
+  mode: 'region' | 'distance'
+  base: number
+  ratePerKm: number
+  /** null = no limit. Never 0 — a 0 would be an honest "deliver nowhere". */
+  maxKm: number | null
+  originPlaceId: string | null
+  /**
+   * Distance mode AND a configuration complete enough to price with. Meaningless in region mode.
+   *
+   * FALSE IS A REFUSAL, NOT A FALLBACK. A distance-mode shop whose rate is missing, negative or
+   * unparseable does not quote 0 shipping and does not fall back to its dormant region rate —
+   * that would charge by a formula the merchant switched off, under a receipt line that cannot
+   * honestly name a distance. It quotes nothing and the caller refuses the delivery.
+   */
+  usable: boolean
+}
+
+/**
+ * A merchant row → the distance policy `priceOrder` charges. The third of `shopRates`'
+ * and `shopTax`'s family, and it exists for the identical reason: the browser quotes and the
+ * backend charges, and a disagreement between them is a `price_changed` refusal for every
+ * order at that shop, not a rounding gap.
+ *
+ * `num()` is not defensiveness — postgres.js returns `numeric` as a STRING ('6.00') while
+ * PostgREST returns a number (6). These are `numeric` columns and inherit that trap exactly.
+ *
+ * The fallback direction is always toward REFUSAL (`usable: false`), never toward a number
+ * nobody chose. That is the same direction `shopTax` fails in, for the same reason.
+ */
+export function shopDistance(row: unknown): ShopDistance {
+  const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>
+  const mode = r.shipping_mode === 'distance' ? 'distance' : 'region'
+  const base = num(r.delivery_base_fee)
+  const ratePerKm = num(r.delivery_rate_per_km)
+  const maxKmRaw = num(r.delivery_max_km)
+  const originPlaceId = typeof r.origin_place_id === 'string' && r.origin_place_id ? r.origin_place_id : null
+
+  const usable =
+    mode === 'distance' &&
+    originPlaceId !== null &&
+    base !== null && base >= 0 &&
+    ratePerKm !== null && ratePerKm >= 0 &&
+    (r.delivery_max_km == null || (maxKmRaw !== null && maxKmRaw > 0))
+
+  return {
+    mode,
+    base: base ?? 0,
+    ratePerKm: ratePerKm ?? 0,
+    maxKm: maxKmRaw !== null && maxKmRaw > 0 ? maxKmRaw : null,
+    originPlaceId,
+    usable,
+  }
+}
+
+/**
+ * Routed metres → the kilometres the fee is charged on, rounded to ONE decimal.
+ *
+ * THE ROUNDING HAPPENS HERE, BEFORE THE RATE MULTIPLIES IT, and that order is part of the
+ * customer-facing contract, not cosmetics: the receipt line reads `Delivery Fee (25.2 km)`, so
+ * the km on the line must be the km that produced the money. Rounding afterwards prints 25.2 km
+ * beside a fee derived from 25.216, and a line that does not reconcile on a calculator is a
+ * support ticket.
+ */
+export function routedKm(metres: number): number {
+  return parseFloat((metres / 1000).toFixed(1))
+}
+
+/** `base + rate × km`, rounded to money. `km` must already have been through `routedKm`. */
+export function distanceFee(policy: ShopDistance, km: number): number {
+  return round2(policy.base + policy.ratePerKm * km)
+}
+
+/** Beyond the shop's maximum? Inclusive at the cap — exactly `maxKm` still delivers. */
+export function exceedsMaxKm(policy: ShopDistance, km: number): boolean {
+  return policy.maxKm !== null && km > policy.maxKm
+}
+
 export function priceOrder(input: PriceInput): PriceBreakdown {
   const now = input.now ?? new Date()
 
@@ -196,7 +297,22 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
   if (input.extraLines) lines.push(...input.extraLines)
 
   const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0))
-  const shipping = input.resolvedShipping ?? shippingFee(input.mode, input.state, input.rates, input.samedayFee)
+
+  // `resolvedShipping` still wins, and it is DELIBERATELY not the channel distance pricing uses:
+  // that override exists so the storefront can show a region placeholder before a state is known,
+  // and routing a real charge through it would put the fee formula back in the callers — the one
+  // thing this module exists to prevent.
+  const distancePriced = input.mode === 'delivery' && input.distance?.mode === 'distance'
+  const canPriceDistance =
+    distancePriced && input.distance!.usable && input.routedMetres != null && Number.isFinite(input.routedMetres)
+  const shippingPending = distancePriced && !canPriceDistance
+  const shipping = input.resolvedShipping ?? (
+    canPriceDistance
+      ? distanceFee(input.distance!, routedKm(input.routedMetres as number))
+      : shippingPending
+        ? 0
+        : shippingFee(input.mode, input.state, input.rates, input.samedayFee)
+  )
 
   const beforeDiscount = subtotal + shipping
   const discount = voucherDiscount(input.voucher, beforeDiscount)
@@ -216,7 +332,7 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
 
   const total = round2(beforeDiscount - discount + tax)
 
-  return { lines, subtotal, shipping, discount, tax, taxRate, total }
+  return { lines, subtotal, shipping, discount, tax, taxRate, total, shippingPending }
 }
 
 export type VoucherErrorCode =

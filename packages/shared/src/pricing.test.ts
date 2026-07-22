@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   priceOrder, voucherError, voucherFromRow, shopRates, shopTax, DEFAULT_WM_RATE,
   promoClaims, productFromRow, promoState,
+  shopDistance, routedKm, distanceFee, exceedsMaxKm,
 } from './pricing.js'
-import type { PricedProduct } from './pricing.js'
+import type { PricedProduct, ShopDistance } from './pricing.js'
 
 const RATES = { WM: 8, EM: 12 }
 const NOW = new Date('2026-06-29T12:00:00')
@@ -531,5 +532,184 @@ describe('shopTax', () => {
 
   it('treats an enabled 0% as no tax', () => {
     expect(shopTax({ tax_enabled: true, tax_rate: 0 })).toEqual({ enabled: false, rate: 0 })
+  })
+})
+
+const DISTANCE_ROW = {
+  shipping_mode: 'distance',
+  delivery_base_fee: 6,
+  delivery_rate_per_km: 1,
+  delivery_max_km: null,
+  origin_place_id: 'ChIJorigin',
+}
+
+describe('shopDistance', () => {
+  it('maps a distance-mode row and reports it usable', () => {
+    expect(shopDistance(DISTANCE_ROW)).toEqual({
+      mode: 'distance', base: 6, ratePerKm: 1, maxKm: null,
+      originPlaceId: 'ChIJorigin', usable: true,
+    })
+  })
+
+  it('maps postgres.js strings identically to PostgREST numbers', () => {
+    // THE CROSS-DRIVER TRAP: postgres.js returns `numeric` as a STRING ('6.00'), PostgREST as a
+    // number. The browser quotes from one and the backend charges from the other; mapping only
+    // one side is a `price_changed` refusal on every distance order at that shop.
+    expect(shopDistance({
+      shipping_mode: 'distance',
+      delivery_base_fee: '6.00',
+      delivery_rate_per_km: '1.00',
+      delivery_max_km: '20.0',
+      origin_place_id: 'ChIJorigin',
+    })).toEqual(shopDistance({ ...DISTANCE_ROW, delivery_max_km: 20 }))
+  })
+
+  it('reads a region-mode row as region and never as a broken distance shop', () => {
+    const p = shopDistance({ shipping_mode: 'region', delivery_base_fee: 6, origin_place_id: null })
+    expect(p.mode).toBe('region')
+  })
+
+  it('treats a missing shipping_mode as region — every shop that predates this feature', () => {
+    expect(shopDistance({}).mode).toBe('region')
+    expect(shopDistance(null).mode).toBe('region')
+  })
+
+  it('is UNUSABLE, never zero-rated, when a distance shop has no origin', () => {
+    expect(shopDistance({ ...DISTANCE_ROW, origin_place_id: null }).usable).toBe(false)
+  })
+
+  it('is UNUSABLE when a rate is unparseable or negative', () => {
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: null }).usable).toBe(false)
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: -1 }).usable).toBe(false)
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_base_fee: -0.5 }).usable).toBe(false)
+  })
+
+  it('accepts an honest zero base and an honest zero rate', () => {
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_base_fee: 0 }).usable).toBe(true)
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: 0 }).usable).toBe(true)
+  })
+
+  it('keeps a null maximum as "no limit" and rejects a non-positive one', () => {
+    expect(shopDistance(DISTANCE_ROW).maxKm).toBeNull()
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_max_km: 0 }).usable).toBe(false)
+  })
+})
+
+describe('routedKm / distanceFee', () => {
+  const policy = shopDistance(DISTANCE_ROW)
+
+  it('reproduces the reference image exactly: 25216 m at 6.00 + 1.00/km is 25.2 km and 31.20', () => {
+    const km = routedKm(25216)
+    expect(km).toBe(25.2)
+    expect(distanceFee(policy, km)).toBe(31.2)
+  })
+
+  it('rounds the km BEFORE the rate multiplies it', () => {
+    // Rounding after would give 25.22 here, printed beside a line that says 25.2 km. A receipt
+    // line that does not reconcile on a calculator is a support ticket.
+    const pureRate = shopDistance({ ...DISTANCE_ROW, delivery_base_fee: 0 })
+    expect(distanceFee(pureRate, routedKm(25216))).toBe(25.2)
+  })
+
+  it('rounds the km half-up and half-down', () => {
+    expect(routedKm(25260)).toBe(25.3)
+    expect(routedKm(25240)).toBe(25.2)
+    expect(routedKm(0)).toBe(0)
+  })
+
+  it('prices a zero base as pure per-km and a zero rate as a flat base', () => {
+    expect(distanceFee(shopDistance({ ...DISTANCE_ROW, delivery_base_fee: 0, delivery_rate_per_km: 2 }), routedKm(3000))).toBe(6)
+    expect(distanceFee(shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: 0 }), routedKm(12345))).toBe(6)
+  })
+
+  it('reports a distance beyond the shop maximum, and never with a null maximum', () => {
+    const capped = shopDistance({ ...DISTANCE_ROW, delivery_max_km: 20 })
+    expect(exceedsMaxKm(capped, 20)).toBe(false)   // inclusive: exactly at the cap still delivers
+    expect(exceedsMaxKm(capped, 20.1)).toBe(true)
+    expect(exceedsMaxKm(shopDistance(DISTANCE_ROW), 999)).toBe(false)
+  })
+})
+
+describe('priceOrder under a distance policy', () => {
+  const distance = shopDistance(DISTANCE_ROW)
+
+  it('charges base + rate x rounded km for a delivery', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      distance, routedMetres: 25216,
+    })
+    expect(r.shipping).toBe(31.2)
+    expect(r.shippingPending).toBe(false)
+    expect(r.total).toBe(41.2)
+  })
+
+  it('ignores the shop region rates entirely — the dormant policy must never leak into a total', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'delivery', state: 'Sabah', rates: { WM: 8, EM: 999 }, now: NOW,
+      distance, routedMetres: 25216,
+    })
+    expect(r.shipping).toBe(31.2)
+  })
+
+  it('charges NOTHING and flags the fee pending when the distance is not known yet', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      distance, routedMetres: null,
+    })
+    expect(r.shipping).toBe(0)
+    expect(r.shippingPending).toBe(true)
+  })
+
+  it('flags pending — never a fee — for a distance shop whose configuration cannot price', () => {
+    const broken = shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: null })
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      distance: broken, routedMetres: 25216,
+    })
+    expect(r.shipping).toBe(0)
+    expect(r.shippingPending).toBe(true)
+  })
+
+  it('charges no shipping on a pickup at a distance shop, and never flags it pending', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'pickup', rates: RATES, now: NOW, distance, routedMetres: null,
+    })
+    expect(r.shipping).toBe(0)
+    expect(r.shippingPending).toBe(false)
+  })
+
+  it('discounts a percent voucher off subtotal PLUS the distance fee, unchanged', () => {
+    // Deliberately unchanged (#101 "What deliberately does not change"): moving the discount
+    // base would shift totals at every shop that never asked for distance pricing.
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      distance, routedMetres: 25216,
+      voucher: { code: 'X', type: 'percent', value: 20 },
+    })
+    expect(r.discount).toBe(8.24) // 20% of 41.20
+  })
+})
+
+describe('region pricing is untouched', () => {
+  it('produces the same money with and without the distance fields present', () => {
+    const base = {
+      products: [product('a', 10)], cart: { a: 2 },
+      mode: 'delivery' as const, state: 'Sabah', rates: RATES, now: NOW,
+      tax: { enabled: true, rate: 6 },
+    }
+    const before = priceOrder(base)
+    const after = priceOrder({ ...base, distance: shopDistance({ shipping_mode: 'region' }), routedMetres: 25216 })
+    expect(after.shipping).toBe(before.shipping)
+    expect(after.subtotal).toBe(before.subtotal)
+    expect(after.discount).toBe(before.discount)
+    expect(after.tax).toBe(before.tax)
+    expect(after.total).toBe(before.total)
+    expect(after.shippingPending).toBe(false)
   })
 })

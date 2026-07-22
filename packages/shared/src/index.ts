@@ -13,12 +13,13 @@ export type {
 export {
   priceOrder, voucherError, shippingFee, voucherFromRow, shopRates, shopTax,
   promoState, promoClaims, productFromRow,
+  shopDistance, routedKm, distanceFee, exceedsMaxKm,
   EM_STATES, DEFAULT_WM_RATE,
 } from './pricing.js'
 export type {
   PriceInput, PriceBreakdown, PriceLine,
   VoucherCtx, VoucherErrorCode,
-  PricedProduct, PricedVoucher, PromoState, ShopTax,
+  PricedProduct, PricedVoucher, PromoState, ShopTax, ShopDistance,
 } from './pricing.js'
 export {
   fulfilmentConfig, isTimezone, todayInZone,
