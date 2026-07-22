@@ -65,16 +65,35 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
   const picking = useRef(false)
   const listboxId = `${id}-listbox`
 
+  // The text of the last CONFIRMED pick — state, not a ref, because it is read during render
+  // (React's compiler refuses a ref read there) and only ever written from an event handler, so
+  // there is no synchronous-within-an-async-closure need the way `requestedPlaceIdRef`-style refs
+  // elsewhere in this flow have. Set below whenever a pick lands, and seeded here (lazily, once)
+  // from whatever `value` arrives already filled: a returning customer's saved address, or a
+  // merchant's saved origin, is exactly as settled as a pick made a moment ago in this session.
+  // `null` the instant a keystroke lands (`onChange` below), because typing is what un-confirms it.
+  const [confirmedText, setConfirmedText] = useState<string | null>(() => value.trim() || null)
+
   const query = value.trim()
   const eligible = open && query.length >= 3
-  const suggestions = eligible ? fetched : []
+  // The field's current text already has a known-good answer sitting in it — a prior pick, or a
+  // prefill nobody has touched yet. Focusing (or reopening) that field must not spend a fresh
+  // Places request just to re-derive an answer already on screen (#101 review, Finding 4): tabbing
+  // through a prefilled saved address, or clicking into a saved origin, cost a real lookup with no
+  // keystroke at all.
+  const settled = query.length > 0 && query === confirmedText
+  const suggestions = eligible && !settled ? fetched : []
   // True the instant a query becomes eligible and stays true until a fetch actually resolves FOR
   // THAT query — this is what keeps the live region from ever announcing "no suggestions" before
-  // a search for the current text has actually run (see the live region below).
-  const searching = eligible && fetchedFor !== query
+  // a search for the current text has actually run (see the live region below). A settled query
+  // has nothing left to search for, so it is never "searching".
+  const searching = eligible && !settled && fetchedFor !== query
 
   useEffect(() => {
     if (!eligible) return
+    // The query's answer is already settled (see `settled` above) — opening the list here must
+    // not re-fetch it.
+    if (settled) return
     // Reopening a list whose query hasn't changed (e.g. Escape then ArrowDown) means the held
     // results are still the correct answer — refetching would both spend a request the platform
     // pays for and, worse, resolve mid-navigation and stomp a highlight the user just set with no
@@ -93,7 +112,7 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
       setActiveIndex(-1)
     }, 300)
     return () => { live = false; clearTimeout(timer) }
-  }, [query, eligible, composeTick, fetchedFor])
+  }, [query, eligible, composeTick, fetchedFor, settled])
 
   async function pick(s: PlaceSuggestion) {
     // A pick already in flight wins. Without this the listbox stays clickable across the await,
@@ -126,7 +145,12 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
     session.current = newPlaceSession()
     // A details call that failed must NOT be turned into an address: the caller would then hold
     // a place the fee cannot be measured to.
-    if (detail) onPick(detail)
+    if (detail) {
+      // This pick's text is the new settled answer — refocusing the field before it is touched
+      // again must not re-fetch (see `settled` above).
+      setConfirmedText(detail.formatted.trim())
+      onPick(detail)
+    }
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -176,7 +200,7 @@ export default function AddressAutocomplete({ id, label, value, placeholder, dis
         placeholder={placeholder}
         autoComplete="off"
         onFocus={() => setOpen(true)}
-        onChange={e => { setOpen(true); onTextChange?.(e.target.value) }}
+        onChange={e => { setConfirmedText(null); setOpen(true); onTextChange?.(e.target.value) }}
         onKeyDown={onKeyDown}
         onCompositionStart={() => { composing.current = true }}
         onCompositionEnd={() => { composing.current = false; setComposeTick(v => v + 1) }}
