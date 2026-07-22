@@ -348,7 +348,7 @@ describe('PATCH /api/merchants/:id (shipping policy)', () => {
     it('refuses a blank/whitespace string in a numeric field instead of coercing it to 0', async () => {
       // Number('') and Number('   ') are both 0 — the same trap tax_rate already guards against.
       // A caller that clears a numeric field and sends '' must not silently save a 0 fee.
-      for (const patchBody of [{ delivery_base_fee: '' }, { delivery_rate_per_km: '   ' }]) {
+      for (const patchBody of [{ delivery_base_fee: '' }, { delivery_rate_per_km: '   ' }, { delivery_max_km: '' }]) {
         const res = await patchMerchant(merchantId, ownerToken, patchBody)
         expect(res.status).toBe(400)
       }
@@ -377,11 +377,20 @@ describe('PATCH /api/merchants/:id (shipping policy)', () => {
     })
 
     it('refuses switching to distance mode when the patch explicitly nulls the origin in the same save', async () => {
-      // The brief calls out both shapes: omitting origin_place_id (case above, falling back to
-      // the row's current value) AND explicitly nulling it in the SAME patch that flips the mode.
-      // A check that only reads the row's stored origin (and never the patch's own value) would
-      // pass the case above by accident and still let this one through.
-      const res = await patchMerchant(merchantId, ownerToken, { shipping_mode: 'distance', origin_place_id: null })
+      // The check must see the patch's own value, not just the row's stored origin. If a check
+      // only reads the row's value and ignores the patch's explicit null, a rewritten code path
+      // like `patch.origin_place_id ?? row.origin` would wrongly allow switching to distance
+      // with an explicit null. This test catches that regression: first give the shop a real
+      // origin, then try to null it and switch mode in the same save — the explicit null must win.
+      const setupRes = await patchMerchant(merchantId, ownerToken, {
+        shipping_mode: 'region',
+        origin_place_id: 'ChIJorigin',
+      })
+      expect(setupRes.status).toBe(200)
+      const res = await patchMerchant(merchantId, ownerToken, {
+        shipping_mode: 'distance',
+        origin_place_id: null,
+      })
       expect(res.status).toBe(400)
     })
 
@@ -399,10 +408,11 @@ describe('PATCH /api/merchants/:id (shipping policy)', () => {
       // A merchant already on distance mode with an origin set must be able to save something
       // that has nothing to do with shipping (e.g. a payment note) without tripping the origin
       // check — it must only fire when the patch is actually TURNING ON distance mode.
-      await patchMerchant(merchantId, ownerToken, {
+      const setupRes = await patchMerchant(merchantId, ownerToken, {
         shipping_mode: 'distance',
         origin_place_id: 'ChIJorigin',
       })
+      expect(setupRes.status).toBe(200)
       const res = await patchMerchant(merchantId, ownerToken, { payment_note: 'Ring the bell twice' })
       expect(res.status).toBe(200)
     })
