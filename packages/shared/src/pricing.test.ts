@@ -612,6 +612,9 @@ describe('routedKm / distanceFee', () => {
   })
 
   it('rounds the km half-up and half-down', () => {
+    // The real tie. 25.25 is exactly representable in binary, so `toFixed(1)` rounds it half-up
+    // deterministically rather than at the mercy of a float that is really 25.249999…
+    expect(routedKm(25250)).toBe(25.3)
     expect(routedKm(25260)).toBe(25.3)
     expect(routedKm(25240)).toBe(25.2)
     expect(routedKm(0)).toBe(0)
@@ -693,6 +696,16 @@ describe('priceOrder under a distance policy', () => {
       voucher: { code: 'X', type: 'percent', value: 20 },
     })
     expect(r.discount).toBe(8.24) // 20% of 41.20
+  })
+
+  it('flags pending — never a reduced fee — for a negative routed distance', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      distance, routedMetres: -5000,
+    })
+    expect(r.shipping).toBe(0)
+    expect(r.shippingPending).toBe(true)
   })
 })
 
