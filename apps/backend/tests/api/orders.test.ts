@@ -1340,12 +1340,27 @@ describe('POST /api/orders', () => {
       expect(await counterOf(distanceId)).toEqual(counterBefore)
     })
 
-    it('leaves the distance columns null on a region-priced shop', async () => {
-      const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
+    // `body()`'s default `mode: 'pickup'` would let this pass for the wrong reason: a pickup
+    // never reaches the distance columns at all, so the assertion would stay green even if a
+    // region DELIVERY started writing them. A region delivery is the actual regression this
+    // guards against (#101 review, Finding 6) — it prices exactly as it did before #101, and it
+    // must go on doing so without picking up a stray distance/base-fee value from the columns
+    // the same insert now also has to fill in for a distance shop.
+    it('leaves the distance columns null on a region-priced delivery', async () => {
+      await svc().from('merchants').update({ shipping: { WM: 8, EM: 18 } }).eq('id', shop)
+
+      const res = await post(body(shop, productId, {
+        fulfilDate: tomorrowInShopZone(),
+        mode: 'delivery',
+        address: { line1: '1 Jalan Besar', postcode: '88000', city: 'Kota Kinabalu', state: 'Sabah' },
+        quotedTotal: 44, // 26 + EM 18
+      }))
       expect(res.status).toBe(200)
       const rows = await ordersOf(shop)
-      expect(rows[rows.length - 1].delivery_distance_km).toBeNull()
-      expect(rows[rows.length - 1].delivery_base_fee).toBeNull()
+      const order = rows[rows.length - 1]
+      expect(Number(order.shipping_fee)).toBe(18)
+      expect(order.delivery_distance_km).toBeNull()
+      expect(order.delivery_base_fee).toBeNull()
     })
 
     // ── `distance_lookup_failed`, and the injected seam that reaches it ────────
