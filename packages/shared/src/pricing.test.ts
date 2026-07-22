@@ -4,7 +4,7 @@ import {
   promoClaims, productFromRow, promoState,
   shopDistance, routedKm, distanceFee, exceedsMaxKm,
 } from './pricing.js'
-import type { PricedProduct, ShopDistance } from './pricing.js'
+import type { PricedProduct } from './pricing.js'
 
 const RATES = { WM: 8, EM: 12 }
 const NOW = new Date('2026-06-29T12:00:00')
