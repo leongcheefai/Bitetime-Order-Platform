@@ -25,7 +25,7 @@ import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
 import { resolveDistance, CACHE_TTL_MS } from './distance.js'
 import { liveDistanceDeps } from './distanceCache.js'
-import { quoteIpWindow, quoteMerchantWindow } from './quotaWindows.js'
+import { quoteIpWindow, quoteMerchantWindow, placesGlobalWindow } from './quotaWindows.js'
 import { googlePlaceSuggest, googlePlaceDetail } from './maps.js'
 import { detectCountry } from './region.js'
 import { fetchBasePricing, createPricingCache, type PricingPayload } from './pricing.js'
@@ -1075,6 +1075,12 @@ app.post('/api/shipping/quote', async (c) => {
 // the same reason the quote endpoint is: these calls cost the platform money.
 app.get('/api/places/suggest', async (c) => {
   if (!placesIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  // The per-IP window rotates away with a spoofed header (see the module comment on
+  // `placesGlobalWindow`); this is the ceiling that actually holds.
+  if (!placesGlobalWindow.allow('global')) {
+    console.error('Places global quota exceeded on /api/places/suggest — investigate for abuse')
+    return c.json({ error: 'rate_limited' }, 429)
+  }
   const input = c.req.query('input') ?? ''
   const session = c.req.query('session') ?? ''
   // A short prefix is noise that still bills. Empty results, no call.
@@ -1084,7 +1090,16 @@ app.get('/api/places/suggest', async (c) => {
 
 app.get('/api/places/detail/:placeId', async (c) => {
   if (!placesIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
-  const detail = await googlePlaceDetail(c.req.param('placeId'), c.req.query('session') ?? '')
+  if (!placesGlobalWindow.allow('global')) {
+    console.error('Places global quota exceeded on /api/places/detail — investigate for abuse')
+    return c.json({ error: 'rate_limited' }, 429)
+  }
+  const placeId = c.req.param('placeId')
+  // Same floor as `suggest`'s input check, missing here until now: place ids have no stable
+  // public format, so this is a sanity guard against an empty or absurdly long value, not a
+  // validation of shape.
+  if (!placeId || placeId.length > 512) return c.json({ error: 'place_not_found' }, 404)
+  const detail = await googlePlaceDetail(placeId, c.req.query('session') ?? '')
   if (!detail) return c.json({ error: 'place_not_found' }, 404)
   return c.json(detail)
 })

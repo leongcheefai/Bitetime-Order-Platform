@@ -28,3 +28,15 @@ import { createSlidingWindow } from './rateLimit.js'
 // quote, it fails an ORDER. The per-shop ceiling below is what actually bounds the spend.
 export const quoteIpWindow = createSlidingWindow({ limit: 300, windowMs: 60 * 60_000, now: () => Date.now() })
 export const quoteMerchantWindow = createSlidingWindow({ limit: 500, windowMs: 24 * 60 * 60_000, now: () => Date.now() })
+
+// The UNSPOOFABLE stop for the Places proxy. `placesIpWindow`'s key comes from `clientIp`, which
+// trusts `cf-connecting-ip` first — and this backend does not sit behind Cloudflare, so a caller
+// rotates that header and mints a fresh per-IP bucket per request. That window bounds accidents;
+// this one bounds abuse. There is no merchant to key on here (the proxy serves the storefront and
+// Shop Settings alike), so the ceiling is global and deliberately generous: it should never be
+// reached by honest traffic, and it is the only thing standing between a curl loop and a
+// four-figure invoice.
+//
+// Same in-memory weaknesses as every other limiter here, inherited knowingly: resets on redeploy,
+// stops working past one backend instance (#101, Out of Scope).
+export const placesGlobalWindow = createSlidingWindow({ limit: 20_000, windowMs: 24 * 60 * 60_000, now: () => Date.now() })
