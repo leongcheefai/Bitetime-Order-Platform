@@ -97,6 +97,8 @@ Order numbers: `<PREFIX>-YYMMDD-XXXX` — six-digit day, and the daily counter s
 
 Hono. `app.ts` defines the routes and **exports the app without serving it**; `index.ts` is the entry that calls `serve()`. That split is what lets `tests/api` drive the real routes in-process via `app.request()` — keep `app.ts` free of I/O at import (it does read `env.ts`, which fails fast on a missing var; that is deliberate and is why the test config stubs the Stripe keys).
 
+`GOOGLE_MAPS_API_KEY` is optional: unset, distance lookups fail closed (a refusal, never a fee) and region-priced shops are unaffected.
+
 Two ways to reach Postgres, and the difference matters:
 
 - **`supabase.ts`** — the REST clients. `admin` (service role, RLS-exempt) and an anon client used only to verify caller JWTs.
@@ -111,6 +113,8 @@ The **intake gate** (shop exists and is active; the order is born `status = 'new
 ### Shipping / pricing
 
 All order totals come from one pure module, `packages/shared/src/pricing.ts` — `priceOrder()` (shipping region, promo, voucher, tax, rounding) and `voucherError()`. It lives in `@bitetime/shared` because it runs on **both** sides of the wire: the browser prices to quote, the backend prices to commit, and the backend refuses a quote it disagrees with (`price_changed`). The row → domain mappers (`shopRates`, `shopTax`, `productFromRow`, `voucherFromRow`) are shared for the same reason — mapping one side and not the other is a refused checkout, not a rounding gap. There is no order-level referral discount; it was removed in #70. Shipping rates are per-merchant: `WM` (West Malaysia) and `EM` (East Malaysia), with `EM_STATES` selecting the region; a storefront that collects no state passes `resolvedShipping` (flat fee). See `CONTEXT.md → Order pricing`.
+
+A shop's **shipping policy** is `merchants.shipping_mode` (`region` | `distance`). Distance pricing is `base + rate × routed km`, with the km rounded to one decimal **before** the rate multiplies it; the road distance comes from `distance_quotes`, a 30-day cache keyed by `(origin place id, destination place id)` that the quote endpoint writes and order intake reads. The routing call happens **outside** the order transaction. See `CONTEXT.md → Shipping policy` and `docs/adr/0001-distance-fees-from-a-cached-google-route.md`.
 
 ### Localisation
 

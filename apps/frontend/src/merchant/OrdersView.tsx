@@ -298,7 +298,16 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
                   <div className="flex flex-col gap-1 pt-2 mt-1 border-t border-dashed border-clay-border text-[13px]">
                     {selected.shipping_fee != null && (
                       <div className="flex justify-between">
-                        <span className="text-rose-muted">{t('Shipping', '运费')}</span>
+                        {/* The dashboard keeps its own word for this ("Shipping"), which is the
+                            merchant's, not the customer's — only the DISTANCE is added here. The
+                            stored value labels it, never a re-derivation: null (region-priced, or
+                            placed before #101) prints the plain label, never `0.0 km`. */}
+                        <span className="text-rose-muted">
+                          {selected.delivery_distance_km != null
+                            ? t(`Shipping (${Number(selected.delivery_distance_km).toFixed(1)} km)`,
+                                `运费（${Number(selected.delivery_distance_km).toFixed(1)} 公里）`)
+                            : t('Shipping', '运费')}
+                        </span>
                         <span className="tabular-nums text-ink">{formatMoney(selected.shipping_fee, orderCurrency)}</span>
                       </div>
                     )}

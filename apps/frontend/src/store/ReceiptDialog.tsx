@@ -117,7 +117,19 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
           <div className="border-t border-clay-border mt-2 pt-2">
             <MoneyLine label={t('Subtotal', '小计')} value={money(subtotal)} />
             {shipping > 0 && (
-              <MoneyLine label={t('Delivery fee', '送货费')} value={money(shipping)} />
+              // The STORED distance, not a re-derivation: this is a snapshot of what the order
+              // actually charged, and a later rate change must never repaint it. Null (every
+              // region-priced order, and every order placed before #101) prints the plain label —
+              // never `0.0 km`, which would read as a distance we measured and lost.
+              <MoneyLine
+                label={
+                  order.delivery_distance_km != null
+                    ? t(`Delivery fee (${Number(order.delivery_distance_km).toFixed(1)} km)`,
+                        `送货费（${Number(order.delivery_distance_km).toFixed(1)} 公里）`)
+                    : t('Delivery fee', '送货费')
+                }
+                value={money(shipping)}
+              />
             )}
             {discount > 0 && (
               <MoneyLine

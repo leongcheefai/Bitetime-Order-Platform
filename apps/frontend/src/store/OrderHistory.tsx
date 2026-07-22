@@ -206,7 +206,18 @@ export default function OrderHistory() {
                           up to the total below them — a receipt that doesn't reconcile is worse
                           than one that shows only a total. */}
                       {shipping > 0 && (
-                        <MoneyLine label={t('Delivery fee', '送货费')} value={formatMoney(shipping, currency)} />
+                        // The STORED distance, not a re-derivation: a later rate change must
+                        // never repaint an old order. Null (region-priced, or placed before
+                        // #101) prints the plain label — never `0.0 km`.
+                        <MoneyLine
+                          label={
+                            o.delivery_distance_km != null
+                              ? t(`Delivery fee (${Number(o.delivery_distance_km).toFixed(1)} km)`,
+                                  `送货费（${Number(o.delivery_distance_km).toFixed(1)} 公里）`)
+                              : t('Delivery fee', '送货费')
+                          }
+                          value={formatMoney(shipping, currency)}
+                        />
                       )}
                       {discount > 0 && (
                         <MoneyLine
