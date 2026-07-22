@@ -27,6 +27,14 @@ function tracked(over: { cached?: number | null; cachedAt?: Date; route?: RouteO
 }
 
 describe('resolveDistance', () => {
+  it('caches for exactly 30 days — Google\'s terms, not a tuning knob', () => {
+    // Asserted against a literal, deliberately. Every other test in this file derives its
+    // fixture timestamps FROM `CACHE_TTL_MS`, so they pin the boundary logic and move with the
+    // constant — a TTL quietly changed to 30 minutes or 300 days would keep them all green.
+    // This is the one assertion that would fail, and the value is contractual.
+    expect(CACHE_TTL_MS).toBe(30 * 24 * 60 * 60 * 1000)
+  })
+
   it('returns the cached distance and never reaches the provider', async () => {
     const t = tracked({ cached: 25216 })
     expect(await resolveDistance(t.deps, PAIR, NOW)).toEqual({ status: 'ok', metres: 25216 })
@@ -81,5 +89,20 @@ describe('resolveDistance', () => {
     }
     expect(await resolveDistance(d, PAIR, NOW)).toEqual({ status: 'ok', metres: 500 })
     expect(calls).toBe(1)
+  })
+
+  it('falls through to the provider when reading the cache throws', () => {
+    // Same shape as the write-failure test above: a database blip is a cost problem, not a
+    // customer problem.
+    let calls = 0
+    const d: DistanceDeps = {
+      readCache: async () => { throw new Error('connection reset') },
+      writeCache: async () => {},
+      lookup: async () => { calls++; return { status: 'ok', metres: 700 } },
+    }
+    return resolveDistance(d, PAIR, NOW).then(result => {
+      expect(result).toEqual({ status: 'ok', metres: 700 })
+      expect(calls).toBe(1)
+    })
   })
 })

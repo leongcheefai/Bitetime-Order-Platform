@@ -39,7 +39,17 @@ export async function resolveDistance(
   if (!originPlaceId || !destinationPlaceId) return { status: 'failed' }
 
   const notBefore = new Date(now.getTime() - CACHE_TTL_MS)
-  const cached = await deps.readCache(originPlaceId, destinationPlaceId, notBefore)
+  // A cache READ that throws degrades to a MISS, never to an exception. This function's contract
+  // is that it always returns an outcome: a caller that gets a thrown database blip instead
+  // reports a 500, where the honest answer is the retryable "could not work out the fee just
+  // now". The cost of the degradation is one extra provider call, which is the same thing a
+  // genuine miss costs.
+  let cached: number | null = null
+  try {
+    cached = await deps.readCache(originPlaceId, destinationPlaceId, notBefore)
+  } catch (err) {
+    console.error('Distance cache read failed:', err instanceof Error ? err.message : String(err))
+  }
   if (cached !== null) return { status: 'ok', metres: cached }
 
   const outcome = await deps.lookup(originPlaceId, destinationPlaceId)
