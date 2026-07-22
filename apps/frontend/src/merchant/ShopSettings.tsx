@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
 import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret, merchantHasOrders } from '../store'
-import { shopRates, shopTax } from '@bitetime/shared'
+import { shopRates, shopTax, shopDistance } from '@bitetime/shared'
 import { CURRENCIES, CURRENCY_CODES, DEFAULT_CURRENCY, currencyDef } from '../currency'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -14,6 +14,7 @@ import { useNavGuard } from './NavGuard'
 import { isDirty, type SettingsFields } from './settingsDirty'
 import ReferralTab from './ReferralTab'
 import FulfilmentTab from './FulfilmentTab'
+import AddressAutocomplete from '../store/AddressAutocomplete'
 
 type TabKey = 'shipping' | 'fulfilment' | 'payment' | 'notifications' | 'referral'
 
@@ -82,6 +83,23 @@ interface TabProps { onDirtyChange: (dirty: boolean) => void }
 const CARD = 'bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border max-sm:p-4 max-sm:mb-6'
 const HEADING = 'font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2'
 
+// `SettingsFields`' index signature is `string | boolean | undefined`, wide enough to cover
+// every tab in this file, but a key with no EXPLICIT declaration there resolves to that whole
+// union — too wide for `Input`/`AddressAutocomplete`'s strictly-`string` `value` props. This
+// local intersection narrows just the distance-policy keys this tab owns to `string` (matching
+// every other numeric field this form already carries as text), without widening the shared
+// type every other tab in this file also uses.
+type ShippingFields = SettingsFields & {
+  shippingMode?: 'region' | 'distance'
+  baseFee?: string
+  ratePerKm?: string
+  maxKm?: string
+  originPlaceId?: string
+  originAddress?: string
+  originLat?: string
+  originLng?: string
+}
+
 // Reports dirty state up whenever `saved` vs `fields` diverge. Returns a stable helper set.
 function useTabDirty(saved: SettingsFields, fields: SettingsFields, onDirtyChange: (d: boolean) => void) {
   const dirty = isDirty(saved, fields)
@@ -99,7 +117,7 @@ function SaveRow({ busy, label }: { busy: boolean; label: { idle: string; busy: 
 
 function ShippingTab({ onDirtyChange }: TabProps) {
   const { t, merchant, refreshMerchant } = useSession()
-  const [saved, setSaved] = useState<SettingsFields>(() => {
+  const [saved, setSaved] = useState<ShippingFields>(() => {
     // shopRates, not a local `?? 8` / `?? 18`: this form shows the merchant what a row with a
     // missing key CHARGES, and the charge is decided by that one function on both sides of the
     // wire. A third fallback rule here would show a rate (EM 18) that nobody quotes and nobody
@@ -109,6 +127,10 @@ function ShippingTab({ onDirtyChange }: TabProps) {
     // shows the merchant what their shop CHARGES, and the charge is decided by that one function
     // on both sides of the wire.
     const tax = shopTax(merchant!)
+    // shopDistance, not a local read of these columns, for exactly the reason shopRates and
+    // shopTax are used above: this form shows the merchant what their shop CHARGES, and the
+    // charge is decided by that one function on both sides of the wire.
+    const distance = shopDistance(merchant!)
     return {
       currency: merchant!.currency ?? DEFAULT_CURRENCY,
       wm: String(rates.WM),
@@ -116,9 +138,21 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       pickupAddress: merchant!.pickup_address ?? '',
       taxEnabled: tax.enabled,
       taxRate: tax.rate ? String(tax.rate) : '',
+      shippingMode: distance.mode,
+      baseFee: String(distance.base),
+      ratePerKm: String(distance.ratePerKm),
+      maxKm: distance.maxKm === null ? '' : String(distance.maxKm),
+      originPlaceId: merchant!.origin_place_id ?? '',
+      originAddress: merchant!.origin_address ?? '',
+      // Held as strings, like every other numeric field this form's inputs already carry
+      // (`wm`, `taxRate`, `baseFee`…) — `SettingsFields`'s index signature is `string | boolean`,
+      // shared by every tab in this file, so lat/lng round-trip through `String()`/`Number()`
+      // at the two edges (a pick, and save) rather than widening that shared type for one tab.
+      originLat: merchant!.origin_lat != null ? String(merchant!.origin_lat) : '',
+      originLng: merchant!.origin_lng != null ? String(merchant!.origin_lng) : '',
     }
   })
-  const [fields, setFields] = useState<SettingsFields>(saved)
+  const [fields, setFields] = useState<ShippingFields>(saved)
   const [busy, setBusy] = useState(false)
   // Currency locks after the first order so past orders/aggregates never
   // re-denominate. Assume locked until the check clears, so it can't flip open.
@@ -159,6 +193,18 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         // row, and reads it back as OFF because `shopTax` gates on the flag.
         tax_enabled: fields.taxEnabled,
         tax_rate: Number(fields.taxRate) || 0,
+        // The REGION rates above are written on every save, distance mode or not: the dormant
+        // policy's configuration is kept so switching back does not mean retyping it (story 10).
+        shipping_mode: fields.shippingMode,
+        delivery_base_fee: Number(fields.baseFee) || 0,
+        delivery_rate_per_km: Number(fields.ratePerKm) || 0,
+        // A BLANK maximum is "deliver anywhere with a road" — null, not 0. A typed 0 would be
+        // "deliver nowhere", and the backend refuses it rather than guessing which was meant.
+        delivery_max_km: (fields.maxKm ?? '').trim() === '' ? null : Number(fields.maxKm),
+        origin_place_id: fields.originPlaceId || null,
+        origin_lat: (fields.originLat ?? '').trim() === '' ? null : Number(fields.originLat),
+        origin_lng: (fields.originLng ?? '').trim() === '' ? null : Number(fields.originLng),
+        origin_address: fields.originAddress || null,
       })
       await refreshMerchant()
       // Show back the rates that were actually SAVED, not the blank that was typed — a merchant
@@ -169,12 +215,25 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       // back on reload. Carrying `fields.taxEnabled` over verbatim would show CHECKED here and
       // UNCHECKED after a refresh — shopTax is what the checkbox must agree with.
       const tax = shopTax({ tax_enabled: fields.taxEnabled, tax_rate: Number(fields.taxRate) || 0 })
+      // Same reasoning again, distance leg: show back what was actually written, read through
+      // the one function that also reads it on reload, not the raw strings that were typed.
+      const distance = shopDistance({
+        shipping_mode: fields.shippingMode,
+        delivery_base_fee: Number(fields.baseFee) || 0,
+        delivery_rate_per_km: Number(fields.ratePerKm) || 0,
+        delivery_max_km: (fields.maxKm ?? '').trim() === '' ? null : Number(fields.maxKm),
+        origin_place_id: fields.originPlaceId || null,
+      })
       const applied = {
         ...fields,
         wm: String(shipping.WM),
         em: String(shipping.EM),
         taxEnabled: tax.enabled,
         taxRate: tax.rate ? String(tax.rate) : '',
+        shippingMode: distance.mode,
+        baseFee: String(distance.base),
+        ratePerKm: String(distance.ratePerKm),
+        maxKm: distance.maxKm === null ? '' : String(distance.maxKm),
       }
       setFields(applied)
       setSaved(applied)
@@ -219,26 +278,130 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         </div>
       </div>
       <div className={CARD}>
-        <h3 className={HEADING}>{t('Shipping rates', '运费')}</h3>
+        <h3 className={HEADING}>{t('How you charge for delivery', '运费计算方式')}</h3>
         <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-wm">{t(`West Malaysia (${symbol})`, `西马运费 (${symbol})`)}</Label>
-            <Input id="shop-wm" type="number" step="0.01" value={fields.wm}
-              onChange={e => setFields(f => ({ ...f, wm: e.target.value }))} variant="compact" />
+          <label className="flex items-start gap-2 text-[14px] text-ink">
+            <input type="radio" name="shipping-mode" className="mt-1"
+              checked={fields.shippingMode === 'region'}
+              onChange={() => setFields(f => ({ ...f, shippingMode: 'region' }))} />
+            <span>
+              {t('By region — one flat rate for West Malaysia, one for East Malaysia.',
+                 '按区域 — 西马一个统一运费，东马一个。')}
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-[14px] text-ink">
+            <input type="radio" name="shipping-mode" className="mt-1"
+              checked={fields.shippingMode === 'distance'}
+              disabled={!fields.originPlaceId}
+              onChange={() => setFields(f => ({ ...f, shippingMode: 'distance' }))} />
+            <span>
+              {t('By distance — a base fee plus a rate for every kilometre your rider drives.',
+                 '按距离 — 基本运费加上每公里费率。')}
+            </span>
+          </label>
+          {!fields.originPlaceId && (
+            /* Says WHY the option is disabled. Without an origin there is nowhere to measure
+               from, and a shop that switched over anyway would quote nothing at all. */
+            <p className="text-[12px] text-rose-muted leading-[1.5]">
+              {t('Set your delivery origin below before you can charge by distance.',
+                 '请先在下方设置配送起点，才能按距离收费。')}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className={CARD}>
+        <h3 className={HEADING}>{t('Delivery origin', '配送起点')}</h3>
+        <AddressAutocomplete
+          id="shop-origin"
+          t={t}
+          label={t('Where your rider starts from', '骑手出发的地址')}
+          value={fields.originAddress ?? ''}
+          placeholder={t('Start typing your shop address…', '输入店铺地址…')}
+          onTextChange={text => setFields(f => (
+            // Typing invalidates any prior pick: a place id must never survive its own text
+            // changing under it, and a shop with no usable origin cannot stay in distance mode
+            // (see the radio's `disabled` above).
+            { ...f, originAddress: text, originPlaceId: '', originLat: '', originLng: '', shippingMode: 'region' }
+          ))}
+          onPick={d => setFields(f => ({
+            ...f,
+            originPlaceId: d.placeId,
+            originAddress: d.formatted,
+            originLat: String(d.lat),
+            originLng: String(d.lng),
+          }))}
+        />
+        {fields.originPlaceId && (
+          /* Show back what was MATCHED, not what was typed: it is the only way a merchant can
+             tell the pin landed on the wrong shoplot (story 4). */
+          <p className="text-[12px] text-rose-muted mt-2 leading-[1.5]">
+            {t('Routes are measured from: ', '距离从此地址起算：')}<strong>{fields.originAddress}</strong>
+          </p>
+        )}
+        <p className="text-[12px] text-rose-muted mt-2 leading-[1.5]">
+          {t('This is separate from your pickup address below, which is free text and is only shown to pickup customers.',
+             '此地址与下方的自取地址不同 — 自取地址是纯文字，仅显示给自取顾客。')}
+        </p>
+      </div>
+
+      {fields.shippingMode === 'region' ? (
+        <div className={CARD}>
+          <h3 className={HEADING}>{t('Shipping rates', '运费')}</h3>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="shop-wm">{t(`West Malaysia (${symbol})`, `西马运费 (${symbol})`)}</Label>
+              <Input id="shop-wm" type="number" step="0.01" value={fields.wm}
+                onChange={e => setFields(f => ({ ...f, wm: e.target.value }))} variant="compact" />
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="shop-em">{t(`East Malaysia (${symbol})`, `东马运费 (${symbol})`)}</Label>
+              <Input id="shop-em" type="number" step="0.01" value={fields.em}
+                onChange={e => setFields(f => ({ ...f, em: e.target.value }))} variant="compact" />
+              {/* Says what a blank field does, because a blank field DOES something: it charges the
+                  West Malaysia rate. Free shipping to East Malaysia has to be typed as a 0. */}
+              <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
+                {t('Blank East Malaysia charges the same as West Malaysia. Enter 0 for free East Malaysia delivery.',
+                   '东马留空则按西马运费收取。填 0 表示东马免运费。')}
+              </p>
+            </div>
           </div>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-em">{t(`East Malaysia (${symbol})`, `东马运费 (${symbol})`)}</Label>
-            <Input id="shop-em" type="number" step="0.01" value={fields.em}
-              onChange={e => setFields(f => ({ ...f, em: e.target.value }))} variant="compact" />
-            {/* Says what a blank field does, because a blank field DOES something: it charges the
-                West Malaysia rate. Free shipping to East Malaysia has to be typed as a 0. */}
-            <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
-              {t('Blank East Malaysia charges the same as West Malaysia. Enter 0 for free East Malaysia delivery.',
-                 '东马留空则按西马运费收取。填 0 表示东马免运费。')}
+        </div>
+      ) : (
+        <div className={CARD}>
+          <h3 className={HEADING}>{t('Distance rates', '距离费率')}</h3>
+          <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="shop-base-fee">{t(`Base fee (${symbol})`, `基本运费 (${symbol})`)}</Label>
+              <Input id="shop-base-fee" type="number" step="0.01" min="0" value={fields.baseFee}
+                onChange={e => setFields(f => ({ ...f, baseFee: e.target.value }))} variant="compact" />
+              <p className="text-[12px] text-rose-muted leading-[1.5]">
+                {t('Charged on every delivery, before distance. Enter 0 to charge purely per kilometre.',
+                   '每单固定收取，与距离无关。填 0 则纯按公里收费。')}
+              </p>
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="shop-rate-km">{t(`Per kilometre (${symbol})`, `每公里 (${symbol})`)}</Label>
+              <Input id="shop-rate-km" type="number" step="0.01" min="0" value={fields.ratePerKm}
+                onChange={e => setFields(f => ({ ...f, ratePerKm: e.target.value }))} variant="compact" />
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="shop-max-km">{t('Maximum distance (km)', '最远配送距离 (公里)')}</Label>
+              <Input id="shop-max-km" type="number" step="0.1" min="0" value={fields.maxKm}
+                onChange={e => setFields(f => ({ ...f, maxKm: e.target.value }))} variant="compact" />
+              {/* Says what a blank field DOES, the same reason the East-Malaysia hint does. */}
+              <p className="text-[12px] text-rose-muted leading-[1.5]">
+                {t('Leave blank to deliver anywhere with a road. Customers past this distance are told you do not deliver to them.',
+                   '留空表示只要有路就送。超过此距离的顾客会被告知不在配送范围。')}
+              </p>
+            </div>
+            <p className="text-[12px] text-rose-muted leading-[1.5]">
+              {t(`Example: ${symbol}${fields.baseFee || 0} + ${symbol}${fields.ratePerKm || 0}/km means a 10 km delivery costs ${symbol}${(Number(fields.baseFee || 0) + Number(fields.ratePerKm || 0) * 10).toFixed(2)}.`,
+                 `例如：${symbol}${fields.baseFee || 0} + ${symbol}${fields.ratePerKm || 0}/公里，10 公里配送为 ${symbol}${(Number(fields.baseFee || 0) + Number(fields.ratePerKm || 0) * 10).toFixed(2)}。`)}
             </p>
           </div>
         </div>
-      </div>
+      )}
       <div className={CARD}>
         <h3 className={HEADING}>{t('Tax', '税')}</h3>
         <div className="flex flex-col gap-2">
