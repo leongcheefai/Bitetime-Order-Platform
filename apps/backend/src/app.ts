@@ -918,6 +918,8 @@ app.post('/api/orders', async (c) => {
       destinationPlaceId: typeof (b.address as Record<string, unknown> | null)?.place_id === 'string'
         ? ((b.address as Record<string, unknown>).place_id as string)
         : null,
+      // For the miss-path spend bound only (Finding 2, fix wave 2) — see PlaceOrderInput.
+      callerIp: ipOf(c),
     })
     return c.json(result)
   } catch (err) {

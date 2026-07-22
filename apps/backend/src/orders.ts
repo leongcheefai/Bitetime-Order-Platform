@@ -5,7 +5,7 @@ import { sql, withTransaction } from './db.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
 import { resolveDistance, CACHE_TTL_MS, type DistanceDeps } from './distance.js'
 import { liveDistanceDeps } from './distanceCache.js'
-import { quoteMerchantWindow } from './quotaWindows.js'
+import { quoteMerchantWindow, quoteIpWindow } from './quotaWindows.js'
 
 /**
  * The machine-readable reasons an order can be refused. The storefront reacts to these, so
@@ -43,8 +43,17 @@ export type OrderErrorCode =
    */
   | 'delivery_out_of_range'
   /**
-   * The routing lookup itself did not happen. Retryable in the ordinary case — a provider
-   * outage, a shop's daily Google-spend ceiling — and the ONLY distance failure that is.
+   * The routing lookup itself did not happen, and the ONLY distance failure that is retryable
+   * at all — but "retryable" covers two causes that recover on very different clocks, and the
+   * wire code does not distinguish them:
+   *
+   *   * a provider outage — retryable within seconds, the ordinary case;
+   *   * the shop's daily Google-spend ceiling (Finding 6, fix wave 2) — does NOT clear for up
+   *     to 24 hours. A customer who retries this one moments later meets the same refusal.
+   *
+   * One code for both anyway: the customer's only available action is "try again later" either
+   * way, and a fourth wire code would cost the frontend a twin for a distinction it cannot act
+   * on differently.
    *
    * ONE EXCEPTION: a distance-priced shop whose configuration cannot price (`!policy.usable`)
    * also raises this code, and no amount of retrying fixes a merchant's own dormant/incomplete
@@ -115,6 +124,16 @@ export interface PlaceOrderInput {
    * rows decide what that costs. A body-supplied distance is the `total: 0` hole with extra steps.
    */
   destinationPlaceId?: string | null
+  /**
+   * The caller's address — for the miss-path SPEND BOUND only (Finding 2, fix wave 2), never
+   * for attribution and never persisted. `userId`/`userEmail` above are what attribution reads;
+   * this is not a second one.
+   *
+   * Optional: a caller that omits it (this module's own tests, which drive `placeOrder`
+   * directly and never go through `app.ts`) simply skips the per-IP leg of the miss-path bound
+   * below — the per-shop ceiling still applies unconditionally either way.
+   */
+  callerIp?: string
 }
 
 /**
@@ -346,7 +365,7 @@ async function resolveRoutedMetres(
   if (input.mode !== 'delivery') return null
 
   const rows = await sql<Record<string, unknown>[]>`
-    select status::text, shipping_mode, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
+    select id::text, status::text, shipping_mode, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
     from merchants where id = ${input.merchantId}
   `
   // The shop's status is checked HERE as well as inside the transaction, and the duplication is
@@ -355,6 +374,13 @@ async function resolveRoutedMetres(
   // be a way to spend the platform's money.
   if (!rows[0]) throw new OrderError('merchant_not_found')
   if ((rows[0].status as string) !== 'active') throw new OrderError('merchant_inactive')
+
+  // Keyed on the ROW's id, never on `input.merchantId`. Postgres parses uuids leniently —
+  // upper-case, brace-wrapped and hyphen-free spellings all match the same row — so a ceiling
+  // keyed on the body's string is one an unauthenticated caller re-keys at will, four spellings
+  // deep, for four times the free lookups. Same trap the cart keys already carry a canonical-
+  // form rule for (CONTEXT.md → Order pricing): with money on the other side, it is not style.
+  const merchantId = rows[0].id as string
 
   const policy = shopDistance(rows[0])
   if (policy.mode !== 'distance') return null
@@ -380,8 +406,18 @@ async function resolveRoutedMetres(
   // A cache HIT costs nothing and must never consume a slot of the shop's daily ceiling; a MISS
   // is a real Google call and must. Identical rule to the quote endpoint, deliberately sharing
   // the SAME bucket — it is one bill for one shop, and intake is a second spender on it.
-  if (cached === null && !quoteMerchantWindow.allow(input.merchantId)) {
-    throw new OrderError('distance_lookup_failed')
+  if (cached === null) {
+    // Bounded per IP as well as per shop, and ONLY on the miss path. A blanket limit on order
+    // placement would refuse legitimate customers behind carrier-grade NAT or mall wifi — most
+    // Malaysian mobile traffic — and a customer who cannot order at all is worse than the abuse
+    // it would prevent. A cache HIT, which is every honest checkout moments after its quote, is
+    // never metered here.
+    if (input.callerIp && !quoteIpWindow.allow(input.callerIp)) {
+      throw new OrderError('distance_lookup_failed')
+    }
+    if (!quoteMerchantWindow.allow(merchantId)) {
+      throw new OrderError('distance_lookup_failed')
+    }
   }
 
   const outcome = cached !== null
