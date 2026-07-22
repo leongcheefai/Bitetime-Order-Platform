@@ -717,8 +717,21 @@ export const googleRouteLookup: RouteLookup = async (originPlaceId, destinationP
       return { status: 'failed' }
     }
     const body = (await res.json()) as { routes?: { distanceMeters?: number }[] }
-    const metres = body.routes?.[0]?.distanceMeters
-    if (typeof metres !== 'number' || !Number.isFinite(metres)) return { status: 'no_route' }
+
+    // An EMPTY or absent `routes` array is Google's documented answer for "there is no road
+    // route between these two points" — an answer about the world, and a permanent refusal.
+    if (!body.routes?.length) return { status: 'no_route' }
+
+    // A route that came back WITHOUT a usable distance is a different thing entirely: we did
+    // not understand the response. It must fail RETRYABLE, not permanent. `no_route` tells the
+    // customer this shop does not deliver to their address and pointedly does not invite them to
+    // try again — so a response-shape drift classified that way would present a total outage as
+    // a business rule, at every address, with nothing on screen to say anything was broken.
+    const metres = body.routes[0]?.distanceMeters
+    if (typeof metres !== 'number' || !Number.isFinite(metres)) {
+      console.error('Route lookup returned a route with no usable distanceMeters')
+      return { status: 'failed' }
+    }
     return { status: 'ok', metres }
   } catch (err) {
     console.error('Route lookup threw:', err instanceof Error ? err.message : String(err))
