@@ -24,6 +24,8 @@ import { app } from '../../src/app.js'
 import { env } from '../../src/env.js'
 import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
 import { orderDay } from '../../src/orderNumber.js'
+import { placeOrder, OrderError, type PlaceOrderInput } from '../../src/orders.js'
+import type { DistanceDeps, DistanceOutcome } from '../../src/distance.js'
 import { MAX_CART_QTY, MAX_CART_LINES, todayInZone, DEFAULT_TIMEZONE } from '@bitetime/shared'
 
 const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended', 'ord-distance']
@@ -130,6 +132,32 @@ async function seedPromoProduct(merchantId: string, opts: {
     if (sold.error) throw new Error(`seeding promo product (sold): ${sold.error.message}`)
   }
   return id
+}
+
+/**
+ * A fake `DistanceDeps` for driving `placeOrder` directly — the seam it takes `distanceDeps`
+ * for. Only the routing PROVIDER is faked (`lookup`); `readCache`/`writeCache` are faked too,
+ * but that is standing in for the distance cache, not the database this suite's rule forbids
+ * mocking — `placeOrder` still runs every statement inside the transaction (the counter, the
+ * products, the insert) against the real Postgres started by `test:db`.
+ *
+ * `cached` stands in for a "seeded cache row": non-null and the peek in `resolveRoutedMetres`
+ * hits, so `lookup` is never called at all. `lookupCalls()` is what proves that.
+ */
+function fakeDistanceDeps(opts: { cached?: number | null; outcome?: DistanceOutcome }): {
+  deps: DistanceDeps
+  lookupCalls: () => number
+} {
+  let calls = 0
+  const deps: DistanceDeps = {
+    lookup: async () => {
+      calls++
+      return opts.outcome ?? { status: 'failed' }
+    },
+    readCache: async () => opts.cached ?? null,
+    writeCache: async () => {},
+  }
+  return { deps, lookupCalls: () => calls }
 }
 
 describe('POST /api/orders', () => {
@@ -1159,6 +1187,24 @@ describe('POST /api/orders', () => {
       expect(order.address.unit).toBe('A-3-2')
     })
 
+    // THE BRANCH THIS TASK EXISTS TO ADD. The state guard is
+    // `mode === 'delivery' && !distancePriced && deliveryState(...) === null` — every OTHER
+    // case above carries `state: 'Selangor'` on its address, so deleting `!distancePriced`
+    // leaves the whole suite green. A distance-priced storefront has no reason to collect a
+    // state at all (the fee comes from the route, not the region), so THIS is the untested
+    // production path: a delivery address with no state key at all must still price and commit.
+    it('prices and commits a distance delivery with no state on the address at all', async () => {
+      const res = await post(deliveryBody({
+        address: { line1: '12 Jalan Test', unit: 'A-3-2', postcode: '50000', city: 'Kuala Lumpur', place_id: NEAR },
+      }))
+      expect(res.status).toBe(200)
+      const { orderNumber } = (await res.json()) as { orderNumber: string }
+      const rows = await ordersOf(distanceId)
+      const order = rows.find(o => o.order_number === orderNumber)!
+      expect(Number(order.shipping_fee)).toBe(31.2)
+      expect(Number(order.total)).toBe(57.2)
+    })
+
     it('refuses a delivery whose destination cannot be resolved, and writes nothing', async () => {
       const before = (await ordersOf(distanceId)).length
       const res = await post(deliveryBody({ address: { line1: '12 Jalan Test', postcode: '50000', city: 'KL', state: 'Selangor' } }))
@@ -1193,6 +1239,90 @@ describe('POST /api/orders', () => {
       const rows = await ordersOf(shop)
       expect(rows[rows.length - 1].delivery_distance_km).toBeNull()
       expect(rows[rows.length - 1].delivery_base_fee).toBeNull()
+    })
+
+    // ── `distance_lookup_failed`, and the injected seam that reaches it ────────
+    //
+    // Three branches raise this code and, before this, none had a test. `placeOrder` is called
+    // DIRECTLY here (not through `app.request`) with a fake `DistanceDeps` — the seam it takes
+    // `distanceDeps` for — against the real database: only the routing PROVIDER is faked, never
+    // Postgres, which is exactly what the seam is for and exactly what this suite's rule
+    // (never mock the database) still requires.
+    describe('distance_lookup_failed and the injected DistanceDeps seam', () => {
+      const placeOrderInput = (extra: Partial<PlaceOrderInput> = {}): PlaceOrderInput => ({
+        merchantId: distanceId,
+        userId: null,
+        userEmail: null,
+        customerName: 'Ah Meng',
+        customerWa: '60123456789',
+        mode: 'delivery',
+        address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
+        cart: { [distanceProductId]: 2 },
+        quotedTotal: 57.2,
+        voucherCode: null,
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+        destinationPlaceId: 'ChIJord-provider-miss',
+        ...extra,
+      })
+
+      it('rejects with distance_lookup_failed when the provider fails, on a cache miss — and rolls back whole', async () => {
+        const before = (await ordersOf(distanceId)).length
+        const counterBefore = await counterOf(distanceId)
+        const { deps } = fakeDistanceDeps({ cached: null, outcome: { status: 'failed' } })
+
+        let err: unknown
+        try {
+          await placeOrder(placeOrderInput(), new Date(), deps)
+        } catch (e) {
+          err = e
+        }
+        expect(err).toBeInstanceOf(OrderError)
+        expect((err as OrderError).code).toBe('distance_lookup_failed')
+        expect((await ordersOf(distanceId)).length).toBe(before)
+        expect(await counterOf(distanceId)).toEqual(counterBefore)
+      })
+
+      it('rejects with delivery_out_of_range when the provider finds no route', async () => {
+        const { deps } = fakeDistanceDeps({
+          cached: null,
+          outcome: { status: 'no_route' },
+        })
+
+        let err: unknown
+        try {
+          await placeOrder(placeOrderInput({ destinationPlaceId: 'ChIJord-no-route' }), new Date(), deps)
+        } catch (e) {
+          err = e
+        }
+        expect(err).toBeInstanceOf(OrderError)
+        expect((err as OrderError).code).toBe('delivery_out_of_range')
+      })
+
+      it('never calls the provider on a cache hit, and commits the order', async () => {
+        // Same metres as the seeded NEAR row above (25216m -> 25.2km -> 6 + 25.2 = 31.20
+        // shipping), so the same quotedTotal holds.
+        const { deps, lookupCalls } = fakeDistanceDeps({ cached: 25216 })
+
+        const { orderNumber } = await placeOrder(
+          placeOrderInput({ destinationPlaceId: 'ChIJord-cache-hit' }),
+          new Date(),
+          deps,
+        )
+
+        expect(lookupCalls()).toBe(0)
+        const rows = await ordersOf(distanceId)
+        const order = rows.find(o => o.order_number === orderNumber)!
+        expect(Number(order.shipping_fee)).toBe(31.2)
+        expect(Number(order.total)).toBe(57.2)
+      })
+    })
+
+    afterAll(async () => {
+      // Fixture leak (#101 review): rows this suite seeded into `distance_quotes`, keyed by its
+      // own ChIJord-* place ids. `resetMerchant` only ever clears tables scoped by
+      // `merchant_id`, and `distance_quotes` is keyed by place id pair alone (see the migration
+      // comment), so nothing else was ever going to remove these.
+      await svc().from('distance_quotes').delete().eq('origin_place_id', ORIGIN)
     })
   })
 })

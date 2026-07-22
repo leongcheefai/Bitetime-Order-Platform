@@ -30,8 +30,11 @@ alter table merchants
     check (delivery_max_km is null or delivery_max_km > 0),
   -- The validation that makes "you cannot half-configure your way into quoting nothing" a
   -- database fact rather than a UI courtesy: distance mode REQUIRES an origin to route from.
+  -- `nullif(origin_place_id, '')`, not a bare `is not null`: an EMPTY STRING is not null and
+  -- would otherwise slip straight through, leaving a "distance" shop with no real origin to
+  -- route from — refused too.
   add constraint merchants_distance_requires_origin
-    check (shipping_mode <> 'distance' or origin_place_id is not null);
+    check (shipping_mode <> 'distance' or nullif(origin_place_id, '') is not null);
 
 comment on column merchants.shipping_mode is
   'Which shipping policy is live: region (flat WM/EM rates) or distance (base + rate x km). The other policy''s configuration stays stored but dormant.';

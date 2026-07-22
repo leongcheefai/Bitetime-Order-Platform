@@ -25,6 +25,7 @@ import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
 import { resolveDistance, CACHE_TTL_MS } from './distance.js'
 import { liveDistanceDeps } from './distanceCache.js'
+import { quoteIpWindow, quoteMerchantWindow } from './quotaWindows.js'
 import { googlePlaceSuggest, googlePlaceDetail } from './maps.js'
 import { detectCountry } from './region.js'
 import { fetchBasePricing, createPricingCache, type PricingPayload } from './pricing.js'
@@ -683,20 +684,8 @@ app.post('/api/billing/portal', async (c) => {
 const signupIpWindow = createSlidingWindow({ limit: 10, windowMs: 60 * 60_000, now: () => Date.now() })
 const signupEmailWindow = createSlidingWindow({ limit: 3, windowMs: 60 * 60_000, now: () => Date.now() })
 
-// The quote endpoint SPENDS MONEY per cache miss (see docs/adr/0001), so it is bounded twice
-// over, and the two bounds guard different things:
-//
-//   * `quoteIpWindow` bounds REQUESTS by caller IP — cheap flood protection, applied to hits
-//     and misses alike.
-//   * `quoteMerchantWindow` bounds PROVIDER CALLS per shop per day — the runaway stop. It is
-//     checked only when the cache missed, because a cache hit costs nothing and must never eat
-//     a shop's ceiling.
-//
-// Both inherit the in-memory limiter's known weaknesses KNOWINGLY, exactly as customer signup
-// does: they reset on redeploy and stop protecting anything past one backend instance. Fixing
-// that is its own piece of work (#101 Out of Scope).
-const quoteIpWindow = createSlidingWindow({ limit: 60, windowMs: 60 * 60_000, now: () => Date.now() })
-const quoteMerchantWindow = createSlidingWindow({ limit: 500, windowMs: 24 * 60 * 60_000, now: () => Date.now() })
+// quoteIpWindow and quoteMerchantWindow moved to quotaWindows.ts — order intake shares
+// quoteMerchantWindow, see that module's header.
 
 // Bounds the Places proxy by caller IP. BOTH routes draw on this one bucket.
 //

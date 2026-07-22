@@ -3,8 +3,9 @@ import { priceOrder, voucherFromRow, shopRates, shopTax, shopDistance, routedKm,
 import type { PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax, ShopDistance } from '@bitetime/shared'
 import { sql, withTransaction } from './db.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
-import { resolveDistance, type DistanceDeps } from './distance.js'
+import { resolveDistance, CACHE_TTL_MS, type DistanceDeps } from './distance.js'
 import { liveDistanceDeps } from './distanceCache.js'
+import { quoteMerchantWindow } from './quotaWindows.js'
 
 /**
  * The machine-readable reasons an order can be refused. The storefront reacts to these, so
@@ -41,7 +42,19 @@ export type OrderErrorCode =
    * retrying.
    */
   | 'delivery_out_of_range'
-  /** The routing lookup itself did not happen. Retryable — and the ONLY distance failure that is. */
+  /**
+   * The routing lookup itself did not happen. Retryable in the ordinary case — a provider
+   * outage, a shop's daily Google-spend ceiling — and the ONLY distance failure that is.
+   *
+   * ONE EXCEPTION: a distance-priced shop whose configuration cannot price (`!policy.usable`)
+   * also raises this code, and no amount of retrying fixes a merchant's own dormant/incomplete
+   * setup — that would be the permanent-refusal-loop shape the ADR rejects elsewhere. This case
+   * is now blocked at the schema level (`merchants_distance_requires_origin`, tightened to
+   * refuse an empty-string origin too), so a shop that reaches intake in `distance` mode is
+   * expected to always have a usable origin — but the check above still throws this same code
+   * as the honest answer, since a config that predates the constraint or fails validation for
+   * some other reason must not silently fall back to a dormant region rate.
+   */
   | 'distance_lookup_failed'
 
 /** A refusal the customer can act on, as opposed to a bug. Thrown inside the transaction. */
@@ -333,11 +346,16 @@ async function resolveRoutedMetres(
   if (input.mode !== 'delivery') return null
 
   const rows = await sql<Record<string, unknown>[]>`
-    select shipping_mode, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
+    select status::text, shipping_mode, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
     from merchants where id = ${input.merchantId}
   `
-  // A missing shop is the transaction's refusal to make (`merchant_not_found`), not ours.
-  if (!rows[0]) return null
+  // The shop's status is checked HERE as well as inside the transaction, and the duplication is
+  // deliberate: the in-transaction check is the authority on whether an order may commit, but it
+  // runs too late to stop the Google lookup below from being paid for. A suspended shop must not
+  // be a way to spend the platform's money.
+  if (!rows[0]) throw new OrderError('merchant_not_found')
+  if ((rows[0].status as string) !== 'active') throw new OrderError('merchant_inactive')
+
   const policy = shopDistance(rows[0])
   if (policy.mode !== 'distance') return null
   // A distance shop that cannot price does not fall back to its dormant region rate — that
@@ -347,11 +365,32 @@ async function resolveRoutedMetres(
   const destination = (input.destinationPlaceId ?? '').trim()
   if (!destination) throw new OrderError('delivery_place_required')
 
-  const outcome = await resolveDistance(
-    deps,
-    { originPlaceId: policy.originPlaceId!, destinationPlaceId: destination },
-    now,
-  )
+  const notBefore = new Date(now.getTime() - CACHE_TTL_MS)
+  // A cache read that throws degrades to a MISS, exactly as `resolveDistance` does with its own
+  // read — and exactly as the quote endpoint's own peek does. This peek exists only to decide
+  // whether the lookup below should cost the shop a slot of its daily ceiling, so a database
+  // blip must not turn a resolvable delivery into a 500.
+  let cached: number | null = null
+  try {
+    cached = await deps.readCache(policy.originPlaceId!, destination, notBefore)
+  } catch (err) {
+    console.error('Distance cache peek failed:', err instanceof Error ? err.message : String(err))
+  }
+
+  // A cache HIT costs nothing and must never consume a slot of the shop's daily ceiling; a MISS
+  // is a real Google call and must. Identical rule to the quote endpoint, deliberately sharing
+  // the SAME bucket — it is one bill for one shop, and intake is a second spender on it.
+  if (cached === null && !quoteMerchantWindow.allow(input.merchantId)) {
+    throw new OrderError('distance_lookup_failed')
+  }
+
+  const outcome = cached !== null
+    ? ({ status: 'ok', metres: cached } as const)
+    : await resolveDistance(
+        deps,
+        { originPlaceId: policy.originPlaceId!, destinationPlaceId: destination },
+        now,
+      )
   // No route and beyond-the-maximum are ONE refusal: same fact, same message.
   if (outcome.status === 'no_route') throw new OrderError('delivery_out_of_range')
   if (outcome.status === 'failed') throw new OrderError('distance_lookup_failed')
@@ -378,25 +417,36 @@ interface OrderableMerchant {
  * different layer. (#65 used the term for this check; the glossary wins.)
  */
 async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: string): Promise<OrderableMerchant> {
-  const rows = await tx<Record<string, unknown>[]>`
+  // The intersection keeps the open-key access `shopDistance`/`shopTax` need (they take
+  // `unknown` and read whatever columns they want off it) while restoring the compiler's
+  // protection on the fields THIS function reads by name — `Record<string, unknown>` alone let
+  // `merchant.order_prefx` (a typo) compile and yield `undefined` at runtime, on the function
+  // that derives the order prefix, currency, rates and tax.
+  type MerchantRow = Record<string, unknown> & {
+    order_prefix: string
+    status: string
+    currency: string | null
+    timezone: string | null
+  }
+  const rows = await tx<MerchantRow[]>`
     select order_prefix, status::text, shipping, currency, config, timezone, tax_enabled, tax_rate,
            shipping_mode, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
     from merchants where id = ${merchantId}
   `
   const merchant = rows[0]
   if (!merchant) throw new OrderError('merchant_not_found')
-  if ((merchant.status as string) !== 'active') throw new OrderError('merchant_inactive')
+  if (merchant.status !== 'active') throw new OrderError('merchant_inactive')
   return {
-    order_prefix: merchant.order_prefix as string,
+    order_prefix: merchant.order_prefix,
     // shopRates, not a local fallback: the storefront quotes from the same function, and the
     // penalty for the two disagreeing is now a REFUSAL (`price_changed`), not a rounding gap.
     rates: shopRates(merchant.shipping),
-    currency: (merchant.currency as string | null) ?? 'MYR',
+    currency: merchant.currency ?? 'MYR',
     // Same argument as shopRates one line up: the picker is BUILT from this function, so intake
     // must judge with it. A second reading of the bag here is a second rule, and the customer
     // meets it as a refusal of a date the picker just offered them.
     fulfilment: fulfilmentConfig(merchant.config),
-    timezone: (merchant.timezone as string | null) ?? DEFAULT_TIMEZONE,
+    timezone: merchant.timezone ?? DEFAULT_TIMEZONE,
     // shopTax, for the same reason as shopRates above: the storefront quotes from this exact
     // function, and the penalty for the two disagreeing is a REFUSAL, not a rounding gap.
     // postgres.js hands `tax_rate` back as a string; the mapper is what knows that.
