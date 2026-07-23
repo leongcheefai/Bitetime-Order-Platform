@@ -182,6 +182,19 @@ function ShippingTab({ onDirtyChange }: TabProps) {
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
     try {
+      // Express requires an origin to route from. Checked here, in the merchant's language, while
+      // they are still looking at the form — the backend's `merchants_express_requires_origin`
+      // CHECK and its PATCH validation are the backstop, but a bare 400 after Save is a worse way
+      // to learn the origin was mandatory than a message that names the rule.
+      if (fields.expressEnabled && !fields.originPlaceId) {
+        toast.error(t(
+          'Set your delivery origin before switching on express delivery.',
+          '请先设置配送起点，才能开启快速配送。'
+        ))
+        setBusy(false)
+        return
+      }
+
       // Guard against a 0 maximum distance: a blank field is "deliver anywhere with a road", but 0
       // is "deliver nowhere". The backend refuses it, but this layer can show why in the merchant's
       // language while they are still looking at the field, rather than a raw developer error string.
@@ -340,19 +353,23 @@ function ShippingTab({ onDirtyChange }: TabProps) {
           <label className="flex items-start gap-2 text-[14px] text-ink">
             <input type="checkbox" className="mt-1"
               checked={fields.expressEnabled}
-              disabled={onlyMethod === 'express' || !fields.originPlaceId}
+              // Tickable regardless of the origin: the merchant declares the INTENT first, and the
+              // origin becomes mandatory because of it — not the other way round. `save()` blocks
+              // until an origin is set (and the DB CHECK is the backstop). Only the last remaining
+              // method is locked on.
+              disabled={onlyMethod === 'express'}
               onChange={e => setFields(f => ({ ...f, expressEnabled: e.target.checked }))} />
             <span>
               {t('Express delivery — a base fee plus a rate for every kilometre your rider drives.',
                  '快速配送 — 基本运费加上每公里费率。')}
             </span>
           </label>
-          {!fields.originPlaceId && (
-            /* Says WHY the option is disabled. Without an origin there is nowhere to measure
-               from, and a shop that switched it on anyway would quote nothing at all. */
-            <p className="text-[12px] text-rose-muted leading-[1.5]">
-              {t('Set your delivery origin below before you can offer express delivery.',
-                 '请先在下方设置配送起点，才能提供快速配送。')}
+          {fields.expressEnabled && !fields.originPlaceId && (
+            /* Express is on but has nowhere to measure from. The origin is mandatory the moment
+               this is ticked; the save is blocked until one is picked below. */
+            <p className="text-[12px] text-oxblood leading-[1.5]">
+              {t('Express delivery needs a delivery origin. Pick one below to save.',
+                 '快速配送需要一个配送起点，请在下方选择后保存。')}
             </p>
           )}
           <p className="text-[12px] text-rose-muted leading-[1.5]">
