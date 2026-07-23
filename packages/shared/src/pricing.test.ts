@@ -537,7 +537,7 @@ describe('shopTax', () => {
 })
 
 const DISTANCE_ROW = {
-  shipping_mode: 'distance',
+  express_enabled: true,
   delivery_base_fee: 6,
   delivery_rate_per_km: 1,
   delivery_max_km: null,
@@ -547,7 +547,7 @@ const DISTANCE_ROW = {
 describe('shopDistance', () => {
   it('maps a distance-mode row and reports it usable', () => {
     expect(shopDistance(DISTANCE_ROW)).toEqual({
-      mode: 'distance', base: 6, ratePerKm: 1, maxKm: null,
+      enabled: true, mode: 'distance', base: 6, ratePerKm: 1, maxKm: null,
       originPlaceId: 'ChIJorigin', usable: true,
     })
   })
@@ -557,7 +557,7 @@ describe('shopDistance', () => {
     // number. The browser quotes from one and the backend charges from the other; mapping only
     // one side is a `price_changed` refusal on every distance order at that shop.
     expect(shopDistance({
-      shipping_mode: 'distance',
+      express_enabled: true,
       delivery_base_fee: '6.00',
       delivery_rate_per_km: '1.00',
       delivery_max_km: '20.0',
@@ -565,14 +565,15 @@ describe('shopDistance', () => {
     })).toEqual(shopDistance({ ...DISTANCE_ROW, delivery_max_km: 20 }))
   })
 
-  it('reads a region-mode row as region and never as a broken distance shop', () => {
-    const p = shopDistance({ shipping_mode: 'region', delivery_base_fee: 6, origin_place_id: null })
-    expect(p.mode).toBe('region')
+  it('is dormant when express is off, whatever the rates say', () => {
+    const p = shopDistance({ express_enabled: false, delivery_base_fee: 6, origin_place_id: 'x' })
+    expect(p.enabled).toBe(false)
+    expect(p.usable).toBe(false)
   })
 
-  it('treats a missing shipping_mode as region — every shop that predates this feature', () => {
-    expect(shopDistance({}).mode).toBe('region')
-    expect(shopDistance(null).mode).toBe('region')
+  it('treats a missing express_enabled as off — every shop that predates this feature', () => {
+    expect(shopDistance({}).enabled).toBe(false)
+    expect(shopDistance(null).enabled).toBe(false)
   })
 
   it('is UNUSABLE, never zero-rated, when a distance shop has no origin', () => {
@@ -775,7 +776,7 @@ describe('region pricing is untouched', () => {
       tax: { enabled: true, rate: 6 },
     }
     const before = priceOrder(base)
-    const after = priceOrder({ ...base, distance: shopDistance({ shipping_mode: 'region' }), routedMetres: 25216 })
+    const after = priceOrder({ ...base, distance: shopDistance({ express_enabled: false }), routedMetres: 25216 })
     expect(after.shipping).toBe(before.shipping)
     expect(after.subtotal).toBe(before.subtotal)
     expect(after.discount).toBe(before.discount)

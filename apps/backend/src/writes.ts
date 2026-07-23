@@ -19,7 +19,8 @@ const MERCHANT_CONFIG_FIELDS = [
   // Distance pricing (#101). `pickup_address` deliberately stays a SEPARATE, free-text field:
   // it is the merchant's own directions for pickup customers and is never routed, so an
   // autocomplete result must never overwrite it.
-  'shipping_mode', 'delivery_base_fee', 'delivery_rate_per_km', 'delivery_max_km',
+  'pickup_enabled', 'delivery_enabled', 'express_enabled',
+  'delivery_base_fee', 'delivery_rate_per_km', 'delivery_max_km',
   'origin_place_id', 'origin_lat', 'origin_lng', 'origin_address',
 ] as const
 
@@ -75,8 +76,12 @@ export function pickMerchantConfig(body: any): PickResult {
     return { ok: false, error: 'tax_enabled must be a boolean' }
   }
 
-  if (out.shipping_mode !== undefined && out.shipping_mode !== 'region' && out.shipping_mode !== 'distance') {
-    return { ok: false, error: "shipping_mode must be 'region' or 'distance'" }
+  // Real booleans, not truthiness: these columns are `boolean not null`, and a coerced 'false'
+  // or 0 would switch a method on that the merchant switched off.
+  for (const key of ['pickup_enabled', 'delivery_enabled', 'express_enabled'] as const) {
+    if (out[key] !== undefined && typeof out[key] !== 'boolean') {
+      return { ok: false, error: `${key} must be a boolean` }
+    }
   }
 
   // A negative fee is a delivery that PAYS the customer. Refused at the door, where the merchant

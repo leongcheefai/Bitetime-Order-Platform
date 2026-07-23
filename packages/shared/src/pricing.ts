@@ -185,7 +185,12 @@ export function shopTax(row: unknown): ShopTax {
 }
 
 export interface ShopDistance {
-  /** Which shipping policy is LIVE. The other policy's configuration stays stored but dormant. */
+  /** Express delivery is switched on for this shop. Its configuration stays stored when off. */
+  enabled: boolean
+  /**
+   * @deprecated Derived from `enabled` purely so #103's cascade can land in small commits.
+   * Delete this field, and its last readers, in Task 10.
+   */
   mode: 'region' | 'distance'
   base: number
   ratePerKm: number
@@ -193,9 +198,10 @@ export interface ShopDistance {
   maxKm: number | null
   originPlaceId: string | null
   /**
-   * Distance mode AND a configuration complete enough to price with. Meaningless in region mode.
+   * Express enabled AND a configuration complete enough to price with. Meaningless when express
+   * is off.
    *
-   * FALSE IS A REFUSAL, NOT A FALLBACK. A distance-mode shop whose rate is missing, negative or
+   * FALSE IS A REFUSAL, NOT A FALLBACK. An express shop whose rate is missing, negative or
    * unparseable does not quote 0 shipping and does not fall back to its dormant region rate —
    * that would charge by a formula the merchant switched off, under a receipt line that cannot
    * honestly name a distance. It quotes nothing and the caller refuses the delivery.
@@ -217,21 +223,22 @@ export interface ShopDistance {
  */
 export function shopDistance(row: unknown): ShopDistance {
   const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>
-  const mode = r.shipping_mode === 'distance' ? 'distance' : 'region'
+  const enabled = r.express_enabled === true
   const base = num(r.delivery_base_fee)
   const ratePerKm = num(r.delivery_rate_per_km)
   const maxKmRaw = num(r.delivery_max_km)
   const originPlaceId = typeof r.origin_place_id === 'string' && r.origin_place_id ? r.origin_place_id : null
 
   const usable =
-    mode === 'distance' &&
+    enabled &&
     originPlaceId !== null &&
     base !== null && base >= 0 &&
     ratePerKm !== null && ratePerKm >= 0 &&
     (r.delivery_max_km == null || (maxKmRaw !== null && maxKmRaw > 0))
 
   return {
-    mode,
+    enabled,
+    mode: enabled ? 'distance' : 'region',
     base: base ?? 0,
     ratePerKm: ratePerKm ?? 0,
     maxKm: maxKmRaw !== null && maxKmRaw > 0 ? maxKmRaw : null,

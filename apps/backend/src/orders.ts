@@ -365,7 +365,7 @@ async function resolveRoutedMetres(
   if (input.mode !== 'delivery') return null
 
   const rows = await sql<Record<string, unknown>[]>`
-    select id::text, status::text, shipping_mode, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
+    select id::text, status::text, express_enabled, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
     from merchants where id = ${input.merchantId}
   `
   // The shop's status is checked HERE as well as inside the transaction, and the duplication is
@@ -468,7 +468,8 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
   }
   const rows = await tx<MerchantRow[]>`
     select order_prefix, status::text, shipping, currency, config, timezone, tax_enabled, tax_rate,
-           shipping_mode, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
+           pickup_enabled, delivery_enabled, express_enabled,
+           delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
     from merchants where id = ${merchantId}
   `
   const merchant = rows[0]

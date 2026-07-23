@@ -49,15 +49,15 @@ beforeAll(async () => {
   const suspendedOwnerId = (await suspendedOwner.auth.getUser()).data.user!.id
   distanceId = await seedMerchant({
     slug: 'q-distance', owner_id: distanceOwnerId, order_prefix: 'QD',
-    shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+    express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
     delivery_max_km: 30, origin_place_id: ORIGIN,
   })
   regionId = await seedMerchant({ slug: 'q-region', owner_id: regionOwnerId, order_prefix: 'QR' })
   suspendedId = await seedMerchant({
     slug: 'q-suspended', owner_id: suspendedOwnerId, order_prefix: 'QS', status: 'suspended',
-    // A suspended shop still needs `origin_place_id` set, or the distance-mode CHECK constraint
-    // rejects the row (shipping_mode <> 'distance' or origin_place_id is not null).
-    shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+    // A suspended shop still needs `origin_place_id` set, or the express CHECK constraint
+    // rejects the row (not express_enabled or origin_place_id is not null).
+    express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
     delivery_max_km: 30, origin_place_id: ORIGIN,
   })
   await seedQuote(DEST, 25216)

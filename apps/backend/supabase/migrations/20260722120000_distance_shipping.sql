@@ -5,10 +5,12 @@
 -- stops a half-configured distance shop from ever pricing an order, and jsonb cannot have one.
 -- Same argument as merchants.tax_enabled/tax_rate (20260720140000).
 --
--- Every default keeps an existing shop EXACTLY where it is: shipping_mode 'region'.
+-- Every default keeps an existing shop EXACTLY where it is: pickup and delivery on, express off.
 
 alter table merchants
-  add column shipping_mode        text          not null default 'region',
+  add column pickup_enabled       boolean       not null default true,
+  add column delivery_enabled     boolean       not null default true,
+  add column express_enabled      boolean       not null default false,
   add column delivery_base_fee    numeric(10,2) not null default 0,
   add column delivery_rate_per_km numeric(10,2) not null default 0,
   -- null = no limit. NOT "0 = no limit": 0 would be an honest "deliver nowhere" and the two
@@ -20,8 +22,10 @@ alter table merchants
   add column origin_address       text;
 
 alter table merchants
-  add constraint merchants_shipping_mode_valid
-    check (shipping_mode in ('region', 'distance')),
+  -- The rule #103 rests on, so it is a database fact and not a UI courtesy: a shop that offers
+  -- nothing has a storefront no customer can order from, and no save may produce one.
+  add constraint merchants_one_fulfilment_method
+    check (pickup_enabled or delivery_enabled or express_enabled),
   add constraint merchants_delivery_base_fee_nonneg
     check (delivery_base_fee >= 0),
   add constraint merchants_delivery_rate_nonneg
@@ -29,17 +33,19 @@ alter table merchants
   add constraint merchants_delivery_max_km_positive
     check (delivery_max_km is null or delivery_max_km > 0),
   -- The validation that makes "you cannot half-configure your way into quoting nothing" a
-  -- database fact rather than a UI courtesy: distance mode REQUIRES an origin to route from.
+  -- database fact rather than a UI courtesy: express REQUIRES an origin to route from.
   -- `nullif(origin_place_id, '')`, not a bare `is not null`: an EMPTY STRING is not null and
-  -- would otherwise slip straight through, leaving a "distance" shop with no real origin to
+  -- would otherwise slip straight through, leaving an express shop with no real origin to
   -- route from — refused too.
-  add constraint merchants_distance_requires_origin
-    check (shipping_mode <> 'distance' or nullif(origin_place_id, '') is not null);
+  add constraint merchants_express_requires_origin
+    check (not express_enabled or nullif(origin_place_id, '') is not null);
 
-comment on column merchants.shipping_mode is
-  'Which shipping policy is live: region (flat WM/EM rates) or distance (base + rate x km). The other policy''s configuration stays stored but dormant.';
+comment on column merchants.delivery_enabled is
+  'Offers flat region-rate delivery (WM/EM). Independent of express_enabled — a shop may offer both.';
+comment on column merchants.express_enabled is
+  'Offers distance-priced express delivery (base + rate x km). Requires an origin to route from.';
 comment on column merchants.delivery_max_km is
-  'Routed km beyond which this shop does not deliver. NULL = no limit.';
+  'Routed km beyond which this shop does not deliver by express. NULL = no limit.';
 comment on column merchants.origin_place_id is
   'The delivery origin''s Google place id — the routing origin AND the distance cache key. A merchant who moves changes this and so invalidates their own cached distances.';
 

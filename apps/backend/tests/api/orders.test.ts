@@ -335,7 +335,7 @@ describe('POST /api/orders', () => {
       const ownerId = (await owner.auth.getUser()).data.user!.id
       suspendedDistanceId = await seedMerchant({
         slug: 'ord-distance-suspended', owner_id: ownerId, order_prefix: 'DS', status: 'suspended',
-        shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+        express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
         delivery_max_km: 30, origin_place_id: 'ChIJord-susp-origin',
       })
       suspendedDistanceProductId = await seedProduct({ merchant_id: suspendedDistanceId, price: 13 })
@@ -1266,7 +1266,7 @@ describe('POST /api/orders', () => {
       const ownerId = (await owner.auth.getUser()).data.user!.id
       distanceId = await seedMerchant({
         slug: 'ord-distance', owner_id: ownerId, order_prefix: 'OD',
-        shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+        express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
         delivery_max_km: 30, origin_place_id: ORIGIN,
       })
       distanceProductId = await seedProduct({ merchant_id: distanceId, price: 13 })
@@ -1396,7 +1396,7 @@ describe('POST /api/orders', () => {
       // not claim to. The two `distance_lookup_failed` throws that DO run inside the
       // transaction (the pre/post shipping-policy mismatch, and the unreachable
       // `shippingPending` guard — both in orders.ts's `placeOrder`) are not exercised by this
-      // suite: the mismatch case needs the merchant's `shipping_mode` to change between the
+      // suite: the mismatch case needs the merchant's `express_enabled` to change between the
       // pre-transaction read (`resolveRoutedMetres`, non-transactional) and the in-transaction
       // read (`assertOrderableMerchant`) while the shop stays REGION-priced at the first read —
       // and `resolveRoutedMetres` returns before ever touching `deps` on that branch, so there
@@ -1482,7 +1482,7 @@ describe('POST /api/orders', () => {
 
         ceilHitId = await seedMerchant({
           slug: CEIL_HIT_SLUG, owner_id: hitOwnerId, order_prefix: 'CH',
-          shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+          express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
           delivery_max_km: 30, origin_place_id: CEIL_HIT_ORIGIN,
         })
         ceilHitProductId = await seedProduct({ merchant_id: ceilHitId, price: 13 })
@@ -1494,7 +1494,7 @@ describe('POST /api/orders', () => {
 
         ceilMissId = await seedMerchant({
           slug: CEIL_MISS_SLUG, owner_id: missOwnerId, order_prefix: 'CM',
-          shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+          express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
           delivery_max_km: 30, origin_place_id: CEIL_MISS_ORIGIN,
         })
         ceilMissProductId = await seedProduct({ merchant_id: ceilMissId, price: 13 })
@@ -1645,7 +1645,7 @@ describe('POST /api/orders', () => {
 
         ipHitId = await seedMerchant({
           slug: IP_HIT_SLUG, owner_id: hitOwnerId, order_prefix: 'IH',
-          shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+          express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
           delivery_max_km: 30, origin_place_id: IP_HIT_ORIGIN,
         })
         ipHitProductId = await seedProduct({ merchant_id: ipHitId, price: 13 })
@@ -1657,7 +1657,7 @@ describe('POST /api/orders', () => {
 
         ipMissId = await seedMerchant({
           slug: IP_MISS_SLUG, owner_id: missOwnerId, order_prefix: 'IM',
-          shipping_mode: 'distance', delivery_base_fee: 6, delivery_rate_per_km: 1,
+          express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
           delivery_max_km: 30, origin_place_id: IP_MISS_ORIGIN,
         })
         ipMissProductId = await seedProduct({ merchant_id: ipMissId, price: 13 })

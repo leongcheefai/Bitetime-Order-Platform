@@ -304,9 +304,9 @@ describe('PATCH /api/merchants/:id/slug', () => {
   })
 })
 
-// ── Distance shipping policy (#101 Task 9) ──────────────────────────────────────
+// ── Fulfilment methods (#103) ────────────────────────────────────────────────────
 // One shop, re-seeded before every test so each case starts from the column defaults
-// (shipping_mode 'region', no origin) regardless of what a prior case in this block saved.
+// (pickup + delivery on, express off, no origin) regardless of what a prior case saved.
 describe('PATCH /api/merchants/:id (shipping policy)', () => {
   let merchantId: string
   let ownerToken: string
@@ -326,7 +326,7 @@ describe('PATCH /api/merchants/:id (shipping policy)', () => {
   describe('shipping policy fields', () => {
     it('saves a complete distance policy', async () => {
       const res = await patchMerchant(merchantId, ownerToken, {
-        shipping_mode: 'distance',
+        express_enabled: true,
         delivery_base_fee: 6,
         delivery_rate_per_km: 1,
         delivery_max_km: 30,
@@ -364,52 +364,47 @@ describe('PATCH /api/merchants/:id (shipping policy)', () => {
       expect(res.status).toBe(200)
     })
 
-    it('refuses an unknown shipping mode', async () => {
-      const res = await patchMerchant(merchantId, ownerToken, { shipping_mode: 'carrier_pigeon' })
-      expect(res.status).toBe(400)
-    })
-
-    it('refuses switching to distance mode with no origin set', async () => {
+    it('refuses switching express on with no origin set', async () => {
       // Story 5: a merchant must not be able to half-configure their shop into quoting nothing.
-      await patchMerchant(merchantId, ownerToken, { origin_place_id: null, shipping_mode: 'region' })
-      const res = await patchMerchant(merchantId, ownerToken, { shipping_mode: 'distance' })
+      await patchMerchant(merchantId, ownerToken, { origin_place_id: null, express_enabled: false })
+      const res = await patchMerchant(merchantId, ownerToken, { express_enabled: true })
       expect(res.status).toBe(400)
     })
 
-    it('refuses switching to distance mode when the patch explicitly nulls the origin in the same save', async () => {
+    it('refuses switching express on when the patch explicitly nulls the origin in the same save', async () => {
       // The check must see the patch's own value, not just the row's stored origin. If a check
       // only reads the row's value and ignores the patch's explicit null, a rewritten code path
-      // like `patch.origin_place_id ?? row.origin` would wrongly allow switching to distance
+      // like `patch.origin_place_id ?? row.origin` would wrongly allow switching express on
       // with an explicit null. This test catches that regression: first give the shop a real
-      // origin, then try to null it and switch mode in the same save — the explicit null must win.
+      // origin, then try to null it and switch express on in the same save — the explicit null wins.
       const setupRes = await patchMerchant(merchantId, ownerToken, {
-        shipping_mode: 'region',
+        express_enabled: false,
         origin_place_id: 'ChIJorigin',
       })
       expect(setupRes.status).toBe(200)
       const res = await patchMerchant(merchantId, ownerToken, {
-        shipping_mode: 'distance',
+        express_enabled: true,
         origin_place_id: null,
       })
       expect(res.status).toBe(400)
     })
 
-    it('allows switching to distance mode using an origin saved in an EARLIER save, without resending it', async () => {
+    it('allows switching express on using an origin saved in an EARLIER save, without resending it', async () => {
       // The other half of "the check has to see the row's CURRENT origin as well as the
-      // patch's": a merchant who sets their origin in one save and flips the mode in a LATER
+      // patch's": a merchant who sets their origin in one save and flips express on in a LATER
       // save (never resending origin_place_id) must succeed — a check that only reads the
       // patch's own value, and never falls back to the row, would wrongly refuse this.
-      await patchMerchant(merchantId, ownerToken, { origin_place_id: 'ChIJorigin', shipping_mode: 'region' })
-      const res = await patchMerchant(merchantId, ownerToken, { shipping_mode: 'distance' })
+      await patchMerchant(merchantId, ownerToken, { origin_place_id: 'ChIJorigin', express_enabled: false })
+      const res = await patchMerchant(merchantId, ownerToken, { express_enabled: true })
       expect(res.status).toBe(200)
     })
 
-    it('does not block a distance-mode shop from saving unrelated fields', async () => {
-      // A merchant already on distance mode with an origin set must be able to save something
+    it('does not block an express shop from saving unrelated fields', async () => {
+      // A merchant already offering express with an origin set must be able to save something
       // that has nothing to do with shipping (e.g. a payment note) without tripping the origin
-      // check — it must only fire when the patch is actually TURNING ON distance mode.
+      // check — it must only fire when the patch is actually TURNING ON express.
       const setupRes = await patchMerchant(merchantId, ownerToken, {
-        shipping_mode: 'distance',
+        express_enabled: true,
         origin_place_id: 'ChIJorigin',
       })
       expect(setupRes.status).toBe(200)
