@@ -25,8 +25,10 @@ const MERCHANT_CONFIG_FIELDS = [
   'delivery_base_fee', 'delivery_rate_per_km', 'delivery_max_km',
   'origin_place_id', 'origin_lat', 'origin_lng', 'origin_address',
   // Onboarding checklist flags (#102). Booleans flipped by the merchant's own
-  // actions (saving Shipping; sharing the link) and the dismiss button.
+  // actions (saving Shipping; sharing the link), the dismiss button, and the
+  // one-time spotlight tour marking itself seen.
   'onboarding_shipping_set', 'onboarding_link_shared', 'onboarding_dismissed',
+  'onboarding_tour_seen',
 ] as const
 
 // `undefined` means "not being written" and passes through untouched; a present-but-invalid
@@ -86,6 +88,7 @@ export function pickMerchantConfig(body: any): PickResult {
   for (const key of [
     'pickup_enabled', 'delivery_enabled', 'express_enabled',
     'onboarding_shipping_set', 'onboarding_link_shared', 'onboarding_dismissed',
+    'onboarding_tour_seen',
   ] as const) {
     if (out[key] !== undefined && typeof out[key] !== 'boolean') {
       return { ok: false, error: `${key} must be a boolean` }

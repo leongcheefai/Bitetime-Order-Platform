@@ -49,6 +49,7 @@ export interface Merchant {
   onboarding_shipping_set?: boolean
   onboarding_link_shared?: boolean
   onboarding_dismissed?: boolean
+  onboarding_tour_seen?: boolean
   [key: string]: any
 }
 
