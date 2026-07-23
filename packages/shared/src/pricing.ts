@@ -62,19 +62,47 @@ export interface PriceBreakdown {
    *  Stored on the order and used to LABEL the line, because `tax` alone cannot say "6%". */
   taxRate: number
   total: number
+  /**
+   * TRUE when the mode is `express` and no fee could be derived — either no routed distance is
+   * known yet or the shop's distance configuration cannot price.
+   *
+   * `shipping` is 0 in that state and IS NOT A FEE. The storefront must say the fee is not yet
+   * calculated and block submission; the backend refuses before it ever prices in this state.
+   * Reading the 0 as a fee is precisely the invented number this feature must never produce.
+   */
+  shippingPending: boolean
 }
 
 export interface PriceInput {
   products: PricedProduct[]
   cart: Record<string, number>
-  mode: 'pickup' | 'delivery' | 'sameday'
+  /**
+   * Which method the customer chose. An ALLOWLIST, and it is a price rule: `mode` selects the
+   * shipping fee, so any unrecognised value prices shipping at 0.
+   *
+   * `delivery` is the flat region rate; `express` is distance-priced. Both may be offered by the
+   * same shop — see `shopMethods`.
+   */
+  mode: FulfilmentMethod
   state?: string | null
   rates: { WM: number; EM: number }
-  samedayFee?: number
   resolvedShipping?: number // caller-resolved flat fee; wins over region logic
   voucher?: PricedVoucher | null
   /** The shop's tax, mapped through `shopTax`. Absent means no tax. */
   tax?: ShopTax
+  /**
+   * The shop's shipping policy, mapped through `shopDistance`. Absent = region pricing, which is
+   * every shop today.
+   */
+  distance?: ShopDistance
+  /**
+   * The routed road distance for THIS delivery, in metres. NEVER read from a request body — it
+   * is resolved from the distance cache (see the backend's `resolveDistance`).
+   *
+   * `null`/absent on a distance-priced delivery is NOT zero shipping: the breakdown comes back
+   * with `shippingPending: true` and no fee, and the caller refuses rather than pricing.
+   */
+  routedMetres?: number | null
   extraLines?: PriceLine[]
   // NO promoSold input. The count is a column on the product row, and a second channel for it is
   // a second thing to diverge — the browser quotes and the backend charges from the same row.
@@ -89,10 +117,8 @@ export function shippingFee(
   mode: PriceInput['mode'],
   state: string | null | undefined,
   rates: { WM: number; EM: number },
-  samedayFee = 0,
 ): number {
   if (mode === 'delivery' && state) return rates[EM_STATES.includes(state) ? 'EM' : 'WM'] || 0
-  if (mode === 'sameday') return samedayFee
   return 0
 }
 
@@ -162,6 +188,138 @@ export function shopTax(row: unknown): ShopTax {
   return { enabled: r.tax_enabled === true, rate }
 }
 
+export interface ShopDistance {
+  /** Express delivery is switched on for this shop. Its configuration stays stored when off. */
+  enabled: boolean
+  base: number
+  ratePerKm: number
+  /** null = no limit. Never 0 — a 0 would be an honest "deliver nowhere". */
+  maxKm: number | null
+  originPlaceId: string | null
+  /**
+   * Express enabled AND a configuration complete enough to price with. Meaningless when express
+   * is off.
+   *
+   * FALSE IS A REFUSAL, NOT A FALLBACK. An express shop whose rate is missing, negative or
+   * unparseable does not quote 0 shipping and does not fall back to its dormant region rate —
+   * that would charge by a formula the merchant switched off, under a receipt line that cannot
+   * honestly name a distance. It quotes nothing and the caller refuses the delivery.
+   */
+  usable: boolean
+}
+
+/**
+ * A merchant row → the express policy `priceOrder` charges. The third of `shopRates`'
+ * and `shopTax`'s family, and it exists for the identical reason: the browser quotes and the
+ * backend charges, and a disagreement between them is a `price_changed` refusal for every
+ * order at that shop, not a rounding gap.
+ *
+ * `num()` is not defensiveness — postgres.js returns `numeric` as a STRING ('6.00') while
+ * PostgREST returns a number (6). These are `numeric` columns and inherit that trap exactly.
+ *
+ * The fallback direction is always toward REFUSAL (`usable: false`), never toward a number
+ * nobody chose. That is the same direction `shopTax` fails in, for the same reason.
+ */
+export function shopDistance(row: unknown): ShopDistance {
+  const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>
+  const enabled = r.express_enabled === true
+  const base = num(r.delivery_base_fee)
+  const ratePerKm = num(r.delivery_rate_per_km)
+  const maxKmRaw = num(r.delivery_max_km)
+  const originPlaceId = typeof r.origin_place_id === 'string' && r.origin_place_id ? r.origin_place_id : null
+
+  const usable =
+    enabled &&
+    originPlaceId !== null &&
+    base !== null && base >= 0 &&
+    ratePerKm !== null && ratePerKm >= 0 &&
+    (r.delivery_max_km == null || (maxKmRaw !== null && maxKmRaw > 0))
+
+  return {
+    enabled,
+    base: base ?? 0,
+    ratePerKm: ratePerKm ?? 0,
+    maxKm: maxKmRaw !== null && maxKmRaw > 0 ? maxKmRaw : null,
+    originPlaceId,
+    usable,
+  }
+}
+
+/**
+ * Routed metres → the kilometres the fee is charged on, rounded to ONE decimal.
+ *
+ * THE ROUNDING HAPPENS HERE, BEFORE THE RATE MULTIPLIES IT, and that order is part of the
+ * customer-facing contract, not cosmetics: the receipt line reads `Delivery Fee (25.2 km)`, so
+ * the km on the line must be the km that produced the money. Rounding afterwards prints 25.2 km
+ * beside a fee derived from 25.216, and a line that does not reconcile on a calculator is a
+ * support ticket.
+ */
+export function routedKm(metres: number): number {
+  return parseFloat((metres / 1000).toFixed(1))
+}
+
+/** `base + rate × km`, rounded to money. `km` must already have been through `routedKm`. */
+export function distanceFee(policy: ShopDistance, km: number): number {
+  return round2(policy.base + policy.ratePerKm * km)
+}
+
+/** Beyond the shop's maximum? Inclusive at the cap — exactly `maxKm` still delivers. */
+export function exceedsMaxKm(policy: ShopDistance, km: number): boolean {
+  return policy.maxKm !== null && km > policy.maxKm
+}
+
+/** The three things a customer can choose. A closed set: `mode` selects the shipping fee. */
+export type FulfilmentMethod = 'pickup' | 'delivery' | 'express'
+
+/** Precedence order, and the order the storefront renders them in. */
+export const FULFILMENT_METHODS: readonly FulfilmentMethod[] = ['pickup', 'delivery', 'express']
+
+export interface ShopMethods {
+  pickup: boolean
+  /** Flat region rate (WM/EM). */
+  delivery: boolean
+  /** Distance-priced: `base + rate × routed km`. Read the rates through `shopDistance`. */
+  express: boolean
+}
+
+/**
+ * A merchant row → the methods this shop offers. The fourth of `shopRates`', `shopTax`'s and
+ * `shopDistance`'s family, and it exists for the identical reason: the storefront decides which
+ * buttons to render from it and the backend refuses an unoffered method from it, and the two
+ * disagreeing is a refused checkout, not a cosmetic gap.
+ *
+ * A NON-BOOLEAN reads as absent, so it takes that column's own default. Both drivers hand these
+ * columns back as real booleans, so anything else is a fixture or a bug — and coercing `'false'`
+ * or `0` is how a shop starts offering a method its merchant switched off.
+ *
+ * ALL THREE FALSE IS RETURNED AS-IS. It is not repaired into pickup: a shop that offers nothing
+ * takes no order, and the callers refuse. That is the same direction `ShopDistance.usable` fails
+ * in, for the same reason. `merchants_one_fulfilment_method` makes it unconstructible anyway.
+ */
+export function shopMethods(row: unknown): ShopMethods {
+  const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>
+  const flag = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback)
+  return {
+    pickup: flag(r.pickup_enabled, true),
+    delivery: flag(r.delivery_enabled, true),
+    express: flag(r.express_enabled, false),
+  }
+}
+
+/** Does this shop offer the method the customer asked for? Any other string is not a method. */
+export function offersMethod(methods: ShopMethods, mode: string): boolean {
+  return (FULFILMENT_METHODS as readonly string[]).includes(mode)
+    && methods[mode as FulfilmentMethod]
+}
+
+/**
+ * The method a storefront lands on. `null` when the shop offers none — which is a REFUSAL to
+ * take an order, never a reason to invent pickup.
+ */
+export function firstOfferedMethod(methods: ShopMethods): FulfilmentMethod | null {
+  return FULFILMENT_METHODS.find(m => methods[m]) ?? null
+}
+
 export function priceOrder(input: PriceInput): PriceBreakdown {
   const now = input.now ?? new Date()
 
@@ -196,7 +354,30 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
   if (input.extraLines) lines.push(...input.extraLines)
 
   const subtotal = round2(lines.reduce((s, l) => s + l.lineTotal, 0))
-  const shipping = input.resolvedShipping ?? shippingFee(input.mode, input.state, input.rates, input.samedayFee)
+
+  // `resolvedShipping` still wins, and it is DELIBERATELY not the channel distance pricing uses:
+  // that override exists so the storefront can show a region placeholder before a state is known,
+  // and routing a real charge through it would put the fee formula back in the callers — the one
+  // thing this module exists to prevent.
+  // The fee rule follows the METHOD the customer chose, not a policy on the shop: one shop can
+  // offer flat-rate `delivery` and distance-priced `express` side by side (#103).
+  const distancePriced = input.mode === 'express'
+  const canPriceDistance =
+    distancePriced && input.distance!.usable &&
+    // `>= 0`, not merely finite: a NEGATIVE distance would price the delivery DOWNWARDS — a
+    // reduced fee derived from a number nobody chose, which is the exact failure direction this
+    // module refuses in. Unreachable today (metres come from the distance cache, whose column is
+    // `check (metres >= 0)`, never from a request body) and guarded anyway, because the fee is
+    // money and the guard costs nothing.
+    input.routedMetres != null && Number.isFinite(input.routedMetres) && input.routedMetres >= 0
+  const shippingPending = distancePriced && !canPriceDistance
+  const shipping = input.resolvedShipping ?? (
+    canPriceDistance
+      ? distanceFee(input.distance!, routedKm(input.routedMetres as number))
+      : shippingPending
+        ? 0
+        : shippingFee(input.mode, input.state, input.rates)
+  )
 
   const beforeDiscount = subtotal + shipping
   const discount = voucherDiscount(input.voucher, beforeDiscount)
@@ -216,7 +397,7 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
 
   const total = round2(beforeDiscount - discount + tax)
 
-  return { lines, subtotal, shipping, discount, tax, taxRate, total }
+  return { lines, subtotal, shipping, discount, tax, taxRate, total, shippingPending }
 }
 
 export type VoucherErrorCode =

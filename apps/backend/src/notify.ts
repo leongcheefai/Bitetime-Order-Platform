@@ -37,9 +37,24 @@ export function formatMoney(amount: number | null | undefined, code?: string | n
 export function formatAddress(addr: unknown): string {
   if (!addr) return ''
   if (typeof addr === 'string') return addr
-  const a = addr as { line1?: string; postcode?: string; city?: string; state?: string }
+  const a = addr as { line1?: string; unit?: string; postcode?: string; city?: string; state?: string; place_id?: string }
+  // A `place_id` marks `line1` as Google's OWN formatted address string, which already contains
+  // the postcode, city and state — appending them again printed every distance order's address
+  // twice in the Telegram message (#101 review, Finding 3). Mirrors the frontend twin exactly.
+  if (a.place_id) return [a.unit, a.line1].filter(Boolean).join(', ')
   const cityLine = [a.postcode, a.city].filter(Boolean).join(' ')
-  return [a.line1, cityLine, a.state].filter(Boolean).join(', ')
+  // The unit/floor/landmark rides in front of the street line, where a rider reads it first. It
+  // is never routed and never moved the fee — it exists so the drop can actually be completed.
+  return [a.unit, a.line1, cityLine, a.state].filter(Boolean).join(', ')
+}
+
+// The merchant-facing name for each method. English only, and deliberately a local map rather
+// than an import: this file already keeps its own `formatMoney` twin for the same reason —
+// Telegram is the backend's own surface and the frontend's translator does not reach it.
+const MODE_LABELS: Record<string, string> = {
+  pickup: 'Pickup',
+  delivery: 'Delivery',
+  express: 'Express delivery',
 }
 
 // Pure: render the Telegram message from an order row, in the order's own
@@ -57,13 +72,16 @@ export function buildOrderMessage(order: any, merchantName?: string): string {
   msg += `*Order No.:* ${order.order_number}\n`
   msg += `*Name:* ${order.customer_name ?? ''}\n`
   if (order.customer_wa) msg += `*WhatsApp:* ${order.customer_wa}\n`
-  if (order.mode) msg += `*Mode:* ${order.mode}\n`
+  if (order.mode) msg += `*Mode:* ${MODE_LABELS[order.mode as string] ?? order.mode}\n`
   // The merchant reading this on their phone is the person scheduling around it, so it sits
   // with the mode rather than down by the totals. Omitted rather than blanked for rows written
   // before #91 — `orders.fulfil_date` is null for every one of them, and a `*Date:* ` with
   // nothing after it reads as data we lost.
   if (order.fulfil_date) msg += `*Date:* ${order.fulfil_date}\n`
   if (order.address) msg += `*Address:* ${formatAddress(order.address)}\n`
+  // Distance-priced orders only; a region-priced order has no distance and must not print an
+  // empty label. `delivery_distance_km` is null for every order placed before #101.
+  if (order.delivery_distance_km != null) msg += `*Distance:* ${Number(order.delivery_distance_km).toFixed(1)} km\n`
   msg += `\n*Items:*\n${lines}\n`
   if (order.shipping_fee) msg += `*Shipping:* ${formatMoney(order.shipping_fee, cur)}\n`
   msg += `\n*Total: ${formatMoney(order.total ?? 0, cur)}*`

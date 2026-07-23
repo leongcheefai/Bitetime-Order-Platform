@@ -8,6 +8,7 @@ import { courierName, trackingUrl } from '../couriers'
 import { formatMoney } from '../currency'
 import { formatOrderDate, formatCalendarDate } from '../orderDate'
 import { formatTaxRate } from '../receipt'
+import { fulfilmentLabel, feeLineLabel } from '../fulfilmentLabel'
 import { cn } from '@/lib/utils'
 import AuthPanel from './AuthPanel'
 import MoneyLine from './MoneyLine'
@@ -206,7 +207,17 @@ export default function OrderHistory() {
                           up to the total below them — a receipt that doesn't reconcile is worse
                           than one that shows only a total. */}
                       {shipping > 0 && (
-                        <MoneyLine label={t('Delivery fee', '送货费')} value={formatMoney(shipping, currency)} />
+                        // The STORED distance, not a re-derivation: a later rate change must
+                        // never repaint an old order. Null (region-priced, or placed before
+                        // #101) prints the plain label — never `0.0 km`.
+                        <MoneyLine
+                          label={feeLineLabel(
+                            o.mode,
+                            o.delivery_distance_km != null ? Number(o.delivery_distance_km) : null,
+                            t,
+                          )}
+                          value={formatMoney(shipping, currency)}
+                        />
                       )}
                       {discount > 0 && (
                         <MoneyLine
@@ -222,7 +233,7 @@ export default function OrderHistory() {
                       )}
                       <div className="flex justify-between items-start gap-2 text-[14px] font-medium text-ink border-t border-rose-border mt-2 pt-2">
                         <span className="shrink-0">
-                          {o.mode === 'delivery' ? t('Delivery', '送货') : t('Pickup', '自取')}
+                          {fulfilmentLabel(o.mode, t)}
                         </span>
                         <span className="text-right">{formatMoney(o.total, currency)}</span>
                       </div>

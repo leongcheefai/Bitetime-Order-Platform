@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import {
   priceOrder, voucherError, voucherFromRow, shopRates, shopTax, DEFAULT_WM_RATE,
   promoClaims, productFromRow, promoState,
+  shopDistance, routedKm, distanceFee, exceedsMaxKm,
+  shopMethods, offersMethod, firstOfferedMethod,
 } from './pricing.js'
 import type { PricedProduct } from './pricing.js'
 
@@ -47,15 +49,6 @@ describe('priceOrder', () => {
     })
     expect(r.shipping).toBe(12)
     expect(r.total).toBe(22)
-  })
-
-  it('sameday uses the passed-in quote fee', () => {
-    const r = priceOrder({
-      products: [product('a', 10)], cart: { a: 1 },
-      mode: 'sameday', samedayFee: 15, rates: RATES, now: NOW,
-    })
-    expect(r.shipping).toBe(15)
-    expect(r.total).toBe(25)
   })
 
   it('resolvedShipping overrides region logic (storefront with no state)', () => {
@@ -531,5 +524,268 @@ describe('shopTax', () => {
 
   it('treats an enabled 0% as no tax', () => {
     expect(shopTax({ tax_enabled: true, tax_rate: 0 })).toEqual({ enabled: false, rate: 0 })
+  })
+})
+
+const DISTANCE_ROW = {
+  express_enabled: true,
+  delivery_base_fee: 6,
+  delivery_rate_per_km: 1,
+  delivery_max_km: null,
+  origin_place_id: 'ChIJorigin',
+}
+
+describe('shopDistance', () => {
+  it('maps a distance-mode row and reports it usable', () => {
+    expect(shopDistance(DISTANCE_ROW)).toEqual({
+      enabled: true, base: 6, ratePerKm: 1, maxKm: null,
+      originPlaceId: 'ChIJorigin', usable: true,
+    })
+  })
+
+  it('maps postgres.js strings identically to PostgREST numbers', () => {
+    // THE CROSS-DRIVER TRAP: postgres.js returns `numeric` as a STRING ('6.00'), PostgREST as a
+    // number. The browser quotes from one and the backend charges from the other; mapping only
+    // one side is a `price_changed` refusal on every distance order at that shop.
+    expect(shopDistance({
+      express_enabled: true,
+      delivery_base_fee: '6.00',
+      delivery_rate_per_km: '1.00',
+      delivery_max_km: '20.0',
+      origin_place_id: 'ChIJorigin',
+    })).toEqual(shopDistance({ ...DISTANCE_ROW, delivery_max_km: 20 }))
+  })
+
+  it('is dormant when express is off, whatever the rates say', () => {
+    const p = shopDistance({ express_enabled: false, delivery_base_fee: 6, origin_place_id: 'x' })
+    expect(p.enabled).toBe(false)
+    expect(p.usable).toBe(false)
+  })
+
+  it('treats a missing express_enabled as off — every shop that predates this feature', () => {
+    expect(shopDistance({}).enabled).toBe(false)
+    expect(shopDistance(null).enabled).toBe(false)
+  })
+
+  it('is UNUSABLE, never zero-rated, when a distance shop has no origin', () => {
+    expect(shopDistance({ ...DISTANCE_ROW, origin_place_id: null }).usable).toBe(false)
+  })
+
+  it('is UNUSABLE when a rate is unparseable or negative', () => {
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: null }).usable).toBe(false)
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: -1 }).usable).toBe(false)
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_base_fee: -0.5 }).usable).toBe(false)
+  })
+
+  it('accepts an honest zero base and an honest zero rate', () => {
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_base_fee: 0 }).usable).toBe(true)
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: 0 }).usable).toBe(true)
+  })
+
+  it('keeps a null maximum as "no limit" and rejects a non-positive one', () => {
+    expect(shopDistance(DISTANCE_ROW).maxKm).toBeNull()
+    expect(shopDistance({ ...DISTANCE_ROW, delivery_max_km: 0 }).usable).toBe(false)
+  })
+})
+
+describe('routedKm / distanceFee', () => {
+  const policy = shopDistance(DISTANCE_ROW)
+
+  it('reproduces the reference image exactly: 25216 m at 6.00 + 1.00/km is 25.2 km and 31.20', () => {
+    const km = routedKm(25216)
+    expect(km).toBe(25.2)
+    expect(distanceFee(policy, km)).toBe(31.2)
+  })
+
+  it('rounds the km BEFORE the rate multiplies it', () => {
+    // Rounding after would give 25.22 here, printed beside a line that says 25.2 km. A receipt
+    // line that does not reconcile on a calculator is a support ticket.
+    const pureRate = shopDistance({ ...DISTANCE_ROW, delivery_base_fee: 0 })
+    expect(distanceFee(pureRate, routedKm(25216))).toBe(25.2)
+  })
+
+  it('rounds the km half-up and half-down', () => {
+    // The real tie. 25.25 is exactly representable in binary, so `toFixed(1)` rounds it half-up
+    // deterministically rather than at the mercy of a float that is really 25.249999…
+    expect(routedKm(25250)).toBe(25.3)
+    expect(routedKm(25260)).toBe(25.3)
+    expect(routedKm(25240)).toBe(25.2)
+    expect(routedKm(0)).toBe(0)
+  })
+
+  it('prices a zero base as pure per-km and a zero rate as a flat base', () => {
+    expect(distanceFee(shopDistance({ ...DISTANCE_ROW, delivery_base_fee: 0, delivery_rate_per_km: 2 }), routedKm(3000))).toBe(6)
+    expect(distanceFee(shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: 0 }), routedKm(12345))).toBe(6)
+  })
+
+  it('reports a distance beyond the shop maximum, and never with a null maximum', () => {
+    const capped = shopDistance({ ...DISTANCE_ROW, delivery_max_km: 20 })
+    expect(exceedsMaxKm(capped, 20)).toBe(false)   // inclusive: exactly at the cap still delivers
+    expect(exceedsMaxKm(capped, 20.1)).toBe(true)
+    expect(exceedsMaxKm(shopDistance(DISTANCE_ROW), 999)).toBe(false)
+  })
+})
+
+describe('priceOrder — express', () => {
+  const distance = shopDistance(DISTANCE_ROW)   // base 6, rate 1/km in the fixture
+
+  it('prices express by distance: base + rate x rounded km', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'express', rates: RATES, now: NOW,
+      distance, routedMetres: 25216,
+    })
+    // routedKm rounds to 25.2 BEFORE the rate multiplies it.
+    expect(r.shipping).toBe(6 + 1 * 25.2)   // 31.2
+    expect(r.shippingPending).toBe(false)
+    expect(r.total).toBe(41.2)
+  })
+
+  it('leaves a plain delivery on the region rate at a shop that also offers express', () => {
+    // The whole point of #103: the fee rule follows the METHOD, not the shop. This shop offers
+    // express (DISTANCE_ROW), but a `delivery` order is priced by the flat region rate regardless.
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      distance, routedMetres: 25216,
+    })
+    expect(r.shipping).toBe(RATES.WM)
+    expect(r.shippingPending).toBe(false)
+  })
+
+  it('ignores the shop region rates entirely on an express order', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'express', rates: { WM: 8, EM: 999 }, now: NOW,
+      distance, routedMetres: 25216,
+    })
+    expect(r.shipping).toBe(31.2)
+  })
+
+  it('charges NOTHING and flags the fee pending when the distance is not known yet', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'express', rates: RATES, now: NOW,
+      distance, routedMetres: null,
+    })
+    expect(r.shipping).toBe(0)   // NOT a fee — see PriceBreakdown.shippingPending
+    expect(r.shippingPending).toBe(true)
+  })
+
+  it('flags pending — never a fee — when express is priced by an unusable configuration', () => {
+    const broken = shopDistance({ ...DISTANCE_ROW, origin_place_id: null })
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'express', rates: RATES, now: NOW,
+      distance: broken, routedMetres: 25216,
+    })
+    expect(r.shipping).toBe(0)
+    expect(r.shippingPending).toBe(true)
+  })
+
+  it('charges no shipping on a pickup at an express shop, and never flags it pending', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'pickup', rates: RATES, now: NOW, distance, routedMetres: null,
+    })
+    expect(r.shipping).toBe(0)
+    expect(r.shippingPending).toBe(false)
+  })
+
+  it('discounts a percent voucher off subtotal PLUS the express fee, unchanged', () => {
+    // Deliberately unchanged (#101 "What deliberately does not change"): moving the discount
+    // base would shift totals at every shop that never asked for distance pricing.
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'express', rates: RATES, now: NOW,
+      distance, routedMetres: 25216,
+      voucher: { code: 'X', type: 'percent', value: 20 },
+    })
+    expect(r.discount).toBe(8.24) // 20% of 41.20
+  })
+
+  it('flags pending — never a reduced fee — for a negative routed distance', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'express', rates: RATES, now: NOW,
+      distance, routedMetres: -5000,
+    })
+    expect(r.shipping).toBe(0)
+    expect(r.shippingPending).toBe(true)
+  })
+})
+
+describe('shopMethods', () => {
+  it('reads the three flags off the row', () => {
+    expect(shopMethods({ pickup_enabled: true, delivery_enabled: false, express_enabled: true }))
+      .toEqual({ pickup: true, delivery: false, express: true })
+  })
+
+  it('falls back to each column\'s own default for a row that predates them', () => {
+    // A pre-#103 row, or a fixture that names none of them: the shop is exactly what it was
+    // before this feature — pickup and delivery on, express off.
+    expect(shopMethods({})).toEqual({ pickup: true, delivery: true, express: false })
+    expect(shopMethods(null)).toEqual({ pickup: true, delivery: true, express: false })
+  })
+
+  it('honours an explicit false', () => {
+    expect(shopMethods({ pickup_enabled: false }).pickup).toBe(false)
+  })
+
+  it('treats a non-boolean as absent rather than coercing it', () => {
+    // Both drivers hand these back as real booleans. Anything else is a fixture or a bug, and
+    // guessing what 'false' or 0 meant is how a shop starts offering a method it switched off.
+    expect(shopMethods({ pickup_enabled: 'false' }).pickup).toBe(true)
+    expect(shopMethods({ express_enabled: 1 }).express).toBe(false)
+  })
+
+  it('reports all-false as all-false — it does not fall back to pickup', () => {
+    // FAILS CLOSED. A shop offering nothing takes no order; inventing pickup here would offer a
+    // method the merchant switched off. Unreachable past merchants_one_fulfilment_method, and
+    // guarded anyway, because that is the direction this whole family fails in.
+    const none = { pickup_enabled: false, delivery_enabled: false, express_enabled: false }
+    expect(shopMethods(none)).toEqual({ pickup: false, delivery: false, express: false })
+    expect(firstOfferedMethod(shopMethods(none))).toBeNull()
+  })
+})
+
+describe('offersMethod', () => {
+  const methods = { pickup: true, delivery: false, express: true }
+
+  it('answers for each of the three methods', () => {
+    expect(offersMethod(methods, 'pickup')).toBe(true)
+    expect(offersMethod(methods, 'delivery')).toBe(false)
+    expect(offersMethod(methods, 'express')).toBe(true)
+  })
+
+  it('refuses a mode that is not a method at all', () => {
+    expect(offersMethod(methods, 'sameday')).toBe(false)
+    expect(offersMethod(methods, '')).toBe(false)
+  })
+})
+
+describe('firstOfferedMethod', () => {
+  it('prefers pickup, then delivery, then express', () => {
+    expect(firstOfferedMethod({ pickup: true, delivery: true, express: true })).toBe('pickup')
+    expect(firstOfferedMethod({ pickup: false, delivery: true, express: true })).toBe('delivery')
+    expect(firstOfferedMethod({ pickup: false, delivery: false, express: true })).toBe('express')
+  })
+})
+
+describe('region pricing is untouched', () => {
+  it('produces the same money with and without the distance fields present', () => {
+    const base = {
+      products: [product('a', 10)], cart: { a: 2 },
+      mode: 'delivery' as const, state: 'Sabah', rates: RATES, now: NOW,
+      tax: { enabled: true, rate: 6 },
+    }
+    const before = priceOrder(base)
+    const after = priceOrder({ ...base, distance: shopDistance({ express_enabled: false }), routedMetres: 25216 })
+    expect(after.shipping).toBe(before.shipping)
+    expect(after.subtotal).toBe(before.subtotal)
+    expect(after.discount).toBe(before.discount)
+    expect(after.tax).toBe(before.tax)
+    expect(after.total).toBe(before.total)
+    expect(after.shippingPending).toBe(false)
   })
 })

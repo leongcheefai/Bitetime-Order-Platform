@@ -24,9 +24,13 @@ import { app } from '../../src/app.js'
 import { env } from '../../src/env.js'
 import { makeUser, resetMerchant, seedMerchant, seedProduct, serviceClient } from '../rls/helpers.js'
 import { orderDay } from '../../src/orderNumber.js'
+import { placeOrder, OrderError, type PlaceOrderInput } from '../../src/orders.js'
+import type { DistanceDeps, DistanceOutcome } from '../../src/distance.js'
+import { sqlDistanceCache } from '../../src/distanceCache.js'
+import { quoteMerchantWindow, quoteIpWindow } from '../../src/quotaWindows.js'
 import { MAX_CART_QTY, MAX_CART_LINES, todayInZone, DEFAULT_TIMEZONE } from '@bitetime/shared'
 
-const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended']
+const SLUGS = ['ord-shop', 'ord-pending', 'ord-suspended', 'ord-distance']
 const DAY = orderDay(new Date())
 
 /** A cart of 2 × RM13 = 26, shaped like the one the storefront now sends. */
@@ -130,6 +134,59 @@ async function seedPromoProduct(merchantId: string, opts: {
     if (sold.error) throw new Error(`seeding promo product (sold): ${sold.error.message}`)
   }
   return id
+}
+
+/**
+ * A fake `DistanceDeps` for driving `placeOrder` directly — the seam it takes `distanceDeps`
+ * for. Only the routing PROVIDER is faked (`lookup`); `readCache`/`writeCache` are faked too,
+ * but that is standing in for the distance cache, not the database this suite's rule forbids
+ * mocking — `placeOrder` still runs every statement inside the transaction (the counter, the
+ * products, the insert) against the real Postgres started by `test:db`.
+ *
+ * `cached` stands in for a "seeded cache row": non-null and the peek in `resolveRoutedMetres`
+ * hits, so `lookup` is never called at all. `lookupCalls()` is what proves that.
+ */
+function fakeDistanceDeps(opts: { cached?: number | null; outcome?: DistanceOutcome }): {
+  deps: DistanceDeps
+  lookupCalls: () => number
+} {
+  let calls = 0
+  const deps: DistanceDeps = {
+    lookup: async () => {
+      calls++
+      return opts.outcome ?? { status: 'failed' }
+    },
+    readCache: async () => opts.cached ?? null,
+    writeCache: async () => {},
+  }
+  return { deps, lookupCalls: () => calls }
+}
+
+/**
+ * `DistanceDeps` with ONLY the provider faked — `readCache`/`writeCache` are the REAL
+ * `sqlDistanceCache`, run against the real Postgres this suite already seeds `distance_quotes`
+ * into (the ORIGIN/NEAR/FAR rows in the `distance-priced intake` describe block below).
+ *
+ * `fakeDistanceDeps` above cannot tell a genuine cache hit from a genuine miss: it fakes
+ * `readCache` itself, and `resolveDistance`'s own internal `readCache` call hits that SAME fake
+ * on a miss — so a caller cannot tell "the peek-and-meter block ran and then fell through to
+ * `resolveDistance`" from "the block was deleted outright and `resolveDistance` ran unguarded".
+ * This is for the tests that need exactly that distinction (Finding 3, fix wave 2).
+ */
+function fakeLookupDeps(outcome: DistanceOutcome = { status: 'failed' }): {
+  deps: DistanceDeps
+  lookupCalls: () => number
+} {
+  let calls = 0
+  const deps: DistanceDeps = {
+    lookup: async () => {
+      calls++
+      return outcome
+    },
+    readCache: sqlDistanceCache.readCache,
+    writeCache: sqlDistanceCache.writeCache,
+  }
+  return { deps, lookupCalls: () => calls }
 }
 
 describe('POST /api/orders', () => {
@@ -246,6 +303,84 @@ describe('POST /api/orders', () => {
     expect(res.status).toBe(409)
     expect(await res.json()).toEqual({ error: 'merchant_inactive' })
     expect(await ordersOf(suspendedShop)).toEqual([])
+  })
+
+  // Finding 5 (fix wave 2): every other intake-gate case above uses `body()`, which is
+  // `mode: 'pickup'` — so `resolveRoutedMetres` (the function whose whole job is to check
+  // status BEFORE the Google spend, see its own comment) returns on its very first line and
+  // never reaches that check at all. A regression that moved the check below the spend would
+  // leave every test above still green.
+  //
+  // A first version of this test used `mode: 'delivery'` against the plain (non-express)
+  // `suspendedShop` over HTTP — CONFIRMED BY EXPERIMENT (not reasoned) to be insufficient: with
+  // the status check moved below the spend, `resolveRoutedMetres` still returns `null` at its
+  // `input.mode !== 'express'` line (this order is not express) regardless of where the
+  // status check sits relative to that, so the request proceeds into the transaction and
+  // `assertOrderableMerchant`'s own status check — the authoritative backstop, kept
+  // deliberately — throws the SAME `merchant_inactive` with the SAME HTTP shape. The response
+  // alone cannot tell "refused before touching Google" from "refused after, by the backstop",
+  // and the experiment (moving the check down, running that test) stayed green.
+  //
+  // So this needs a shop that IS distance-priced, so there is a real spend to be before-or-
+  // after, and it needs to observe the spend directly rather than the HTTP shape —
+  // `placeOrder` is called straight with an instrumented `DistanceDeps` (the same seam
+  // `distance_lookup_failed and the injected DistanceDeps seam` below uses), so the assertion
+  // is "the cache was never even peeked", not just "got a 409".
+  describe('the status gate runs before any spend, on a distance-priced shop', () => {
+    let suspendedDistanceId = ''
+    let suspendedDistanceProductId = ''
+
+    beforeAll(async () => {
+      const owner = await makeUser('ord-distance-suspended-owner@test.dev', 'password123')
+      const ownerId = (await owner.auth.getUser()).data.user!.id
+      suspendedDistanceId = await seedMerchant({
+        slug: 'ord-distance-suspended', owner_id: ownerId, order_prefix: 'DS', status: 'suspended',
+        express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
+        delivery_max_km: 30, origin_place_id: 'ChIJord-susp-origin',
+      })
+      suspendedDistanceProductId = await seedProduct({ merchant_id: suspendedDistanceId, price: 13 })
+    }, 60_000)
+
+    afterAll(() => resetMerchant('ord-distance-suspended'))
+
+    it('refuses the order and never even peeks the distance cache', async () => {
+      let peeked = false
+      const deps: DistanceDeps = {
+        lookup: async () => { throw new Error('lookup must never run — the shop is suspended') },
+        readCache: async () => { peeked = true; return null },
+        writeCache: async () => {},
+      }
+
+      let err: unknown
+      try {
+        await placeOrder(
+          {
+            merchantId: suspendedDistanceId,
+            userId: null,
+            userEmail: null,
+            customerName: 'Ah Meng',
+            customerWa: '60123456789',
+            mode: 'express',
+            address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
+            cart: { [suspendedDistanceProductId]: 2 },
+            quotedTotal: 57.2,
+            voucherCode: null,
+            fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+            destinationPlaceId: 'ChIJord-susp-dest',
+          },
+          new Date(),
+          deps,
+        )
+      } catch (e) {
+        err = e
+      }
+
+      expect(err).toBeInstanceOf(OrderError)
+      expect((err as OrderError).code).toBe('merchant_inactive')
+      // The behavioural proof: NOT ONE byte was spent chasing a route for a shop that cannot
+      // take the order at all.
+      expect(peeked).toBe(false)
+    })
   })
 
   it('refuses an order against a merchant that does not exist', async () => {
@@ -1094,6 +1229,636 @@ describe('POST /api/orders', () => {
       const [order] = await ordersOf(taxShop)
       expect(Number(order.tax)).toBe(1.2)
       expect(Number(order.tax_rate)).toBe(6)
+    })
+  })
+
+  // ── Fulfilment method gating (#103) ─────────────────────────────────────────
+  //
+  // Intake refuses a method the shop does not offer, and refuses it BEFORE the fee rules. The
+  // flags live on the merchant row, which only the backend reads, so this is checked in the
+  // transaction rather than at the route.
+  describe('fulfilment method gating', () => {
+    const METHOD_SLUGS = ['ord-pickup-only', 'ord-flat-only', 'ord-both']
+    const BOTH_ORIGIN = 'ChIJord-both-origin'
+    const BOTH_DEST = 'ChIJord-both-dest'
+    let pickupOnlyId = '', pickupOnlyProduct = ''
+    let flatOnlyId = '', flatOnlyProduct = ''
+    let bothId = '', bothProduct = ''
+
+    beforeAll(async () => {
+      const mk = async (slug: string, flags: Record<string, unknown>) => {
+        const owner = await makeUser(`${slug}-owner@test.dev`, 'password123')
+        const ownerId = (await owner.auth.getUser()).data.user!.id
+        const id = await seedMerchant({ slug, owner_id: ownerId, order_prefix: 'MG', ...flags })
+        const pid = await seedProduct({ merchant_id: id, price: 13 })
+        return { id, pid }
+      }
+      ;({ id: pickupOnlyId, pid: pickupOnlyProduct } =
+        await mk('ord-pickup-only', { pickup_enabled: true, delivery_enabled: false, express_enabled: false }))
+      ;({ id: flatOnlyId, pid: flatOnlyProduct } =
+        await mk('ord-flat-only', { pickup_enabled: false, delivery_enabled: true, express_enabled: false }))
+      ;({ id: bothId, pid: bothProduct } =
+        await mk('ord-both', {
+          pickup_enabled: false, delivery_enabled: true, express_enabled: true,
+          delivery_base_fee: 6, delivery_rate_per_km: 1, delivery_max_km: 30,
+          origin_place_id: BOTH_ORIGIN,
+        }))
+      await svc().from('distance_quotes').upsert({
+        origin_place_id: BOTH_ORIGIN, destination_place_id: BOTH_DEST, metres: 25216,
+        created_at: new Date().toISOString(),
+      })
+    }, 60_000)
+
+    afterAll(async () => {
+      for (const slug of METHOD_SLUGS) await resetMerchant(slug)
+      const { error } = await svc().from('distance_quotes').delete().eq('origin_place_id', BOTH_ORIGIN)
+      if (error) throw new Error(`cleaning up distance_quotes for ${BOTH_ORIGIN}: ${error.message}`)
+    })
+
+    it('refuses a method the shop does not offer', async () => {
+      const res = await post(body(pickupOnlyId, pickupOnlyProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'delivery',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL', state: 'Selangor' }, quotedTotal: 34,
+      }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('method_not_offered')
+    })
+
+    it('refuses express at a shop that only offers flat delivery', async () => {
+      const res = await post(body(flatOnlyId, flatOnlyProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'express',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL', place_id: BOTH_DEST }, quotedTotal: 57.2,
+      }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('method_not_offered')
+    })
+
+    it('stamps the distance snapshot on an express order, and leaves it null on a flat delivery at the same shop', async () => {
+      // One shop, both methods live. The express order carries the distance line; the flat
+      // delivery at the same shop carries none — a reader must never see 0 km where the answer
+      // is "not priced by distance".
+      const expressRes = await post(body(bothId, bothProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'express',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL', place_id: BOTH_DEST },
+        quotedTotal: 57.2,   // 26 + (6 + 1 x 25.2)
+      }))
+      expect(expressRes.status).toBe(200)
+      const expressNo = ((await expressRes.json()) as { orderNumber: string }).orderNumber
+      const expressOrder = (await ordersOf(bothId)).find(o => o.order_number === expressNo)!
+      expect(Number(expressOrder.delivery_distance_km)).toBe(25.2)
+      expect(Number(expressOrder.delivery_base_fee)).toBe(6)
+      expect(Number(expressOrder.delivery_rate_per_km)).toBe(1)
+
+      const flatRes = await post(body(bothId, bothProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'delivery',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL', state: 'Selangor' },
+        quotedTotal: 34,   // 26 + flat WM 8
+      }))
+      expect(flatRes.status).toBe(200)
+      const flatNo = ((await flatRes.json()) as { orderNumber: string }).orderNumber
+      const flatOrder = (await ordersOf(bothId)).find(o => o.order_number === flatNo)!
+      expect(flatOrder.delivery_distance_km).toBeNull()
+      expect(flatOrder.delivery_base_fee).toBeNull()
+      expect(flatOrder.delivery_rate_per_km).toBeNull()
+    })
+
+    it('still refuses a flat delivery with no state', async () => {
+      const res = await post(body(bothId, bothProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'delivery',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL' }, quotedTotal: 34,
+      }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('delivery_state_required')
+    })
+  })
+
+  // ── Distance-priced intake (#101 Task 7) ────────────────────────────────────
+  //
+  // A distance shop's fee is `base + rate x km`, and the km comes from a routed lookup the
+  // customer's destination place id names — never from the request body. `distance_quotes` is
+  // SEEDED here rather than hit over the network: it is the exact row order intake reads, and
+  // it is what keeps this suite from calling Google at all (GOOGLE_MAPS_API_KEY is force-emptied
+  // in vitest.db.config.ts).
+  describe('distance-priced intake', () => {
+    const ORIGIN = 'ChIJord-origin'
+    const NEAR = 'ChIJord-near'
+    const FAR = 'ChIJord-far'
+    let distanceId = ''
+    let distanceProductId = ''
+
+    const deliveryBody = (extra: Record<string, unknown> = {}) => ({
+      merchantId: distanceId,
+      customerName: 'Ah Meng',
+      customerWa: '60123456789',
+      mode: 'express',
+      address: { line1: '12 Jalan Test', unit: 'A-3-2', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor', place_id: NEAR },
+      cart: { [distanceProductId]: 2 },
+      // 2 x 13 = 26 subtotal, plus 6.00 + 1.00 x 25.2 = 31.20 shipping.
+      quotedTotal: 57.2,
+      fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+      ...extra,
+    })
+
+    beforeAll(async () => {
+      // Its own owner — merchants.owner_id is uniquely indexed, so the shared 'ord-owner' account
+      // above cannot also own this shop.
+      const owner = await makeUser('ord-distance-owner@test.dev', 'password123')
+      const ownerId = (await owner.auth.getUser()).data.user!.id
+      distanceId = await seedMerchant({
+        slug: 'ord-distance', owner_id: ownerId, order_prefix: 'OD',
+        express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
+        delivery_max_km: 30, origin_place_id: ORIGIN,
+      })
+      distanceProductId = await seedProduct({ merchant_id: distanceId, price: 13 })
+      for (const [dest, metres] of [[NEAR, 25216], [FAR, 45000]] as const) {
+        await svc().from('distance_quotes').upsert({
+          origin_place_id: ORIGIN, destination_place_id: dest, metres,
+          created_at: new Date().toISOString(),
+        })
+      }
+    }, 60_000)
+
+    it('prices a delivery from the seeded cache row and snapshots the rule on the order', async () => {
+      const res = await post(deliveryBody())
+      expect(res.status).toBe(200)
+      const { orderNumber } = (await res.json()) as { orderNumber: string }
+      const rows = await ordersOf(distanceId)
+      const order = rows.find(o => o.order_number === orderNumber)!
+      expect(Number(order.shipping_fee)).toBe(31.2)
+      expect(Number(order.total)).toBe(57.2)
+      expect(Number(order.delivery_distance_km)).toBe(25.2)
+      expect(Number(order.delivery_base_fee)).toBe(6)
+      expect(Number(order.delivery_rate_per_km)).toBe(1)
+      // The unit rides along on the address so the rider can complete the drop, and it never
+      // touched the fee.
+      expect(order.address.unit).toBe('A-3-2')
+    })
+
+    // THE BRANCH THIS TASK EXISTS TO ADD. The state guard is
+    // `mode === 'delivery' && !distancePriced && deliveryState(...) === null` — every OTHER
+    // case above carries `state: 'Selangor'` on its address, so deleting `!distancePriced`
+    // leaves the whole suite green. A distance-priced storefront has no reason to collect a
+    // state at all (the fee comes from the route, not the region), so THIS is the untested
+    // production path: a delivery address with no state key at all must still price and commit.
+    it('prices and commits a distance delivery with no state on the address at all', async () => {
+      const res = await post(deliveryBody({
+        address: { line1: '12 Jalan Test', unit: 'A-3-2', postcode: '50000', city: 'Kuala Lumpur', place_id: NEAR },
+      }))
+      expect(res.status).toBe(200)
+      const { orderNumber } = (await res.json()) as { orderNumber: string }
+      const rows = await ordersOf(distanceId)
+      const order = rows.find(o => o.order_number === orderNumber)!
+      expect(Number(order.shipping_fee)).toBe(31.2)
+      expect(Number(order.total)).toBe(57.2)
+    })
+
+    it('refuses a delivery whose destination cannot be resolved, and writes nothing', async () => {
+      const before = (await ordersOf(distanceId)).length
+      const res = await post(deliveryBody({ address: { line1: '12 Jalan Test', postcode: '50000', city: 'KL', state: 'Selangor' } }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('delivery_place_required')
+      expect((await ordersOf(distanceId)).length).toBe(before)
+    })
+
+    it('refuses a destination beyond the shop maximum', async () => {
+      const res = await post(deliveryBody({
+        address: { line1: 'Far away', postcode: '86000', city: 'Kluang', state: 'Johor', place_id: FAR },
+        quotedTotal: 77,
+      }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('delivery_out_of_range')
+    })
+
+    it('rolls the whole transaction back when the derived distance disagrees with the quote', async () => {
+      const before = (await ordersOf(distanceId)).length
+      const counterBefore = await counterOf(distanceId)
+      const res = await post(deliveryBody({ quotedTotal: 40 }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('price_changed')
+      expect((await ordersOf(distanceId)).length).toBe(before)
+      // Not even a counter slot is burnt — the same rollback assertion the voucher cases make.
+      expect(await counterOf(distanceId)).toEqual(counterBefore)
+    })
+
+    // `body()`'s default `mode: 'pickup'` would let this pass for the wrong reason: a pickup
+    // never reaches the distance columns at all, so the assertion would stay green even if a
+    // region DELIVERY started writing them. A region delivery is the actual regression this
+    // guards against (#101 review, Finding 6) — it prices exactly as it did before #101, and it
+    // must go on doing so without picking up a stray distance/base-fee value from the columns
+    // the same insert now also has to fill in for a distance shop.
+    it('leaves the distance columns null on a region-priced delivery', async () => {
+      await svc().from('merchants').update({ shipping: { WM: 8, EM: 18 } }).eq('id', shop)
+
+      const res = await post(body(shop, productId, {
+        fulfilDate: tomorrowInShopZone(),
+        mode: 'delivery',
+        address: { line1: '1 Jalan Besar', postcode: '88000', city: 'Kota Kinabalu', state: 'Sabah' },
+        quotedTotal: 44, // 26 + EM 18
+      }))
+      expect(res.status).toBe(200)
+      const rows = await ordersOf(shop)
+      const order = rows[rows.length - 1]
+      expect(Number(order.shipping_fee)).toBe(18)
+      expect(order.delivery_distance_km).toBeNull()
+      expect(order.delivery_base_fee).toBeNull()
+    })
+
+    // ── `distance_lookup_failed`, and the injected seam that reaches it ────────
+    //
+    // Three branches raise this code and, before this, none had a test. `placeOrder` is called
+    // DIRECTLY here (not through `app.request`) with a fake `DistanceDeps` — the seam it takes
+    // `distanceDeps` for — against the real database: only the routing PROVIDER is faked, never
+    // Postgres, which is exactly what the seam is for and exactly what this suite's rule
+    // (never mock the database) still requires.
+    describe('distance_lookup_failed and the injected DistanceDeps seam', () => {
+      const placeOrderInput = (extra: Partial<PlaceOrderInput> = {}): PlaceOrderInput => ({
+        merchantId: distanceId,
+        userId: null,
+        userEmail: null,
+        customerName: 'Ah Meng',
+        customerWa: '60123456789',
+        mode: 'express',
+        address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
+        cart: { [distanceProductId]: 2 },
+        quotedTotal: 57.2,
+        voucherCode: null,
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+        destinationPlaceId: 'ChIJord-provider-miss',
+        ...extra,
+      })
+
+      // Finding 4 (fix wave 2): this refusal fires in `resolveRoutedMetres`, which runs BEFORE
+      // `withTransaction` ever opens (see placeOrder's own comment on why routing sits outside
+      // the transaction). Nothing could have been written no matter what code runs after it —
+      // an implementation with no transaction at all, or one that always rolls back, or one
+      // that rolls back correctly, all pass an order-count/counter assertion here identically.
+      // So this test asserts only the refusal itself; it proves nothing about rollback, and does
+      // not claim to. The two `distance_lookup_failed` throws that DO run inside the
+      // transaction (the pre/post shipping-policy mismatch, and the unreachable
+      // `shippingPending` guard — both in orders.ts's `placeOrder`) are not exercised by this
+      // suite: the mismatch case needs the merchant's `express_enabled` to change between the
+      // pre-transaction read (`resolveRoutedMetres`, non-transactional) and the in-transaction
+      // read (`assertOrderableMerchant`) while the shop stays REGION-priced at the first read —
+      // and `resolveRoutedMetres` returns before ever touching `deps` on that branch, so there
+      // is no seam here to hook a side effect off; reaching it would mean timing a real
+      // concurrent write against the transaction's own read, which is exactly the kind of
+      // flaky, implementation-timing-dependent test this suite avoids elsewhere. Left
+      // untested rather than forced.
+      it('rejects with distance_lookup_failed when the provider fails, on a cache miss', async () => {
+        const { deps } = fakeDistanceDeps({ cached: null, outcome: { status: 'failed' } })
+
+        let err: unknown
+        try {
+          await placeOrder(placeOrderInput(), new Date(), deps)
+        } catch (e) {
+          err = e
+        }
+        expect(err).toBeInstanceOf(OrderError)
+        expect((err as OrderError).code).toBe('distance_lookup_failed')
+      })
+
+      it('rejects with delivery_out_of_range when the provider finds no route', async () => {
+        const { deps } = fakeDistanceDeps({
+          cached: null,
+          outcome: { status: 'no_route' },
+        })
+
+        let err: unknown
+        try {
+          await placeOrder(placeOrderInput({ destinationPlaceId: 'ChIJord-no-route' }), new Date(), deps)
+        } catch (e) {
+          err = e
+        }
+        expect(err).toBeInstanceOf(OrderError)
+        expect((err as OrderError).code).toBe('delivery_out_of_range')
+      })
+    })
+
+    // ── The daily ceiling itself (Finding 3, fix wave 2) ────────────────────────
+    //
+    // The OLD version of the cache-hit test faked `readCache` to return a distance for EVERY
+    // caller — including the one `resolveDistance` makes internally on a miss — so it passed
+    // whether or not `resolveRoutedMetres`'s whole peek-and-meter block existed: deleting it
+    // left control falling through to `resolveDistance`, which hit the same fake cache and
+    // never called `lookup` either. It could not distinguish an injected cache from a real
+    // one, and it asserted nothing about the ceiling the block exists to protect in the first
+    // place.
+    //
+    // Rewritten against the REAL cache (`fakeLookupDeps`, faking only `lookup`) to assert the
+    // two properties that actually depend on the block existing, both driven against the
+    // production `quoteMerchantWindow` singleton directly — keyed (Finding 1) on the
+    // merchant's own row id.
+    //
+    // TWO DEDICATED merchants, not `distanceId` above: `quoteMerchantWindow` is a real
+    // module-level singleton shared with the rest of this suite (and, in production, with the
+    // quote endpoint too), and each test below needs to know EXACTLY how many slots are left
+    // before it spends one or asserts none were spent — something no other test in this file
+    // needs. Reusing `distanceId`, or even one merchant for both tests, would make that
+    // arithmetic depend on execution order (a prior test's manual `.allow()` calls, or this
+    // test's own final assertion call, leaking into the next). A fresh merchant per test is
+    // what makes "leave exactly one slot" an actual guarantee instead of a hope.
+    //
+    // `createSlidingWindow` has no reset hook, so `ceilHitId` and `ceilMissId` (below) are left
+    // permanently spent in this process once these two tests have run — harmless today, because
+    // each key is touched by exactly one test in this file, but SINGLE-USE: a future test that
+    // reaches for either id inherits a poisoned window with no way to clear it. Give any new
+    // ceiling test its own fresh merchant, the same way these two got theirs.
+    describe('the shop’s daily Google-spend ceiling', () => {
+      const CEIL_HIT_SLUG = 'ord-ceiling-hit'
+      const CEIL_MISS_SLUG = 'ord-ceiling-miss'
+      const CEIL_HIT_ORIGIN = 'ChIJord-ceiling-hit-origin'
+      const CEIL_MISS_ORIGIN = 'ChIJord-ceiling-miss-origin'
+      const CEIL_HIT_DEST = 'ChIJord-ceiling-hit-dest'
+      let ceilHitId = ''
+      let ceilHitProductId = ''
+      let ceilMissId = ''
+      let ceilMissProductId = ''
+
+      beforeAll(async () => {
+        const hitOwner = await makeUser('ord-ceiling-hit-owner@test.dev', 'password123')
+        const missOwner = await makeUser('ord-ceiling-miss-owner@test.dev', 'password123')
+        const hitOwnerId = (await hitOwner.auth.getUser()).data.user!.id
+        const missOwnerId = (await missOwner.auth.getUser()).data.user!.id
+
+        ceilHitId = await seedMerchant({
+          slug: CEIL_HIT_SLUG, owner_id: hitOwnerId, order_prefix: 'CH',
+          express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
+          delivery_max_km: 30, origin_place_id: CEIL_HIT_ORIGIN,
+        })
+        ceilHitProductId = await seedProduct({ merchant_id: ceilHitId, price: 13 })
+        // Seeded so every request in the hit test is a genuine cache HIT.
+        await svc().from('distance_quotes').upsert({
+          origin_place_id: CEIL_HIT_ORIGIN, destination_place_id: CEIL_HIT_DEST, metres: 25216,
+          created_at: new Date().toISOString(),
+        })
+
+        ceilMissId = await seedMerchant({
+          slug: CEIL_MISS_SLUG, owner_id: missOwnerId, order_prefix: 'CM',
+          express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
+          delivery_max_km: 30, origin_place_id: CEIL_MISS_ORIGIN,
+        })
+        ceilMissProductId = await seedProduct({ merchant_id: ceilMissId, price: 13 })
+        // Deliberately NOTHING seeded for CEIL_MISS_ORIGIN — every request in the miss test
+        // must be a genuine cache miss.
+      }, 60_000)
+
+      afterAll(async () => {
+        await resetMerchant(CEIL_HIT_SLUG)
+        await resetMerchant(CEIL_MISS_SLUG)
+        const { error } = await svc()
+          .from('distance_quotes')
+          .delete()
+          .in('origin_place_id', [CEIL_HIT_ORIGIN, CEIL_MISS_ORIGIN])
+        if (error) {
+          throw new Error(`cleaning up distance_quotes for the ceiling tests: ${error.message}`)
+        }
+      })
+
+      const ceilInput = (merchantId: string, productId: string, extra: Partial<PlaceOrderInput> = {}): PlaceOrderInput => ({
+        merchantId,
+        userId: null,
+        userEmail: null,
+        customerName: 'Ah Meng',
+        customerWa: '60123456789',
+        mode: 'express',
+        address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
+        cart: { [productId]: 2 },
+        quotedTotal: 57.2,
+        voucherCode: null,
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+        destinationPlaceId: null,
+        ...extra,
+      })
+
+      it('a cache hit commits the order and never touches the shop’s ceiling', async () => {
+        // Spend this merchant's ceiling down to its last slot. `.allow()` returning `false`
+        // does not itself record a hit (see rateLimit.ts — the exhausted branch never pushes),
+        // so exactly 499 calls leaves exactly one slot open, never zero — and this merchant's
+        // key has never been touched before this line, so the count starts at zero for real.
+        for (let i = 0; i < 499; i++) quoteMerchantWindow.allow(ceilHitId)
+
+        const { deps, lookupCalls } = fakeLookupDeps()
+        // Several hits in a row, all against that ONE remaining slot. Catches a regression
+        // that re-adds an unconditional ceiling check — one that fires on a HIT too, not only
+        // when `cached === null` — because that would spend the slot on the first call and
+        // refuse the second.
+        for (let i = 0; i < 5; i++) {
+          const { orderNumber } = await placeOrder(
+            ceilInput(ceilHitId, ceilHitProductId, { destinationPlaceId: CEIL_HIT_DEST }),
+            new Date(),
+            deps,
+          )
+          expect(orderNumber).toBeTruthy()
+        }
+        expect(lookupCalls()).toBe(0)
+
+        // The behavioural proof the ceiling was never touched: the one slot left standing
+        // before the five hits is STILL there afterwards.
+        expect(quoteMerchantWindow.allow(ceilHitId)).toBe(true)
+      })
+
+      it('a cache miss consumes exactly one slot of the shop’s ceiling', async () => {
+        // One slot short of full — the very next miss is the one that must spend it. As above,
+        // this merchant's key starts at zero, so 499 calls land exactly one short of the
+        // limit (500).
+        for (let i = 0; i < 499; i++) quoteMerchantWindow.allow(ceilMissId)
+
+        // 10km -> 6 + 1x10 = 16 shipping, +26 subtotal = 42 total.
+        const first = fakeLookupDeps({ status: 'ok', metres: 10_000 })
+        const { orderNumber } = await placeOrder(
+          ceilInput(ceilMissId, ceilMissProductId, { destinationPlaceId: 'ChIJord-ceiling-miss-1', quotedTotal: 42 }),
+          new Date(),
+          first.deps,
+        )
+        expect(orderNumber).toBeTruthy()
+        // A GENUINE miss — nothing is seeded at CEIL_MISS_ORIGIN, so the provider really ran.
+        // Distinguishes "the metering block let this miss through" from "this was secretly a
+        // hit and the ceiling was never actually exercised".
+        expect(first.lookupCalls()).toBe(1)
+
+        // The ceiling is now spent. A second, otherwise-identical miss must be refused before
+        // ever reaching the provider — the behavioural proof the first miss cost exactly one
+        // slot, not zero (a ceiling that were never actually consulted would let this one
+        // through too, and `second.lookupCalls()` would read 1, not 0).
+        //
+        // Sent with the SAME id in a DIFFERENT SPELLING, and that is the entire assertion. Postgres
+        // matches `550E8400-…` to the same row as `550e8400-…`, so a ceiling keyed on the body's
+        // string would hand this request a fresh, empty bucket and a fresh 500 billable lookups.
+        // Keyed on the row's own id, it is the same bucket and stays refused. Same trap the cart keys
+        // carry a canonical-form rule for (CONTEXT.md → Order pricing).
+        const second = fakeLookupDeps({ status: 'ok', metres: 10_000 })
+        let err: unknown
+        try {
+          await placeOrder(
+            ceilInput(ceilMissId.toUpperCase(), ceilMissProductId, { destinationPlaceId: 'ChIJord-ceiling-miss-2', quotedTotal: 42 }),
+            new Date(),
+            second.deps,
+          )
+        } catch (e) {
+          err = e
+        }
+        expect(err).toBeInstanceOf(OrderError)
+        expect((err as OrderError).code).toBe('distance_lookup_failed')
+        expect(second.lookupCalls()).toBe(0)
+      })
+    })
+
+    // ── The per-IP courtesy bound on the miss path (Finding 2, fix wave 3) ─────
+    //
+    // `callerIp` appeared nowhere in this file before this block, so the IP check inside
+    // `resolveRoutedMetres` shipped with zero coverage. That is not decoration to skip: deleting
+    // it, or hoisting it out of the `cached === null` branch so it fires on every delivery order
+    // — the blanket limit on order placement the brief explicitly forbids, because it would
+    // refuse legitimate customers behind carrier-grade NAT — both leave every other test in this
+    // file green.
+    //
+    // Driven through `placeOrder` directly with an explicit `callerIp`, not through
+    // `app.request` with forged `x-forwarded-for`/`cf-connecting-ip` headers: `PlaceOrderInput`
+    // already carries the seam for exactly this (see its doc comment), and using it is the
+    // honest way to pin the property, the same choice the ceiling tests above already made for
+    // `quoteMerchantWindow`.
+    //
+    // TWO DEDICATED merchants and TWO DEDICATED IP strings — never `distanceId`, `ceilHitId` or
+    // `ceilMissId`, and never an IP any other test in this file might touch — so exhausting
+    // `quoteIpWindow` here cannot interact with the ceiling tests' fixtures or any other test's
+    // bucket. `quoteIpWindow` has no reset hook either, so `IP_HIT_CALLER`/`IP_MISS_CALLER` are
+    // left permanently exhausted after this block runs, same single-use caveat as the ceiling
+    // merchants above.
+    describe('the per-IP courtesy bound on the miss path', () => {
+      const IP_HIT_SLUG = 'ord-ip-hit'
+      const IP_MISS_SLUG = 'ord-ip-miss'
+      const IP_HIT_ORIGIN = 'ChIJord-ip-hit-origin'
+      const IP_MISS_ORIGIN = 'ChIJord-ip-miss-origin'
+      const IP_HIT_DEST = 'ChIJord-ip-hit-dest'
+      const IP_HIT_CALLER = '203.0.113.11'
+      const IP_MISS_CALLER = '203.0.113.22'
+      let ipHitId = ''
+      let ipHitProductId = ''
+      let ipMissId = ''
+      let ipMissProductId = ''
+
+      beforeAll(async () => {
+        const hitOwner = await makeUser('ord-ip-hit-owner@test.dev', 'password123')
+        const missOwner = await makeUser('ord-ip-miss-owner@test.dev', 'password123')
+        const hitOwnerId = (await hitOwner.auth.getUser()).data.user!.id
+        const missOwnerId = (await missOwner.auth.getUser()).data.user!.id
+
+        ipHitId = await seedMerchant({
+          slug: IP_HIT_SLUG, owner_id: hitOwnerId, order_prefix: 'IH',
+          express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
+          delivery_max_km: 30, origin_place_id: IP_HIT_ORIGIN,
+        })
+        ipHitProductId = await seedProduct({ merchant_id: ipHitId, price: 13 })
+        // Seeded so every request in the hit test is a genuine cache HIT.
+        await svc().from('distance_quotes').upsert({
+          origin_place_id: IP_HIT_ORIGIN, destination_place_id: IP_HIT_DEST, metres: 25216,
+          created_at: new Date().toISOString(),
+        })
+
+        ipMissId = await seedMerchant({
+          slug: IP_MISS_SLUG, owner_id: missOwnerId, order_prefix: 'IM',
+          express_enabled: true, delivery_base_fee: 6, delivery_rate_per_km: 1,
+          delivery_max_km: 30, origin_place_id: IP_MISS_ORIGIN,
+        })
+        ipMissProductId = await seedProduct({ merchant_id: ipMissId, price: 13 })
+        // Deliberately NOTHING seeded for IP_MISS_ORIGIN — every request in the miss test
+        // must be a genuine cache miss.
+      }, 60_000)
+
+      afterAll(async () => {
+        await resetMerchant(IP_HIT_SLUG)
+        await resetMerchant(IP_MISS_SLUG)
+        const { error } = await svc()
+          .from('distance_quotes')
+          .delete()
+          .in('origin_place_id', [IP_HIT_ORIGIN, IP_MISS_ORIGIN])
+        if (error) {
+          throw new Error(`cleaning up distance_quotes for the IP-bound tests: ${error.message}`)
+        }
+      })
+
+      const ipInput = (
+        merchantId: string,
+        productId: string,
+        callerIp: string,
+        extra: Partial<PlaceOrderInput> = {},
+      ): PlaceOrderInput => ({
+        merchantId,
+        userId: null,
+        userEmail: null,
+        customerName: 'Ah Meng',
+        customerWa: '60123456789',
+        mode: 'express',
+        address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
+        cart: { [productId]: 2 },
+        quotedTotal: 57.2,
+        voucherCode: null,
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+        destinationPlaceId: null,
+        callerIp,
+        ...extra,
+      })
+
+      /** Spends every remaining slot in `quoteIpWindow` for `key`, however many that is. */
+      function exhaustIpWindow(key: string): void {
+        let guard = 0
+        while (quoteIpWindow.allow(key)) {
+          guard++
+          if (guard > 10_000) throw new Error(`quoteIpWindow for ${key} never exhausted`)
+        }
+      }
+
+      it('a cache hit still commits when that IP’s bucket is exhausted', async () => {
+        exhaustIpWindow(IP_HIT_CALLER)
+        expect(quoteIpWindow.allow(IP_HIT_CALLER)).toBe(false)
+
+        const { deps, lookupCalls } = fakeLookupDeps()
+        const { orderNumber } = await placeOrder(
+          ipInput(ipHitId, ipHitProductId, IP_HIT_CALLER, { destinationPlaceId: IP_HIT_DEST }),
+          new Date(),
+          deps,
+        )
+        expect(orderNumber).toBeTruthy()
+        // The provider was never called — a genuine, unmetered hit. Fails the moment the IP
+        // check is hoisted out of the `cached === null` block: an exhausted bucket would then
+        // refuse this HIT too, and `placeOrder` would throw instead of returning.
+        expect(lookupCalls()).toBe(0)
+      })
+
+      it('a cache miss is refused when that IP’s bucket is exhausted', async () => {
+        exhaustIpWindow(IP_MISS_CALLER)
+        expect(quoteIpWindow.allow(IP_MISS_CALLER)).toBe(false)
+
+        const { deps, lookupCalls } = fakeLookupDeps({ status: 'ok', metres: 10_000 })
+        let err: unknown
+        try {
+          await placeOrder(
+            ipInput(ipMissId, ipMissProductId, IP_MISS_CALLER, { destinationPlaceId: 'ChIJord-ip-miss-1' }),
+            new Date(),
+            deps,
+          )
+        } catch (e) {
+          err = e
+        }
+        // Fails the moment the IP check is deleted outright: with no check at all, this miss
+        // would resolve through the real provider and commit instead of refusing.
+        expect(err).toBeInstanceOf(OrderError)
+        expect((err as OrderError).code).toBe('distance_lookup_failed')
+        expect(lookupCalls()).toBe(0)
+      })
+    })
+
+    afterAll(async () => {
+      // Fixture leak (#101 review): rows this suite seeded into `distance_quotes`, keyed by its
+      // own ChIJord-* place ids. `resetMerchant` only ever clears tables scoped by
+      // `merchant_id`, and `distance_quotes` is keyed by place id pair alone (see the migration
+      // comment), so nothing else was ever going to remove these.
+      //
+      // The error is checked, like every other seed/cleanup helper in this file (Finding 6, fix
+      // wave 2) — a silently failing delete here restores exactly the leak this cleanup exists
+      // to close, with the suite still reporting green.
+      const { error } = await svc().from('distance_quotes').delete().eq('origin_place_id', ORIGIN)
+      if (error) throw new Error(`cleaning up distance_quotes for ${ORIGIN}: ${error.message}`)
     })
   })
 })

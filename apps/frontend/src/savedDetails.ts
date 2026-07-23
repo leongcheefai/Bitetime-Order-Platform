@@ -20,12 +20,34 @@ export interface SavedDetails {
   delivery_address?: AddressParts
 }
 
-/** Every part filled in. A half-typed address is not worth remembering. */
+/**
+ * "Complete enough to remember" on either of TWO grounds, because the two delivery paths
+ * remember an address for different reasons (#101 review, Finding 4):
+ *
+ *   - the REGION path has no place id, so all four parts are demanded — that address is
+ *     remembered because it can be PRINTED, and a printed address missing a part is useless to
+ *     the merchant reading it.
+ *   - the DISTANCE path has a confirmed `place_id`, so `line1` plus the id is enough — that
+ *     address is remembered because it can be ROUTED, and Google returns no `postal_code`
+ *     component for plenty of real, deliverable places (POIs, rural addresses). The distance
+ *     form has no field to fill that gap with, and demanding one anyway meant a picked,
+ *     routable address was silently never saved — the "once ever" prefill (Finding 3) could
+ *     never even start for it.
+ */
 function isCompleteAddress(a: AddressParts | undefined | null): a is AddressParts {
-  return !!a && [a.line1, a.postcode, a.city, a.state].every(part => typeof part === 'string' && part.trim() !== '')
+  if (!a) return false
+  if (a.place_id) return typeof a.line1 === 'string' && a.line1.trim() !== ''
+  return [a.line1, a.postcode, a.city, a.state].every(part => typeof part === 'string' && part.trim() !== '')
 }
 
-/** The shape the form works in. `delivery_address` is jsonb and will hold whatever it was last given. */
+/**
+ * The shape the form works in. `delivery_address` is jsonb and will hold whatever it was last
+ * given — including a DISTANCE-path save, where `postcode`/`city`/`state` can be present but
+ * BLANK (see `isCompleteAddress` above). This only checks the four fields are STRINGS, not that
+ * they are non-blank, so such a row still passes and prefills correctly; `place_id`, present or
+ * absent, is never inspected here and rides along unchanged in the object this returns, so a
+ * saved address with one is still recognised — and still routable — on the way back in.
+ */
 function isAddressShaped(a: unknown): a is AddressParts {
   if (!a || typeof a !== 'object') return false
   const parts = a as Record<string, unknown>
@@ -33,7 +55,7 @@ function isAddressShaped(a: unknown): a is AddressParts {
 }
 
 export function savedDetailsFromOrder(order: {
-  mode: 'pickup' | 'delivery'
+  mode: 'pickup' | 'delivery' | 'express'
   wa: string
   address: AddressParts
 }): SavedDetails {
@@ -41,8 +63,10 @@ export function savedDetailsFromOrder(order: {
   const whatsapp = order.wa.trim()
   if (whatsapp) saved.whatsapp = whatsapp
   // A pickup order carries no address. Writing the form's empty one would blank the address the
-  // customer saved on their last delivery — and they would only discover it at the next checkout.
-  if (order.mode === 'delivery' && isCompleteAddress(order.address)) {
+  // customer saved on their last delivery — and they would only discover it at the next
+  // checkout. The test is "not a pickup", not "is a delivery": an express order carries an
+  // address too, and it is just as worth keeping.
+  if (order.mode !== 'pickup' && isCompleteAddress(order.address)) {
     saved.delivery_address = order.address
   }
   return saved

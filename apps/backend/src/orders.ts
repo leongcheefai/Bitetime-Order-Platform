@@ -1,8 +1,11 @@
 import type postgres from 'postgres'
-import { priceOrder, voucherFromRow, shopRates, shopTax, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
-import type { PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax } from '@bitetime/shared'
-import { withTransaction } from './db.js'
+import { priceOrder, voucherFromRow, shopRates, shopTax, shopDistance, shopMethods, offersMethod, routedKm, exceedsMaxKm, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import type { PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax, ShopDistance, ShopMethods } from '@bitetime/shared'
+import { sql, withTransaction } from './db.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
+import { resolveDistance, CACHE_TTL_MS, type DistanceDeps } from './distance.js'
+import { liveDistanceDeps } from './distanceCache.js'
+import { quoteMerchantWindow, quoteIpWindow } from './quotaWindows.js'
 
 /**
  * The machine-readable reasons an order can be refused. The storefront reacts to these, so
@@ -26,6 +29,48 @@ export type OrderErrorCode =
   | 'delivery_state_required'
   | 'fulfil_date_unavailable'
   | 'fulfil_date_required'
+  /**
+   * A distance-priced shop was handed a delivery with no destination place id. The same rule as
+   * `delivery_state_required` one policy over: an unresolvable destination is REFUSED, never
+   * priced — with no distance, `shippingFee` would fall through to 0 and the shop would drive
+   * 40 km for free.
+   */
+  | 'delivery_place_required'
+  /**
+   * Beyond the shop's `max_km`, OR no road route exists. ONE code, because to the customer they
+   * are the same fact: this shop does not deliver there. Only `distance_lookup_failed` is worth
+   * retrying.
+   */
+  | 'delivery_out_of_range'
+  /**
+   * The shop does not offer the method this order names. Checked in the transaction because the
+   * flags live on the shop's row, which only the backend reads — the storefront renders no
+   * button for a disabled method, so an honest checkout never sees this.
+   */
+  | 'method_not_offered'
+  /**
+   * The routing lookup itself did not happen, and the ONLY distance failure that is retryable
+   * at all — but "retryable" covers two causes that recover on very different clocks, and the
+   * wire code does not distinguish them:
+   *
+   *   * a provider outage — retryable within seconds, the ordinary case;
+   *   * the shop's daily Google-spend ceiling (Finding 6, fix wave 2) — does NOT clear for up
+   *     to 24 hours. A customer who retries this one moments later meets the same refusal.
+   *
+   * One code for both anyway: the customer's only available action is "try again later" either
+   * way, and a fourth wire code would cost the frontend a twin for a distinction it cannot act
+   * on differently.
+   *
+   * ONE EXCEPTION: a distance-priced shop whose configuration cannot price (`!policy.usable`)
+   * also raises this code, and no amount of retrying fixes a merchant's own dormant/incomplete
+   * setup — that would be the permanent-refusal-loop shape the ADR rejects elsewhere. This case
+   * is now blocked at the schema level (`merchants_distance_requires_origin`, tightened to
+   * refuse an empty-string origin too), so a shop that reaches intake in `distance` mode is
+   * expected to always have a usable origin — but the check above still throws this same code
+   * as the honest answer, since a config that predates the constraint or fails validation for
+   * some other reason must not silently fall back to a dormant region rate.
+   */
+  | 'distance_lookup_failed'
 
 /** A refusal the customer can act on, as opposed to a bug. Thrown inside the transaction. */
 export class OrderError extends Error {
@@ -51,15 +96,14 @@ export interface PlaceOrderInput {
   customerName: string
   customerWa: string
   /**
-   * The two modes the Storefront offers, as a UNION and not a string — `mode` selects the
-   * shipping fee, so a free string is a client-chosen value that can zero one. It was a
-   * string, and `mode: 'sameday'` bought a delivery with a shipping_fee of 0.
+   * The method the customer chose, as a UNION and not a string — `mode` selects the shipping
+   * fee, so a free string is a client-chosen value that can zero one. It was a string, and
+   * `mode: 'sameday'` bought a delivery with a shipping_fee of 0.
    *
-   * 'sameday' is DELIBERATELY absent: it is unreachable from the Storefront and has no rate
-   * behind it (`shippingFee` reads a `samedayFee` nobody passes, so it prices at 0). It is
-   * tracked separately — do not re-widen this union without giving it a real rate.
+   * `delivery` is the flat region rate and `express` is distance-priced. Whether this shop
+   * OFFERS the named method is checked in the transaction (`method_not_offered`).
    */
-  mode: 'pickup' | 'delivery'
+  mode: 'pickup' | 'delivery' | 'express'
   address?: unknown
   /** What they want, not what it costs. `{ [productId]: qty }`. */
   cart: Record<string, number>
@@ -76,6 +120,25 @@ export interface PlaceOrderInput {
    * it runs in the customer's browser, and a body is a body.
    */
   fulfilDate: string | null
+  /**
+   * The destination's stable place identifier, lifted off the address the customer submitted.
+   *
+   * The DESTINATION is a fact only the customer can supply, so it arrives in the request — but
+   * as an identifier, and the DISTANCE is never taken from the body. That is the same shape as
+   * the region rule one policy over: the customer declares where the parcel goes, the shop's own
+   * rows decide what that costs. A body-supplied distance is the `total: 0` hole with extra steps.
+   */
+  destinationPlaceId?: string | null
+  /**
+   * The caller's address — for the miss-path SPEND BOUND only (Finding 2, fix wave 2), never
+   * for attribution and never persisted. `userId`/`userEmail` above are what attribution reads;
+   * this is not a second one.
+   *
+   * Optional: a caller that omits it (this module's own tests, which drive `placeOrder`
+   * directly and never go through `app.ts`) simply skips the per-IP leg of the miss-path bound
+   * below — the per-shop ceiling still applies unconditionally either way.
+   */
+  callerIp?: string
 }
 
 /**
@@ -107,19 +170,55 @@ export interface PlaceOrderInput {
  *     (`price_changed`), never silently re-priced upward — a customer must not be charged a
  *     number they did not see.
  */
-export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ orderNumber: string }> {
+export async function placeOrder(
+  input: PlaceOrderInput,
+  now = new Date(),
+  distanceDeps: DistanceDeps = liveDistanceDeps,
+): Promise<{ orderNumber: string }> {
+  // THE ROUTING CALL HAPPENS HERE, OUTSIDE THE TRANSACTION, and that placement is the whole
+  // reason this function is no longer a bare `withTransaction(...)`. Inside, the transaction
+  // holds this shop's single `order_counters` row lock, which serialises every checkout at that
+  // shop — a third party's network round-trip under that lock would queue the entire shop's
+  // intake behind Google's latency.
+  //
+  // A cache HIT is the normal case — the customer quoted moments ago, and that quote wrote the
+  // row. A miss re-resolves. A distance that MOVED in the meantime does not need a new failure
+  // path: the derived total disagrees with the quoted total and the existing `price_changed`
+  // refusal fires, which the storefront already knows how to recover from.
+  const routedMetres = await resolveRoutedMetres(input, distanceDeps, now)
+
   return withTransaction(async (tx) => {
-    // A delivery with no state prices at ZERO — `shippingFee` reads the region off the state,
-    // and with none it falls through to `return 0`. That is the same species of hole the `mode`
-    // allowlist closed one field over: a fee zeroed by a value the client chose (here, by a
-    // value the client simply left out), on an order that is still perfectly deliverable. It is
-    // refused here rather than in the route because the region rules are this module's, not
+    const merchant = await assertOrderableMerchant(tx, input.merchantId)
+
+    // BEFORE the fee rules, because "you cannot order that way here" is the answer to give when
+    // both could fire: a shop with express switched off should not be told its distance lookup
+    // failed.
+    if (!offersMethod(merchant.methods, input.mode)) {
+      throw new OrderError('method_not_offered')
+    }
+
+    // The fee rule follows the METHOD, not the shop: `delivery` is the flat region rate and
+    // `express` is priced by the routed distance, and one shop may offer both.
+    const distancePriced = input.mode === 'express'
+
+    // A REGION-priced delivery with no state prices at ZERO — `shippingFee` reads the region off
+    // the state, and with none it falls through to `return 0`. That is the same species of hole
+    // the `mode` allowlist closed one field over: a fee zeroed by a value the client chose (here,
+    // by a value the client simply left out), on an order that is still perfectly deliverable. It
+    // is refused here rather than in the route because the region rules are this module's, not
     // HTTP's — and the Storefront's `deliveryReady` gate means no honest checkout ever sees it.
+    //
+    // A `delivery` order is ALWAYS region-priced, whatever else the shop offers, so it always
+    // needs a state. An `express` order takes its fee from the routed distance instead.
     if (input.mode === 'delivery' && deliveryState(input.mode, input.address) === null) {
       throw new OrderError('delivery_state_required')
     }
-
-    const merchant = await assertOrderableMerchant(tx, input.merchantId)
+    // The pre-transaction resolution and the authoritative row disagree only if the merchant
+    // flipped their methods between the routing call and this read. Fail closed rather than
+    // price an express order the routing call never ran for.
+    if (input.mode === 'express' && routedMetres === null) {
+      throw new OrderError('distance_lookup_failed')
+    }
 
     // Before the counter moves. A refused date must cost the shop nothing — not a burnt order
     // number, not a claimed voucher — and throwing here rolls back a transaction that has not
@@ -170,10 +269,17 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
       // and is refused above.
       state: deliveryState(input.mode, input.address),
       rates: merchant.rates,
+      distance: merchant.distance,
+      routedMetres,
       voucher,
       tax: merchant.tax,
       now,
     })
+
+    // A pending fee is never committed. Unreachable — the refusals above cover every route to
+    // it — and asserted anyway, because the one thing this feature must never do is charge a
+    // delivery fee of 0 that nobody chose.
+    if (bd.shippingPending) throw new OrderError('distance_lookup_failed')
 
     assertQuoteHolds(bd.total, input.quotedTotal)
 
@@ -211,10 +317,18 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
     const items = bd.lines.map(l => ({ id: l.id, name: l.name, qty: l.qty, price: l.unitPrice, promo: l.promo }))
     const discount = bd.discount > 0 ? bd.discount : null
 
+    // The snapshot. `delivery_distance_km` LABELS the receipt line; base/rate exist because
+    // `base + rate × km` has two unknowns and one equation, and without them no past order's fee
+    // is reconstructable once the merchant edits their rates. Null for a region-priced shop.
+    const distanceKm = distancePriced && routedMetres !== null ? routedKm(routedMetres) : null
+    const distanceBase = distanceKm === null ? null : merchant.distance.base
+    const distanceRate = distanceKm === null ? null : merchant.distance.ratePerKm
+
     await tx`
       insert into orders (
         merchant_id, user_id, customer_name, customer_wa, mode, address,
-        shipping_fee, items, total, currency, discount, tax, tax_rate, voucher_code, fulfil_date, order_number, status
+        shipping_fee, items, total, currency, discount, tax, tax_rate, voucher_code, fulfil_date, order_number, status,
+        delivery_distance_km, delivery_base_fee, delivery_rate_per_km
       ) values (
         ${input.merchantId},
         ${input.userId},
@@ -239,12 +353,104 @@ export function placeOrder(input: PlaceOrderInput, now = new Date()): Promise<{ 
         -- Hardcoded, never taken from the caller. A client could otherwise file an order that
         -- is already 'completed' — which the insert policy used to prevent and no longer can,
         -- because no policy runs on this connection.
-        'new'
+        'new',
+        ${distanceKm},
+        ${distanceBase},
+        ${distanceRate}
       )
     `
 
     return { orderNumber }
   })
+}
+
+/**
+ * The routed distance for this order, or a refusal. `null` for any mode that is not `express`
+ * — pickup and flat-rate delivery price by their own rules and never route.
+ *
+ * Reads the shop's policy on a NON-transactional connection: the authoritative read is still
+ * the one inside `assertOrderableMerchant`, and the price is still derived in there. This read
+ * exists only to know whether to route at all, and what origin to route from.
+ */
+async function resolveRoutedMetres(
+  input: PlaceOrderInput,
+  deps: DistanceDeps,
+  now: Date,
+): Promise<number | null> {
+  if (input.mode !== 'express') return null
+
+  const rows = await sql<Record<string, unknown>[]>`
+    select id::text, status::text, express_enabled, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
+    from merchants where id = ${input.merchantId}
+  `
+  // The shop's status is checked HERE as well as inside the transaction, and the duplication is
+  // deliberate: the in-transaction check is the authority on whether an order may commit, but it
+  // runs too late to stop the Google lookup below from being paid for. A suspended shop must not
+  // be a way to spend the platform's money.
+  if (!rows[0]) throw new OrderError('merchant_not_found')
+  if ((rows[0].status as string) !== 'active') throw new OrderError('merchant_inactive')
+
+  // Keyed on the ROW's id, never on `input.merchantId`. Postgres parses uuids leniently —
+  // upper-case, brace-wrapped and hyphen-free spellings all match the same row — so a ceiling
+  // keyed on the body's string is one an unauthenticated caller re-keys at will, four spellings
+  // deep, for four times the free lookups. Same trap the cart keys already carry a canonical-
+  // form rule for (CONTEXT.md → Order pricing): with money on the other side, it is not style.
+  const merchantId = rows[0].id as string
+
+  const policy = shopDistance(rows[0])
+  // Not this shop's method. The transaction refuses it with `method_not_offered`; returning null
+  // here just means no Google call is paid for on the way to that refusal.
+  if (!policy.enabled) return null
+  // A distance shop that cannot price does not fall back to its dormant region rate — that
+  // charges by a formula the merchant switched off. It refuses.
+  if (!policy.usable) throw new OrderError('distance_lookup_failed')
+
+  const destination = (input.destinationPlaceId ?? '').trim()
+  if (!destination) throw new OrderError('delivery_place_required')
+
+  const notBefore = new Date(now.getTime() - CACHE_TTL_MS)
+  // A cache read that throws degrades to a MISS, exactly as `resolveDistance` does with its own
+  // read — and exactly as the quote endpoint's own peek does. This peek exists only to decide
+  // whether the lookup below should cost the shop a slot of its daily ceiling, so a database
+  // blip must not turn a resolvable delivery into a 500.
+  let cached: number | null = null
+  try {
+    cached = await deps.readCache(policy.originPlaceId!, destination, notBefore)
+  } catch (err) {
+    console.error('Distance cache peek failed:', err instanceof Error ? err.message : String(err))
+  }
+
+  // A cache HIT costs nothing and must never consume a slot of the shop's daily ceiling; a MISS
+  // is a real Google call and must. Identical rule to the quote endpoint, deliberately sharing
+  // the SAME bucket — it is one bill for one shop, and intake is a second spender on it.
+  if (cached === null) {
+    // A COURTESY bound, not an abuse control, and worth being precise about: `clientIp` trusts
+    // `cf-connecting-ip` first, and this backend does not sit behind Cloudflare, so a determined
+    // caller rotates that header and mints a fresh key per request. What actually stops a runaway
+    // is the per-shop ceiling below, which is keyed on the row's own id and cannot be re-spelled.
+    // This one stops accidental hammering, and it is on the MISS path only: a blanket limit on
+    // order placement would refuse legitimate customers behind carrier-grade NAT, which is worse
+    // than the abuse it would prevent.
+    if (input.callerIp && !quoteIpWindow.allow(input.callerIp)) {
+      throw new OrderError('distance_lookup_failed')
+    }
+    if (!quoteMerchantWindow.allow(merchantId)) {
+      throw new OrderError('distance_lookup_failed')
+    }
+  }
+
+  const outcome = cached !== null
+    ? ({ status: 'ok', metres: cached } as const)
+    : await resolveDistance(
+        deps,
+        { originPlaceId: policy.originPlaceId!, destinationPlaceId: destination },
+        now,
+      )
+  // No route and beyond-the-maximum are ONE refusal: same fact, same message.
+  if (outcome.status === 'no_route') throw new OrderError('delivery_out_of_range')
+  if (outcome.status === 'failed') throw new OrderError('distance_lookup_failed')
+  if (exceedsMaxKm(policy, routedKm(outcome.metres))) throw new OrderError('delivery_out_of_range')
+  return outcome.metres
 }
 
 interface OrderableMerchant {
@@ -254,6 +460,8 @@ interface OrderableMerchant {
   fulfilment: FulfilmentConfig
   timezone: string
   tax: ShopTax
+  distance: ShopDistance
+  methods: ShopMethods
 }
 
 /**
@@ -265,8 +473,22 @@ interface OrderableMerchant {
  * different layer. (#65 used the term for this check; the glossary wins.)
  */
 async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: string): Promise<OrderableMerchant> {
-  const rows = await tx<{ order_prefix: string; status: string; shipping: unknown; currency: string | null; config: unknown; timezone: string | null; tax_enabled: boolean; tax_rate: unknown }[]>`
-    select order_prefix, status::text, shipping, currency, config, timezone, tax_enabled, tax_rate from merchants where id = ${merchantId}
+  // The intersection keeps the open-key access `shopDistance`/`shopTax` need (they take
+  // `unknown` and read whatever columns they want off it) while restoring the compiler's
+  // protection on the fields THIS function reads by name — `Record<string, unknown>` alone let
+  // `merchant.order_prefx` (a typo) compile and yield `undefined` at runtime, on the function
+  // that derives the order prefix, currency, rates and tax.
+  type MerchantRow = Record<string, unknown> & {
+    order_prefix: string
+    status: string
+    currency: string | null
+    timezone: string | null
+  }
+  const rows = await tx<MerchantRow[]>`
+    select order_prefix, status::text, shipping, currency, config, timezone, tax_enabled, tax_rate,
+           pickup_enabled, delivery_enabled, express_enabled,
+           delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id
+    from merchants where id = ${merchantId}
   `
   const merchant = rows[0]
   if (!merchant) throw new OrderError('merchant_not_found')
@@ -286,6 +508,14 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
     // function, and the penalty for the two disagreeing is a REFUSAL, not a rounding gap.
     // postgres.js hands `tax_rate` back as a string; the mapper is what knows that.
     tax: shopTax(merchant),
+    // shopDistance, for the same reason as shopRates and shopTax above: the storefront quotes
+    // from this exact function and the quote endpoint quotes from it, and a disagreement is a
+    // REFUSAL, not a rounding gap. postgres.js hands these numerics back as strings.
+    distance: shopDistance(merchant),
+    // shopMethods, for the same reason as shopRates, shopTax and shopDistance above: the
+    // storefront renders its buttons from this exact function, and a second reading here is a
+    // second rule the customer meets as a refusal of a button they were just offered.
+    methods: shopMethods(merchant),
   }
 }
 

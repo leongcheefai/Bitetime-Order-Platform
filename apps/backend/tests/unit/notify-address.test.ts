@@ -15,6 +15,22 @@ describe('backend formatAddress', () => {
     expect(formatAddress(null)).toBe('')
     expect(formatAddress(undefined)).toBe('')
   })
+
+  it('renders a real Google-shaped distance address once, not twice, when a place_id is present', () => {
+    // `line1` here is exactly what the storefront stores for a distance order: Google's OWN full
+    // formatted address, which already contains the postcode/city/state — the real shape a short
+    // fixed stub could never catch (#101 review, Finding 3).
+    expect(
+      formatAddress({
+        line1: '12 Jalan SS 2/24, 47300 Petaling Jaya, Selangor, Malaysia',
+        unit: 'A-3-2',
+        postcode: '47300',
+        city: 'Petaling Jaya',
+        state: 'Selangor',
+        place_id: 'ChIJ_test_place_id',
+      }),
+    ).toBe('A-3-2, 12 Jalan SS 2/24, 47300 Petaling Jaya, Selangor, Malaysia')
+  })
 })
 
 describe('buildOrderMessage', () => {

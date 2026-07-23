@@ -57,6 +57,13 @@ function loadSupabaseEnv() {
     if (!process.env[name]) process.env[name] = value
   }
 
+  // FORCED EMPTY, not merely defaulted: these suites must never reach Google. A developer with
+  // a real key in their shell would otherwise turn the cache-miss cases below into live,
+  // billable, flaky network calls. Same argument as the Stripe stubs above — a real credential
+  // in a test process is a liability, not an asset — but stronger, because this one spends money
+  // per call. Everything distance-related in tests/api is exercised through SEEDED CACHE ROWS.
+  process.env.GOOGLE_MAPS_API_KEY = ''
+
   const missing = Object.keys(FROM_CLI).filter(name => !process.env[name])
   if (missing.length === 0) return
 

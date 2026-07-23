@@ -34,6 +34,17 @@ export interface Merchant {
   tax_enabled?: boolean
   /** A PERCENTAGE: 6 means 6%. PostgREST sends a number; read via `shopTax`. */
   tax_rate?: number | string
+  /** Which methods this shop offers. Read through `shopMethods`, never directly — an absent
+   *  column means that column's own default, not `false`. */
+  pickup_enabled?: boolean
+  delivery_enabled?: boolean
+  express_enabled?: boolean
+  /** Read these through `shopDistance`, never directly — they arrive as strings or numbers. */
+  delivery_base_fee?: number | string
+  delivery_rate_per_km?: number | string
+  delivery_max_km?: number | string | null
+  origin_place_id?: string | null
+  origin_address?: string | null
   [key: string]: any
 }
 
@@ -102,6 +113,18 @@ export interface AddressParts {
   postcode: string
   city: string
   state: string
+  /**
+   * Unit, floor or landmark. Carried on the order and shown to the merchant, and DELIBERATELY
+   * never routed: it must not be able to move the fee, so adding delivery instructions can
+   * never cost the customer money.
+   */
+  unit?: string
+  /**
+   * The selected place's stable identifier — the distance cache key, and the reason free-text
+   * resolution was rejected: a re-resolved string can drift between quote and charge. Absent on
+   * every address saved before #101 and on every region-priced shop's addresses.
+   */
+  place_id?: string
 }
 
 export interface Order {
@@ -126,6 +149,8 @@ export interface Order {
   created_at?: string
   /** `YYYY-MM-DD`. Null on orders placed before fulfilment dates shipped. */
   fulfil_date?: string | null
+  /** Routed km this order was charged for. Null for region-priced orders and everything before #101. */
+  delivery_distance_km?: number | null
   [key: string]: any
 }
 

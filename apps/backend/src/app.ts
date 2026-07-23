@@ -23,6 +23,10 @@ import { notifyOrderPlaced, telegramSend } from './notify.js'
 import { signUpCustomer, isDuplicateEmailError } from './customerSignup.js'
 import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
+import { resolveDistance, CACHE_TTL_MS } from './distance.js'
+import { liveDistanceDeps } from './distanceCache.js'
+import { quoteIpWindow, quoteMerchantWindow, placesGlobalWindow } from './quotaWindows.js'
+import { googlePlaceSuggest, googlePlaceDetail } from './maps.js'
 import { detectCountry } from './region.js'
 import { fetchBasePricing, createPricingCache, type PricingPayload } from './pricing.js'
 import { estimateFor } from './fx.js'
@@ -31,7 +35,7 @@ import { processReferralReward } from './referralRewardGrant.js'
 import { trackOrder } from './orderTracking.js'
 import { placeOrder, OrderError } from './orders.js'
 import { insertFeedback, listFeedback, updateFeedbackStatus } from './feedback.js'
-import { isCart, validateFeedback, isFeedbackStatus } from '@bitetime/shared'
+import { isCart, validateFeedback, isFeedbackStatus, shopDistance, routedKm, distanceFee, exceedsMaxKm } from '@bitetime/shared'
 import { resolveSlug, orderPrefix, referralCodeOf, resolveReferredByCode, RESERVED_SLUGS } from './slug.js'
 import { pickMerchantConfig, pickProfileFields, pickProductFields, pickOrderFields, ORDER_STATUSES } from './writes.js'
 
@@ -142,6 +146,29 @@ app.patch('/api/merchants/:id', requireMerchantOwns, async (c) => {
   if (!picked.ok) return c.json({ error: picked.error }, 400)
   const patch = picked.patch
   if (Object.keys(patch).length === 0) return c.json({ error: 'No updatable fields' }, 400)
+  // These two rules must see the row's CURRENT flags as well as the patch's. A merchant who
+  // turns delivery off in one save and pickup off in the next sends two bodies that are each
+  // legal alone — and lands on a storefront no customer can order from. `c.get('merchant')` is
+  // the row `requireMerchantOwns` already loaded (`select('*')`) for the ownership check above,
+  // so this is a read of already-fetched data, not a second query.
+  //
+  // The columns' own CHECK constraints (`merchants_one_fulfilment_method`,
+  // `merchants_express_requires_origin`) are the backstop. These are the checks that can say
+  // WHY, in time for the merchant still looking at the form, instead of a bare 500 out of
+  // PostgREST.
+  const stored = c.get('merchant')
+  const merged = {
+    pickup: patch.pickup_enabled ?? stored.pickup_enabled,
+    delivery: patch.delivery_enabled ?? stored.delivery_enabled,
+    express: patch.express_enabled ?? stored.express_enabled,
+  }
+  if (!merged.pickup && !merged.delivery && !merged.express) {
+    return c.json({ error: 'Your shop must offer at least one fulfilment method' }, 400)
+  }
+  if (merged.express) {
+    const origin = patch.origin_place_id !== undefined ? patch.origin_place_id : stored.origin_place_id
+    if (!origin) return c.json({ error: 'Set your delivery origin before switching on express delivery' }, 400)
+  }
   const { data, error } = await admin.from('merchants').update(patch).eq('id', id).select().single()
   if (error) return c.json({ error: 'Update failed' }, 500)
   return c.json(data)
@@ -680,6 +707,34 @@ app.post('/api/billing/portal', async (c) => {
 const signupIpWindow = createSlidingWindow({ limit: 10, windowMs: 60 * 60_000, now: () => Date.now() })
 const signupEmailWindow = createSlidingWindow({ limit: 3, windowMs: 60 * 60_000, now: () => Date.now() })
 
+// quoteIpWindow and quoteMerchantWindow moved to quotaWindows.ts — order intake shares
+// quoteMerchantWindow, see that module's header.
+
+// Bounds the Places proxy by caller IP. BOTH routes draw on this one bucket.
+//
+// 300/hour, deliberately five times `quoteIpWindow` above, because the two endpoints are called
+// nothing alike: a quote happens ONCE per address the customer selects, while suggest fires per
+// burst of typing — one address entry is realistically four to eight suggests plus one detail.
+// At 60 this would be about six address entries per hour per IP, and behind carrier-grade NAT or
+// a mall's wifi (most Malaysian mobile traffic, and this is a Malaysian platform) dozens of
+// unrelated customers share one address. They would exhaust it in minutes, and the failure is
+// silent and fatal: the address box returns nothing and the customer cannot place a delivery
+// order at all.
+//
+// Raising a REQUEST ceiling does not raise the bill proportionally, because the billable unit is
+// the SESSION: a burst of keystrokes carrying one session token, ending in a details call, bills
+// as one lookup. Same in-memory limiter weaknesses as everything else here, inherited knowingly.
+const placesIpWindow = createSlidingWindow({ limit: 300, windowMs: 60 * 60_000, now: () => Date.now() })
+
+/** The caller's IP, from the proxy headers with the socket as the local-dev fallback. */
+function ipOf(c: { req: { header: (n: string) => string | undefined }; env: unknown }): string {
+  const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)?.incoming
+  return clientIp(
+    { 'x-forwarded-for': c.req.header('x-forwarded-for'), 'cf-connecting-ip': c.req.header('cf-connecting-ip') },
+    incoming?.socket?.remoteAddress,
+  )
+}
+
 // ── Referred shops ────────────────────────────────────────────────────────────
 // Replaces the my_referred_shops SECURITY DEFINER function. That function could read
 // across tenants — it had to, since a referrer's shops are not their own — and was safe
@@ -839,15 +894,14 @@ app.post('/api/orders', async (c) => {
     ? b.quotedTotal
     : null
 
-  // An ALLOWLIST, not a string check: `mode` SELECTS THE SHIPPING FEE. Any value other than
-  // 'delivery' prices shipping at 0, so a free string is a client-chosen value that zeroes a
-  // fee — the same hole as a client-supplied `total`, and `mode: 'sameday'` walked straight
-  // through it with an address attached.
+  // An ALLOWLIST, not a string check: `mode` SELECTS THE SHIPPING FEE. Any unrecognised value
+  // prices shipping at 0, so a free string is a client-chosen value that zeroes a fee — the same
+  // hole as a client-supplied `total`, and `mode: 'sameday'` walked straight through it with an
+  // address attached.
   //
-  // 'sameday' is DELIBERATELY not here: it is unreachable from the Storefront (which offers
-  // exactly these two) and has no rate behind it. Adding it back without a real fee re-opens
-  // the hole.
-  const mode = b.mode === 'pickup' || b.mode === 'delivery' ? b.mode : null
+  // Whether the SHOP offers the method it names is `placeOrder`'s call, not HTTP's — the same
+  // split as the delivery region, allowlisted for shape here and refused there.
+  const mode = b.mode === 'pickup' || b.mode === 'delivery' || b.mode === 'express' ? b.mode : null
 
   // A string or nothing. The SHAPE is checked here; whether the shop is actually taking that
   // date is `placeOrder`'s call, because the window is the shop's rule and not HTTP's — the
@@ -880,6 +934,14 @@ app.post('/api/orders', async (c) => {
       quotedTotal,
       voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
       fulfilDate,
+      // Lifted off the ADDRESS, not a sibling body field: it is a property of where the parcel
+      // goes, and keeping the two together is what stops an address and a place id from
+      // disagreeing. The distance itself is never read from the body — see placeOrder.
+      destinationPlaceId: typeof (b.address as Record<string, unknown> | null)?.place_id === 'string'
+        ? ((b.address as Record<string, unknown>).place_id as string)
+        : null,
+      // For the miss-path spend bound only (Finding 2, fix wave 2) — see PlaceOrderInput.
+      callerIp: ipOf(c),
     })
     return c.json(result)
   } catch (err) {
@@ -938,6 +1000,122 @@ app.post('/api/orders/track', async (c) => {
     console.error('Order tracking failed:', err instanceof Error ? err.message : String(err))
     return c.json(null)
   }
+})
+
+// ── Distance delivery quote ───────────────────────────────────────────────────
+// Unauthenticated on purpose: a guest checkout must be able to see its delivery fee, and guest
+// checkout is a first-class path.
+//
+// It takes a PLACE ID rather than an address, and that is an API-shape decision with a cost
+// behind it: a free-text field invites a caller to mint unlimited distinct destinations, and
+// every distinct destination is a billable lookup on the platform's own Maps account. Note the
+// shape is the deterrent, not a validation — any non-empty string is accepted, because place ids
+// have no stable public format and a shape check would refuse legitimate addresses. What
+// actually bounds the spend is the pair of limits below. (docs/adr/0001)
+//
+// A hit on `distance_quotes` is the normal case and costs nothing; the same row is what order
+// intake reads a moment later, which is what makes the quote and the charge the same number.
+app.post('/api/shipping/quote', async (c) => {
+  const body = await c.req.json().catch(() => null)
+  const b = (body ?? {}) as Record<string, unknown>
+  if (typeof b.merchantId !== 'string' || !b.merchantId || typeof b.placeId !== 'string' || !b.placeId) {
+    return c.json({ error: 'invalid_body' }, 400)
+  }
+
+  if (!quoteIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+
+  const { data: merchant } = await admin
+    .from('merchants')
+    .select('id, currency, status, express_enabled, delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id')
+    .eq('id', b.merchantId)
+    .maybeSingle()
+  if (!merchant) return c.json({ error: 'merchant_not_found' }, 404)
+  if (merchant.status !== 'active') return c.json({ error: 'merchant_inactive' }, 409)
+
+  // `shopDistance`, not a local read of these columns: the storefront quotes from this exact
+  // function and order intake charges from it, and a third reading here is a third rule the
+  // customer meets as a `price_changed` refusal.
+  const policy = shopDistance(merchant)
+  // `not_distance_priced` keeps its wire name — the storefront already branches on it, and
+  // renaming a refusal code is a separate, customer-visible change.
+  if (!policy.enabled || !policy.usable) return c.json({ error: 'not_distance_priced' }, 409)
+
+  // The ceiling is checked against PROVIDER CALLS, so a cache hit is free. Peek at the cache
+  // first for exactly that reason.
+  //
+  // A cache read that throws degrades to a MISS, exactly as `resolveDistance` does with its own
+  // read. The peek exists only to decide whether this request should cost the shop a slot of its
+  // daily ceiling, so a database blip must not turn a quotable address into a 500 — it just means
+  // this one is metered like any other miss.
+  let cached: number | null = null
+  try {
+    cached = await liveDistanceDeps.readCache(
+      policy.originPlaceId!, b.placeId, new Date(Date.now() - CACHE_TTL_MS),
+    )
+  } catch (err) {
+    console.error('Distance cache peek failed:', err instanceof Error ? err.message : String(err))
+  }
+  if (cached === null && !quoteMerchantWindow.allow(merchant.id)) {
+    return c.json({ error: 'quota_exceeded' }, 429)
+  }
+
+  const outcome = cached !== null
+    ? ({ status: 'ok', metres: cached } as const)
+    : await resolveDistance(liveDistanceDeps, {
+        originPlaceId: policy.originPlaceId!,
+        destinationPlaceId: b.placeId,
+      })
+
+  // NO ROUTE AND OUT-OF-RANGE ARE THE SAME ANSWER to the customer — "this shop does not deliver
+  // there" — because they are the same fact. Only `failed` invites a retry.
+  if (outcome.status === 'no_route') return c.json({ error: 'out_of_range' }, 409)
+  if (outcome.status === 'failed') return c.json({ error: 'lookup_failed' }, 409)
+
+  const km = routedKm(outcome.metres)
+  if (exceedsMaxKm(policy, km)) return c.json({ error: 'out_of_range' }, 409)
+
+  return c.json({ km, fee: distanceFee(policy, km), currency: merchant.currency ?? 'MYR' })
+})
+
+// ── Address autocomplete proxy ────────────────────────────────────────────────
+// Proxied for ONE reason above all: the Maps credential must never reach the browser, where a
+// key can be lifted off a page and spent elsewhere (#101, story 49).
+//
+// `session` is money, not hygiene: a burst of keystrokes carrying one token bills as a single
+// lookup when it ends in a details call. The browser mints it and passes the SAME one to
+// /api/places/detail.
+//
+// Unauthenticated, because a guest picking a delivery address has no session. Bounded by IP for
+// the same reason the quote endpoint is: these calls cost the platform money.
+app.get('/api/places/suggest', async (c) => {
+  if (!placesIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  // The per-IP window rotates away with a spoofed header (see the module comment on
+  // `placesGlobalWindow`); this is the ceiling that actually holds.
+  if (!placesGlobalWindow.allow('global')) {
+    console.error('Places global quota exceeded on /api/places/suggest — investigate for abuse')
+    return c.json({ error: 'rate_limited' }, 429)
+  }
+  const input = c.req.query('input') ?? ''
+  const session = c.req.query('session') ?? ''
+  // A short prefix is noise that still bills. Empty results, no call.
+  if (input.trim().length < 3) return c.json({ suggestions: [] })
+  return c.json({ suggestions: await googlePlaceSuggest(input, session) })
+})
+
+app.get('/api/places/detail/:placeId', async (c) => {
+  if (!placesIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  if (!placesGlobalWindow.allow('global')) {
+    console.error('Places global quota exceeded on /api/places/detail — investigate for abuse')
+    return c.json({ error: 'rate_limited' }, 429)
+  }
+  const placeId = c.req.param('placeId')
+  // Same floor as `suggest`'s input check, missing here until now: place ids have no stable
+  // public format, so this is a sanity guard against an empty or absurdly long value, not a
+  // validation of shape.
+  if (!placeId || placeId.length > 512) return c.json({ error: 'place_not_found' }, 404)
+  const detail = await googlePlaceDetail(placeId, c.req.query('session') ?? '')
+  if (!detail) return c.json({ error: 'place_not_found' }, 404)
+  return c.json(detail)
 })
 
 // ── Stripe webhook — authoritative subscription state ──────────────────────────

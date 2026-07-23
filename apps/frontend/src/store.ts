@@ -549,6 +549,9 @@ export type OrderErrorCode =
   | 'delivery_state_required'
   | 'fulfil_date_unavailable'
   | 'fulfil_date_required'
+  | 'delivery_place_required'
+  | 'delivery_out_of_range'
+  | 'distance_lookup_failed'
 
 /**
  * A refusal the customer can do something about — retry without the voucher, come back later.
@@ -603,9 +606,9 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   merchantId: string
   customerName: string
   customerWa: string
-  // The wire contract, not a string: the backend allowlists exactly these two and 400s on
+  // The wire contract, not a string: the backend allowlists exactly these three and 400s on
   // anything else, because `mode` selects the shipping fee. Mirrors PlaceOrderInput's union.
-  mode: 'pickup' | 'delivery'
+  mode: 'pickup' | 'delivery' | 'express'
   address?: AddressParts | string
   cart: Record<string, number>
   quotedTotal: number
@@ -637,6 +640,42 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     throw new OrderError(payload?.error ?? 'order_failed', typeof payload?.now === 'string' ? payload.now : undefined)
   }
   return (await res.json()) as { orderNumber: string }
+}
+
+/**
+ * Why a delivery could not be quoted. `out_of_range` covers "beyond this shop's maximum" AND
+ * "no road route exists" — the same fact to the customer, and the same message. Only
+ * `lookup_failed` is worth retrying.
+ */
+export class DeliveryQuoteError extends Error {
+  constructor(readonly code: 'out_of_range' | 'lookup_failed' | 'not_distance_priced' | 'rate_limited' | 'network') {
+    super(code)
+    this.name = 'DeliveryQuoteError'
+  }
+}
+
+/**
+ * Ask what this delivery costs. Sends a PLACE ID and never a typed address: free text would let
+ * a caller mint unlimited billable lookups on the platform's Maps account (docs/adr/0001).
+ *
+ * The row this writes is the same row order intake reads a moment later, which is what makes the
+ * quote and the charge the same number.
+ */
+export async function quoteDelivery(merchantId: string, placeId: string): Promise<{ km: number; fee: number }> {
+  const res = await fetch(`${API_URL}/api/shipping/quote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ merchantId, placeId }),
+  }).catch(() => null)
+  if (!res) throw new DeliveryQuoteError('network')
+  if (!res.ok) {
+    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    const code = payload.error
+    throw new DeliveryQuoteError(
+      code === 'out_of_range' || code === 'not_distance_priced' || code === 'rate_limited' ? code : 'lookup_failed',
+    )
+  }
+  return (await res.json()) as { km: number; fee: number }
 }
 
 // Trigger the server-side order notification (Telegram). The bot token stays on

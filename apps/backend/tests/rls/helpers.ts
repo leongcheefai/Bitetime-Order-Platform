@@ -78,6 +78,14 @@ export async function seedMerchant(fields: {
   /** Defaults to the column defaults (off / 0) when omitted — see 20260720140000_merchant_tax.sql. */
   tax_enabled?: boolean
   tax_rate?: number
+  /** Fulfilment methods (#103). Omitted fields keep the column defaults — pickup + delivery. */
+  pickup_enabled?: boolean
+  delivery_enabled?: boolean
+  express_enabled?: boolean
+  delivery_base_fee?: number
+  delivery_rate_per_km?: number
+  delivery_max_km?: number | null
+  origin_place_id?: string
 }) {
   await resetMerchant(fields.slug)
   const { data, error } = await serviceClient()
@@ -90,6 +98,13 @@ export async function seedMerchant(fields: {
       status: fields.status ?? 'active',
       ...(fields.tax_enabled !== undefined ? { tax_enabled: fields.tax_enabled } : {}),
       ...(fields.tax_rate !== undefined ? { tax_rate: fields.tax_rate } : {}),
+      ...(fields.pickup_enabled !== undefined ? { pickup_enabled: fields.pickup_enabled } : {}),
+      ...(fields.delivery_enabled !== undefined ? { delivery_enabled: fields.delivery_enabled } : {}),
+      ...(fields.express_enabled !== undefined ? { express_enabled: fields.express_enabled } : {}),
+      ...(fields.delivery_base_fee !== undefined ? { delivery_base_fee: fields.delivery_base_fee } : {}),
+      ...(fields.delivery_rate_per_km !== undefined ? { delivery_rate_per_km: fields.delivery_rate_per_km } : {}),
+      ...(fields.delivery_max_km !== undefined ? { delivery_max_km: fields.delivery_max_km } : {}),
+      ...(fields.origin_place_id !== undefined ? { origin_place_id: fields.origin_place_id } : {}),
     })
     .select('id')
     .single()
