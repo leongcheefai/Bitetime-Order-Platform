@@ -412,4 +412,42 @@ describe('PATCH /api/merchants/:id (shipping policy)', () => {
       expect(res.status).toBe(200)
     })
   })
+
+  describe('at least one fulfilment method', () => {
+    it('refuses a save that would leave the shop offering nothing', async () => {
+      // Default seed is pickup + delivery on, express off. Clearing both in one body leaves
+      // nothing on — refused before the DB CHECK ever answers with a bare 500.
+      const res = await patchMerchant(merchantId, ownerToken, { pickup_enabled: false, delivery_enabled: false })
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as any).error).toMatch(/at least one fulfilment method/)
+    })
+
+    it('judges the LAST flag against the stored row, not against the patch alone', async () => {
+      // The trap this check exists for. Two saves, each legal on its own body: the first turns
+      // delivery off (pickup still on, fine), the second turns pickup off. Reading only the
+      // second patch sees one false flag and waves it through — and the shop is left with no
+      // method at all. The merged read is what catches it.
+      const first = await patchMerchant(merchantId, ownerToken, { delivery_enabled: false })
+      expect(first.status).toBe(200)
+      const res = await patchMerchant(merchantId, ownerToken, { pickup_enabled: false })
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as any).error).toMatch(/at least one fulfilment method/)
+    })
+
+    it('lets one shop offer delivery AND express at once', async () => {
+      const res = await patchMerchant(merchantId, ownerToken, {
+        delivery_enabled: true, express_enabled: true, origin_place_id: 'ChIJorigin',
+      })
+      expect(res.status).toBe(200)
+      const row = (await res.json()) as any
+      expect(row.delivery_enabled).toBe(true)
+      expect(row.express_enabled).toBe(true)
+    })
+
+    it('refuses a non-boolean flag rather than coercing it', async () => {
+      const res = await patchMerchant(merchantId, ownerToken, { pickup_enabled: 'false' })
+      expect(res.status).toBe(400)
+      expect(((await res.json()) as any).error).toMatch(/pickup_enabled must be a boolean/)
+    })
+  })
 })

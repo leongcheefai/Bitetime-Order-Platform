@@ -146,14 +146,27 @@ app.patch('/api/merchants/:id', requireMerchantOwns, async (c) => {
   if (!picked.ok) return c.json({ error: picked.error }, 400)
   const patch = picked.patch
   if (Object.keys(patch).length === 0) return c.json({ error: 'No updatable fields' }, 400)
-  // Express REQUIRES an origin, and the check has to see the row's CURRENT origin as well as the
-  // patch's: a merchant switching express on in one save and setting their origin in another must
-  // not be able to land in a state where the shop quotes nothing. `c.get('merchant')` is the same
-  // row `requireMerchantOwns` already loaded for the ownership check above, so this is a fallback
-  // to already-fetched data, not a second query. The column's own CHECK constraint
-  // (`merchants_express_requires_origin`) is the backstop; this is the one that can say WHY.
-  if (patch.express_enabled === true) {
-    const origin = patch.origin_place_id !== undefined ? patch.origin_place_id : c.get('merchant').origin_place_id
+  // These two rules must see the row's CURRENT flags as well as the patch's. A merchant who
+  // turns delivery off in one save and pickup off in the next sends two bodies that are each
+  // legal alone — and lands on a storefront no customer can order from. `c.get('merchant')` is
+  // the row `requireMerchantOwns` already loaded (`select('*')`) for the ownership check above,
+  // so this is a read of already-fetched data, not a second query.
+  //
+  // The columns' own CHECK constraints (`merchants_one_fulfilment_method`,
+  // `merchants_express_requires_origin`) are the backstop. These are the checks that can say
+  // WHY, in time for the merchant still looking at the form, instead of a bare 500 out of
+  // PostgREST.
+  const stored = c.get('merchant')
+  const merged = {
+    pickup: patch.pickup_enabled ?? stored.pickup_enabled,
+    delivery: patch.delivery_enabled ?? stored.delivery_enabled,
+    express: patch.express_enabled ?? stored.express_enabled,
+  }
+  if (!merged.pickup && !merged.delivery && !merged.express) {
+    return c.json({ error: 'Your shop must offer at least one fulfilment method' }, 400)
+  }
+  if (merged.express) {
+    const origin = patch.origin_place_id !== undefined ? patch.origin_place_id : stored.origin_place_id
     if (!origin) return c.json({ error: 'Set your delivery origin before switching on express delivery' }, 400)
   }
   const { data, error } = await admin.from('merchants').update(patch).eq('id', id).select().single()
