@@ -55,7 +55,7 @@ function isAddressShaped(a: unknown): a is AddressParts {
 }
 
 export function savedDetailsFromOrder(order: {
-  mode: 'pickup' | 'delivery'
+  mode: 'pickup' | 'delivery' | 'express'
   wa: string
   address: AddressParts
 }): SavedDetails {
@@ -63,8 +63,10 @@ export function savedDetailsFromOrder(order: {
   const whatsapp = order.wa.trim()
   if (whatsapp) saved.whatsapp = whatsapp
   // A pickup order carries no address. Writing the form's empty one would blank the address the
-  // customer saved on their last delivery — and they would only discover it at the next checkout.
-  if (order.mode === 'delivery' && isCompleteAddress(order.address)) {
+  // customer saved on their last delivery — and they would only discover it at the next
+  // checkout. The test is "not a pickup", not "is a delivery": an express order carries an
+  // address too, and it is just as worth keeping.
+  if (order.mode !== 'pickup' && isCompleteAddress(order.address)) {
     saved.delivery_address = order.address
   }
   return saved

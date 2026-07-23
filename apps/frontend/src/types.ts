@@ -34,8 +34,11 @@ export interface Merchant {
   tax_enabled?: boolean
   /** A PERCENTAGE: 6 means 6%. PostgREST sends a number; read via `shopTax`. */
   tax_rate?: number | string
-  /** Which shipping policy is live. Absent = region, which is every shop that predates #101. */
-  shipping_mode?: 'region' | 'distance'
+  /** Which methods this shop offers. Read through `shopMethods`, never directly — an absent
+   *  column means that column's own default, not `false`. */
+  pickup_enabled?: boolean
+  delivery_enabled?: boolean
+  express_enabled?: boolean
   /** Read these through `shopDistance`, never directly — they arrive as strings or numbers. */
   delivery_base_fee?: number | string
   delivery_rate_per_km?: number | string

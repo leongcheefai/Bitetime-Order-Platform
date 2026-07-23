@@ -606,9 +606,9 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   merchantId: string
   customerName: string
   customerWa: string
-  // The wire contract, not a string: the backend allowlists exactly these two and 400s on
+  // The wire contract, not a string: the backend allowlists exactly these three and 400s on
   // anything else, because `mode` selects the shipping fee. Mirrors PlaceOrderInput's union.
-  mode: 'pickup' | 'delivery'
+  mode: 'pickup' | 'delivery' | 'express'
   address?: AddressParts | string
   cart: Record<string, number>
   quotedTotal: number

@@ -19,6 +19,14 @@ describe('savedDetailsFromOrder', () => {
     expect(saved).not.toHaveProperty('name')
   })
 
+  it('saves the address on an express order, the same as a delivery', () => {
+    // The rule is "not a pickup", not "is a delivery". An express order carries an address the
+    // customer will want back next time, and testing for 'delivery' silently drops it.
+    const routed: AddressParts = { line1: '12 Jalan Example', postcode: '47301', city: 'PJ', state: 'Selangor' }
+    expect(savedDetailsFromOrder({ mode: 'express', wa: '60123456789', address: routed }))
+      .toEqual({ whatsapp: '60123456789', delivery_address: routed })
+  })
+
   it('never touches the saved address on a pickup order', () => {
     // The trap: a pickup order carries no address, so writing the form's address would blank the
     // one the customer saved on their last delivery — and they would only find out next time.
