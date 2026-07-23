@@ -5,8 +5,10 @@ import { useSession } from '../SessionContext'
 import { useEnterTransition } from '../motion'
 import { toast } from 'sonner'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails, quoteDelivery, DeliveryQuoteError } from '../store'
-import { priceOrder, voucherError, shopRates, shopTax, shopDistance, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import { priceOrder, voucherError, shopRates, shopTax, shopDistance, shopMethods, firstOfferedMethod, FULFILMENT_METHODS, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import type { FulfilmentMethod } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder } from '../savedDetails'
+import { fulfilmentLabel, feeLineLabel } from '../fulfilmentLabel'
 import { formatMoney } from '../currency'
 import { formatTaxRate } from '../receipt'
 import { formatUnit } from '../productUnit'
@@ -96,7 +98,6 @@ export default function Storefront() {
 
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<Record<string, number>>({})        // { [productId]: qty }
-  const [mode, setMode] = useState<'pickup' | 'delivery'>('pickup')  // 'pickup' | 'delivery'
   const [fulfilDate, setFulfilDate] = useState<string | null>(null)
 
   // Prefill is DERIVED, never copied into state by an effect. `null` means "the customer hasn't
@@ -152,16 +153,22 @@ export default function Storefront() {
       setQuoteError({
         placeId,
         // Out-of-range and no-route are ONE message because they are one fact. Only a lookup
-        // failure invites a retry, and pickup is offered either way so the shop does not lose
-        // the order over a fee it could not calculate.
+        // failure invites a retry, and pickup is offered as an escape ONLY when the shop offers
+        // it (`pickupEscape`) — pointing at a button that is not there is worse than no suggestion.
         message: code === 'out_of_range'
-          ? t('Sorry, this shop does not deliver to that address. You can still choose pickup.',
-              '抱歉，本店不配送到该地址。您仍可选择自取。')
+          ? (pickupEscape
+              ? t('Sorry, this shop does not deliver to that address. You can still choose pickup.',
+                  '抱歉，本店不配送到该地址。您仍可选择自取。')
+              : t('Sorry, this shop does not deliver to that address.',
+                  '抱歉，本店不配送到该地址。'))
           : code === 'rate_limited'
             ? t('Too many address lookups just now. Please wait a moment and try again.',
                 '地址查询过于频繁，请稍候再试。')
-            : t('We could not work out the delivery fee just now. Please try again, or choose pickup.',
-                '暂时无法计算运费，请重试或选择自取。'),
+            : (pickupEscape
+                ? t('We could not work out the delivery fee just now. Please try again, or choose pickup.',
+                    '暂时无法计算运费，请重试或选择自取。')
+                : t('We could not work out the delivery fee just now. Please try again.',
+                    '暂时无法计算运费，请重试。')),
       })
     } finally {
       // Conditional — unlike the invalidator below, which clears `quoting` UNCONDITIONALLY. This
@@ -208,7 +215,7 @@ export default function Storefront() {
       state: detail.state,
       place_id: detail.placeId,
     })
-    if (!distancePriced) return
+    if (!expressPriced) return
     await fetchQuote(detail.placeId)
   }
 
@@ -263,19 +270,35 @@ export default function Storefront() {
   // The SAME mapper the order transaction charges with — a second reading of these columns here
   // is a second rule, and the customer meets it as a refused checkout.
   const distance = shopDistance(merchant)
-  // Which policy is LIVE — matches `priceOrder`'s OWN internal `distancePriced` (mode ===
-  // 'distance', usable or not), the same predicate that decides its `shippingPending`. Gating the
-  // storefront on the NARROWER `&& usable` below is exactly how the region form's fee leaked into
-  // a distance shop whose configuration cannot price (#101 review, Finding 1): `resolvedShipping`
-  // tested the narrow flag, saw it false, and quietly filled in the region estimate.
-  const distanceMode = distance.mode === 'distance'
-  // Distance mode AND priceable. `!distance.usable` is a REFUSAL of delivery at this shop, not a
-  // fallback to the region form or its rate — see `ShopDistance.usable`'s own contract ("FALSE IS
-  // A REFUSAL, NOT A FALLBACK"). Unreachable today (DB constraints and the backend's allowlist
-  // make it unconstructible) and honoured anyway: that contract is the layered defence for
-  // exactly this case, and every rendering decision below reads `distanceMode` for "is this shop
-  // on the distance path at all" and `distancePriced` only for "can it actually price right now".
-  const distancePriced = distanceMode && distance.usable
+  // The SAME mapper intake refuses with. A second reading of these columns here is a second
+  // rule, and the customer meets it as a refusal of a button they were just offered.
+  const methods = shopMethods(merchant)
+  // `null` when the shop offers nothing — a state the CHECK constraint makes unconstructible,
+  // and which this form must still refuse rather than invent a method for.
+  const defaultMode = firstOfferedMethod(methods)
+  // Only offer the escape the shop actually has. "Please choose pickup instead" at a shop that
+  // does not do pickup is worse than no suggestion at all — it sends the customer looking for a
+  // button that is not there.
+  const pickupEscape = methods.pickup
+
+  const [modeInput, setModeInput] = useState<FulfilmentMethod | null>(null)
+  // DERIVED, not seeded by an effect — the same shape as the profile prefill above: `null` means
+  // "the customer has not chosen", so the shop's first offered method fills in until they do.
+  // `?? 'pickup'` is unreachable (see `defaultMode`) and is here only so `mode` is never null
+  // for the price call; `noMethods` below is what actually stops such a shop taking an order.
+  const mode = modeInput ?? defaultMode ?? 'pickup'
+  const setMode = setModeInput
+  const noMethods = defaultMode === null
+
+  // Is the CUSTOMER'S CHOICE the distance-priced one? This is what `priceOrder` branches on
+  // internally (`mode === 'express'`), and gating the storefront on anything else is how a
+  // region form's fee leaked into a distance quote (#101 review, Finding 1).
+  const expressChosen = mode === 'express'
+  // Chosen AND priceable. `!distance.usable` is a REFUSAL of express at this shop, not a
+  // fallback to the delivery form or its rate — see `ShopDistance.usable`'s own contract
+  // ("FALSE IS A REFUSAL, NOT A FALLBACK"). Unreachable today (the DB constraint and the
+  // backend's allowlist make it unconstructible) and honoured anyway.
+  const expressPriced = expressChosen && distance.usable
 
   // The quote for the address currently selected. `null` means "not calculated" — which is a
   // state the UI must SAY, never a 0 it can show as a fee.
@@ -305,8 +328,8 @@ export default function Storefront() {
   // survive a save) still saw "not calculated yet" on every fresh load, because nothing ever
   // quoted from a place id that arrived via prefill rather than a live pick.
   //
-  // Deliberately narrow: only fires for a distance shop, in delivery mode, for a place id that
-  // has never been requested (`requestedPlaceIdRef` — the SAME token Finding 5 uses to sequence
+  // Deliberately narrow: only fires when express is the chosen method and priceable, for a place
+  // id that has never been requested (`requestedPlaceIdRef` — the SAME token Finding 5 uses to sequence
   // manual picks). That one guard does three jobs at once: it stops this effect from re-firing on
   // every render (the id it just requested is now "seen"), it stops it from looping after a
   // failure (a failed id stays "seen" — the customer must actively re-pick to try again, same as
@@ -318,12 +341,12 @@ export default function Storefront() {
   // before metering, so a cache hit — the normal case for a saved, previously-quoted address —
   // consumes no quota at all.
   useEffect(() => {
-    if (!distancePriced || mode !== 'delivery') return
+    if (!expressPriced) return
     const placeId = address.place_id
     if (!placeId || requestedPlaceIdRef.current === placeId) return
     fetchQuote(placeId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [distancePriced, mode, address.place_id])
+  }, [expressPriced, mode, address.place_id])
 
   // What actually invalidates a refusal is the ADDRESS it was raised against changing, never the
   // fulfilment MODE — clearing on every `mode` flip threw away a still-applicable refusal the
@@ -490,11 +513,11 @@ export default function Storefront() {
     // find none, and it refuses such an order outright (`delivery_state_required`) rather than
     // shipping it for free. Weaken the gate and the two sides diverge.
     //
-    // The region placeholder is for REGION shops only — gated on `distanceMode`, not the
-    // narrower `distancePriced`, so an unusable distance shop never falls back to it either. A
-    // distance shop shows no fee at all until one is calculated: an estimate the customer might
-    // mistake for their fee is the invented number this feature exists to never produce.
-    resolvedShipping: !distanceMode && mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
+    // The region placeholder is for the `delivery` method specifically — a `delivery` order is
+    // region-priced at every shop now, whatever else that shop offers. Express shows no fee at
+    // all until one is calculated: an estimate the customer might mistake for their fee is the
+    // invented number this feature exists to never produce.
+    resolvedShipping: mode === 'delivery' && !address.state ? baseDeliveryFee : undefined,
     distance,
     // `quote.km` is already the rounded km the backend derived, so `km × 1000` re-enters
     // `routedKm` unchanged (`routedKm(25200) === 25.2`) and reproduces the same fee.
@@ -512,11 +535,11 @@ export default function Storefront() {
   const taxAmount = bd.tax
   const taxRate = bd.taxRate
   const deliveryReady =
-    mode !== 'delivery' ||
-    (distanceMode
+    mode === 'pickup' ||
+    (mode === 'express'
       // `!distance.usable` refuses outright — no address form is even rendered in that state
-      // (see the Delivery section below), so there is nothing here that could become "ready".
-      // At a PRICEABLE distance shop the address must have been SELECTED (so it has a place id)
+      // (see the Fulfilment section below), so there is nothing here that could become "ready".
+      // At a priceable express shop the address must have been SELECTED (so it has a place id)
       // and a fee must have come back. This gate is load-bearing for the PRICE, not just form
       // validity: it is the only thing stopping an order the shop would have to cancel (story 38).
       ? distance.usable && quotedForThisAddress && address.line1.trim() !== ''
@@ -524,7 +547,8 @@ export default function Storefront() {
         address.postcode.length === 5 &&
         address.city.trim() !== '' &&
         address.state.trim() !== '')
-  const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy && deliveryReady && chosenDate !== null
+  const canSubmit = cartItems.length > 0 && name.trim() !== '' && wa.trim() !== '' && !busy
+    && deliveryReady && chosenDate !== null && !noMethods
 
   // The one decision that says whether this customer is ever asked to sign in. `account` is
   // `undefined` until the session resolves — 'pending' holds the checkout back for that beat
@@ -791,7 +815,7 @@ export default function Storefront() {
         // have no way to act on (#101 review, Finding — price_changed strands a distance customer).
         // A re-quote moments after the original is a cache HIT, which consumes no ceiling — see the
         // quote endpoint's peek.
-        if (distancePriced && address.place_id) void fetchQuote(address.place_id)
+        if (expressPriced && address.place_id) void fetchQuote(address.place_id)
         const msg = t(
           'Prices at this shop just changed. Please review your order and place it again.',
           '本店价格刚刚有所调整，请确认订单后重新下单。',
@@ -821,19 +845,35 @@ export default function Storefront() {
         )
         setError(msg)
         toast.error(msg)
+      } else if (code === 'method_not_offered') {
+        // Unreachable from this form — it renders no button for a method the shop does not
+        // offer — and messaged anyway, because the alternative is the customer reading the
+        // literal string `method_not_offered` on the checkout screen. It fires if the merchant
+        // switches a method off while someone is mid-checkout.
+        const msg = t('This shop no longer offers that option. Please choose another.',
+                      '本店已不再提供该方式，请另选一种。')
+        setError(msg)
+        toast.error(msg)
       } else if (code === 'delivery_out_of_range') {
-        const msg = t('Sorry, this shop does not deliver to that address. Please choose pickup instead.',
-                   '抱歉，本店不配送到该地址，请改选自取。')
+        // Point at pickup ONLY when the shop offers it — see `pickupEscape`.
+        const msg = pickupEscape
+          ? t('Sorry, this shop does not deliver to that address. Please choose pickup instead.',
+              '抱歉，本店不配送到该地址，请改选自取。')
+          : t('Sorry, this shop does not deliver to that address.',
+              '抱歉，本店不配送到该地址。')
         setError(msg)
         toast.error(msg)
       } else if (code === 'distance_lookup_failed') {
         // Matches the quote-path copy verbatim (`fetchQuote`'s own 'lookup_failed' branch,
         // above) — and NOT the old submit-path wording, which promised "in a moment". This code
         // is also what a QUOTA-exhausted shop throws, and quota does not clear for up to 24
-        // hours: a time promise is a lie for that shop, and neither wording offered pickup as an
-        // escape (#101 review, Finding 2).
-        const msg = t('We could not work out the delivery fee just now. Please try again, or choose pickup.',
-                   '暂时无法计算运费，请重试或选择自取。')
+        // hours: a time promise is a lie for that shop. Pickup is offered as an escape only when
+        // the shop offers it (#101 review, Finding 2).
+        const msg = pickupEscape
+          ? t('We could not work out the delivery fee just now. Please try again, or choose pickup.',
+              '暂时无法计算运费，请重试或选择自取。')
+          : t('We could not work out the delivery fee just now. Please try again.',
+              '暂时无法计算运费，请重试。')
         setError(msg)
         toast.error(msg)
       } else if (code === 'delivery_place_required') {
@@ -1178,51 +1218,43 @@ export default function Storefront() {
           <div className="mb-7">
             <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">{t('Fulfilment', '配送方式')}</div>
             <div className="flex gap-[10px]" role="group" aria-label={t('Fulfilment method', '配送方式')}>
-              <button
-                type="button"
-                className={cn(
-                  "flex-1 border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
-                  mode === 'pickup'
-                    ? "border-[1.5px] border-oxblood bg-oxblood-tint text-oxblood font-medium"
-                    : "border-clay-border bg-surface-raised text-ink"
-                )}
-                aria-pressed={mode === 'pickup'}
-                onClick={() => setMode('pickup')}
-              >
-                {t('Pickup', '自取')}
-              </button>
-              <button
-                type="button"
-                className={cn(
-                  "flex-1 border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
-                  mode === 'delivery'
-                    ? "border-[1.5px] border-oxblood bg-oxblood-tint text-oxblood font-medium"
-                    : "border-clay-border bg-surface-raised text-ink"
-                )}
-                aria-pressed={mode === 'delivery'}
-                onClick={() => setMode('delivery')}
-              >
-                {/* States the rule BEFORE the customer types an address — a distance shop's fee
-                    formula, not the region shop's flat rate, is what they're committing to.
-                    Gated on `distancePriced`, not the bare `distanceMode`: `shopDistance` defaults
-                    `base`/`ratePerKm` to 0 for the UNUSABLE case specifically so nothing
-                    downstream mistakes them for a chosen rate — rendering "RM 0.00 + RM 0.00/km"
-                    here would be exactly that mistake, made directly above a panel already saying
-                    delivery is refused (#101 review, Finding 3). An unusable distance shop gets a
-                    BARE label instead — not the region shop's dormant rate either:
-                    `shopDistance` remains the only reader of the merchant's distance columns, and
-                    surfacing its region twin here is the same fallback direction its own contract
-                    forbids.
-                    A REGION shop's copy is restored to its pre-#101 form verbatim — a shop that
-                    never opted into distance pricing must look untouched (#101 review, Finding 6). */}
-                {distancePriced
-                  ? t(`Delivery — ${formatMoney(distance.base, currency)} + ${formatMoney(distance.ratePerKm, currency)}/km`,
-                       `配送 — ${formatMoney(distance.base, currency)} + ${formatMoney(distance.ratePerKm, currency)}/公里`)
-                  : distanceMode
-                    ? t('Delivery', '送货')
-                    : (<>{t('Delivery', '送货')} (+{formatMoney(baseDeliveryFee, currency)})</>)}
-              </button>
+              {FULFILMENT_METHODS.filter(m => methods[m]).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  className={cn(
+                    "flex-1 border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-center transition-all hover:border-oxblood focus-visible:outline-2 focus-visible:outline-oxblood focus-visible:outline-offset-2",
+                    mode === m
+                      ? "border-[1.5px] border-oxblood bg-oxblood-tint text-oxblood font-medium"
+                      : "border-clay-border bg-surface-raised text-ink"
+                  )}
+                  aria-pressed={mode === m}
+                  onClick={() => setMode(m)}
+                >
+                  {/* The fee is stated BEFORE the customer types an address — what they are
+                      committing to is the rate, not a number they have yet to see. The express
+                      formula is gated on `distance.usable`, not on the bare flag: `shopDistance`
+                      defaults base/ratePerKm to 0 for the UNUSABLE case specifically so nothing
+                      downstream mistakes them for a chosen rate, and rendering "RM 0.00 + RM
+                      0.00/km" here would be exactly that mistake (#101 review, Finding 3). */}
+                  {m === 'pickup'
+                    ? fulfilmentLabel('pickup', t)
+                    : m === 'delivery'
+                      ? <>{fulfilmentLabel('delivery', t)} (+{formatMoney(baseDeliveryFee, currency)})</>
+                      : distance.usable
+                        ? t(`Express delivery — ${formatMoney(distance.base, currency)} + ${formatMoney(distance.ratePerKm, currency)}/km`,
+                             `快速配送 — ${formatMoney(distance.base, currency)} + ${formatMoney(distance.ratePerKm, currency)}/公里`)
+                        : fulfilmentLabel('express', t)}
+                </button>
+              ))}
             </div>
+            {noMethods && (
+              /* Unreachable past `merchants_one_fulfilment_method`. Said anyway, because the
+                 alternative is a checkout with no buttons and no explanation. */
+              <p className="text-[13px] text-oxblood mt-3">
+                {t('This shop is not accepting orders right now.', '本店目前暂不接受订单。')}
+              </p>
+            )}
             {mode === 'pickup' && merchant?.pickup_address && (
               <div className="flex flex-col gap-1.5 mt-3">
                 <div className="text-[13px] font-medium text-oxblood">{t('Pickup address', '自取地址')}</div>
@@ -1236,11 +1268,10 @@ export default function Storefront() {
                 </a>
               </div>
             )}
-            {mode === 'delivery' && (
+            {mode === 'express' && (
               <div className="flex flex-col gap-3 mt-3">
-                {distanceMode ? (
-                  distance.usable ? (
-                    <>
+                {distance.usable ? (
+                  <>
                       <AddressAutocomplete
                         id="sf-address"
                         t={t}
@@ -1265,20 +1296,30 @@ export default function Storefront() {
                       {quoting && <p className="text-[13px] text-rose-muted">{t('Calculating delivery fee…', '正在计算运费…')}</p>}
                       {quoteErrorForThisAddress && <p className="text-[13px] text-oxblood">{quoteErrorForThisAddress.message}</p>}
                     </>
-                  ) : (
-                    // `usable === false`: no address field at all, in either shape — offering one
-                    // would invite a pick that can never quote, and a region form here is the
-                    // exact fallback `ShopDistance.usable`'s contract forbids. Say so, and point
-                    // at pickup, which is unaffected. Unreachable today (see the comment on
-                    // `distancePriced` above) — the DB/backend cannot construct this state, but
-                    // the storefront must not silently invent a fee if they ever could.
-                    <p className="text-[13px] text-oxblood">
-                      {t('Delivery is not available at this shop right now. Please choose pickup instead.',
-                         '本店目前暂不提供配送服务，请改选自取。')}
-                    </p>
-                  )
                 ) : (
-                  <>
+                  // `usable === false`: no address field at all. Offering one would invite a pick
+                  // that can never quote, and a region form here is the exact fallback
+                  // `ShopDistance.usable`'s contract forbids. Unreachable today — the DB and the
+                  // backend cannot construct this state — but the storefront must not silently
+                  // invent a fee if they ever could.
+                  <p className="text-[13px] text-oxblood">
+                    {methods.pickup
+                      ? t('Express delivery is not available at this shop right now. Please choose pickup instead.',
+                          '本店目前暂不提供快速配送，请改选自取。')
+                      : t('Express delivery is not available at this shop right now.',
+                          '本店目前暂不提供快速配送。')}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {mode === 'delivery' && (
+              <div className="flex flex-col gap-3 mt-3">
+                {/* The `line1` field goes through `clearAddressForNewText`, and it matters MORE
+                    here, not less: a customer who switched from Express to Delivery at the same
+                    shop is carrying a confirmed place id into a form with no field to confirm one.
+                    Left attached, a LATER express visit's auto-quote would price to the OLD place
+                    while this line names a different one (#101 review, Finding 5). */}
                     <div className="flex flex-col gap-1.5">
                       <Label htmlFor="sf-line1">{t('Address line', '地址')}</Label>
                       <Input
@@ -1335,8 +1376,6 @@ export default function Storefront() {
                         ))}
                       </select>
                     </div>
-                  </>
-                )}
               </div>
             )}
           </div>
@@ -1481,21 +1520,17 @@ export default function Storefront() {
                   <span className="min-w-0">{t('Subtotal', '小计')}</span>
                   <span className="shrink-0 text-right whitespace-nowrap">{formatMoney(subtotal, currency)}</span>
                 </div>
-                {mode === 'delivery' && (
-                  // The house term and casing — 'Delivery fee' / '送货费' — matching the success
-                  // view, ReceiptDialog and OrderHistory verbatim: those three never changed for
-                  // #101, so a fourth spelling here ('Delivery Fee' / '运费') left one order
-                  // showing the customer two different terms for the same line on two screens
-                  // (#101 review, Finding 6). The distance still LABELS the line — in parentheses,
-                  // after the house term — and the two reconcile on a calculator: the km shown is
-                  // the km the fee was derived from.
+                {mode !== 'pickup' && (
+                  // `feeLineLabel` is the ONE place that names this line — the same function the
+                  // receipt and order history use, so a customer never meets two terms for one
+                  // order (#103). It names the line after the METHOD (`Delivery fee` /
+                  // `Express delivery fee`) and appends the distance only when there is one. The
+                  // pending case is express-only (`shippingPending`) and keeps its own wording.
                   <MoneyLine
                     label={
                       bd.shippingPending
-                        ? t('Delivery fee (not calculated yet)', '送货费（尚未计算）')
-                        : quotedForThisAddress
-                          ? t(`Delivery fee (${quote!.km.toFixed(1)} km)`, `送货费（${quote!.km.toFixed(1)} 公里）`)
-                          : t('Delivery fee', '送货费')
+                        ? t('Express delivery fee (not calculated yet)', '快速配送费（尚未计算）')
+                        : feeLineLabel(mode, quotedForThisAddress ? quote!.km : null, t)
                     }
                     value={bd.shippingPending ? t('—', '—') : formatMoney(fee, currency)}
                   />
