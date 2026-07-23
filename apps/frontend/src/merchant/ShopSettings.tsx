@@ -182,6 +182,21 @@ function ShippingTab({ onDirtyChange }: TabProps) {
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
     try {
+      // A typed origin that was never confirmed against the map has no place id. The save would
+      // otherwise DROP it silently and still report success — the merchant watches their address
+      // vanish on the next reload under a "Settings saved" toast. Refuse instead, and say what
+      // "confirmed" means: an origin must be PICKED from the suggestions, because it is the
+      // routing origin AND the distance-cache key and free text can be neither. (After a load the
+      // two fields are always consistent, so this only fires on live, unconfirmed typing.)
+      if ((fields.originAddress ?? '').trim() !== '' && !fields.originPlaceId) {
+        toast.error(t(
+          'Pick your delivery origin from the suggestions — a typed address on its own cannot be saved.',
+          '请从建议列表中选择配送起点 — 仅输入文字无法保存。'
+        ))
+        setBusy(false)
+        return
+      }
+
       // Express requires an origin to route from. Checked here, in the merchant's language, while
       // they are still looking at the form — the backend's `merchants_express_requires_origin`
       // CHECK and its PATCH validation are the backstop, but a bare 400 after Save is a worse way
