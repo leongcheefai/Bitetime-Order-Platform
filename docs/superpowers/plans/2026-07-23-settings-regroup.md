@@ -1,119 +1,215 @@
-import { useEffect, useRef, useState } from 'react'
-import { toast } from 'sonner'
-import { useSession } from '../SessionContext'
-import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret, merchantHasOrders } from '../store'
-import { shopRates, shopTax, shopDistance, shopMethods } from '@bitetime/shared'
-import { CURRENCIES, CURRENCY_CODES, DEFAULT_CURRENCY, currencyDef } from '../currency'
-import { Button } from '../components/ui/button'
-import { Input } from '../components/ui/input'
-import { Label } from '../components/ui/label'
-import { Textarea } from '../components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger } from '../components/ui/select'
-import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
-import { useNavGuard } from './NavGuard'
-import { isDirty, type SettingsFields } from './settingsDirty'
-import ReferralTab from './ReferralTab'
-import FulfilmentTab from './FulfilmentTab'
-import AddressAutocomplete from '../store/AddressAutocomplete'
+# Shop Settings Regroup Implementation Plan
 
-type TabKey = 'shipping' | 'fulfilment' | 'payment' | 'notifications' | 'referral'
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-// Tabbed Shop Settings (issue #19). A container renders a horizontal tab bar and
-// the active tab's form; each tab is its own form with its own Save. Only the
-// active tab can be dirty — the unsaved guard blocks leaving a dirty tab — so the
-// container tracks a single `dirty` flag and registers it with the NavGuard.
-export default function ShopSettings() {
-  const { t } = useSession()
-  const { guard, registerBlocker } = useNavGuard()
-  const [tab, setTab] = useState<TabKey>('shipping')
-  const [dirty, setDirty] = useState(false)
+**Goal:** Move Currency and Tax out of the Shipping tab into the Payment tab, and reorder the Shipping tab method-first, so each settings tab does one job.
 
-  // Register this section's dirty state so the Dashboard sidebar can guard against it.
+**Architecture:** Pure relocation of JSX cards + their form state between two sibling components in one file (`ShopSettings.tsx`). Currency + Tax state and save logic move from `ShippingTab` into `PaymentTab`. Shipping's rate-label currency symbol switches from the live `fields.currency` to the saved `merchant.currency`. No backend, schema, shared-package, or copy changes.
+
+**Tech Stack:** React 19 + TypeScript, Vite, Tailwind, Vitest.
+
+## Global Constraints
+
+- Single file touched: `apps/frontend/src/merchant/ShopSettings.tsx`. No other file changes.
+- No backend / SQL / `@bitetime/shared` changes. No `settingsDirty.ts` change.
+- No copy changes — card headings, labels, hints, and toasts move verbatim.
+- No change to which cards are conditional: Delivery rates stay gated on `deliveryEnabled`, Express rates on `expressEnabled`; Pickup address and Delivery origin stay always-rendered.
+- Currency lock rule preserved: currency persists only when `!currencyLocked`; `currencyLocked` starts `true` and clears via `merchantHasOrders(merchant.id)`.
+- Tax read/write-back must stay routed through `shopTax` so a blank/0 rate reads back as unticked.
+- Dirty invariant: every boolean key (`taxEnabled`) must be present in BOTH `saved` and `fields` from init on whichever tab owns it, or `isDirty` false-fires.
+
+**Task order:** Task 1 (add to Payment) before Task 2 (strip from Shipping). Between the two, Currency/Tax appear on BOTH tabs — a harmless, functional duplicate that Task 2 resolves. Doing Task 2 first would lose the cards entirely mid-flight.
+
+---
+
+### Task 1: Move Currency + Tax into PaymentTab
+
+**Files:**
+- Modify: `apps/frontend/src/merchant/ShopSettings.tsx` — replace the whole `PaymentTab` function (currently ~544–585).
+
+**Interfaces:**
+- Consumes (all already imported at file top, module-level — no new imports): `shopTax`, `updateMerchantConfig`, `merchantHasOrders`, `CURRENCIES`, `CURRENCY_CODES`, `DEFAULT_CURRENCY`, `currencyDef`, `useTabDirty`, `SaveRow`, `CARD`, `HEADING`, `Select`/`SelectContent`/`SelectItem`/`SelectTrigger`, `Input`, `Label`, `useSession`, `toast`.
+- Produces: none consumed by other tasks (sibling component).
+
+- [ ] **Step 1: Replace the `PaymentTab` function**
+
+Replace the entire existing `PaymentTab` (from `function PaymentTab({ onDirtyChange }: TabProps) {` through its closing `}` before `NotificationsTab`) with:
+
+```tsx
+function PaymentTab({ onDirtyChange }: TabProps) {
+  const { t, merchant, refreshMerchant } = useSession()
+  const [saved, setSaved] = useState<SettingsFields>(() => {
+    // shopTax, not a local `?? 0`: this form shows the merchant what their shop CHARGES, and the
+    // charge is decided by that one function on both sides of the wire.
+    const tax = shopTax(merchant!)
+    return {
+      currency: merchant!.currency ?? DEFAULT_CURRENCY,
+      taxEnabled: tax.enabled,
+      taxRate: tax.rate ? String(tax.rate) : '',
+      bank: merchant!.payment_bank ?? '',
+      note: merchant!.payment_note ?? '',
+    }
+  })
+  const [fields, setFields] = useState<SettingsFields>(saved)
+  const [busy, setBusy] = useState(false)
+  // Currency locks after the first order so past orders/aggregates never
+  // re-denominate. Assume locked until the check clears, so it can't flip open.
+  const [currencyLocked, setCurrencyLocked] = useState(true)
+  useTabDirty(saved, fields, onDirtyChange)
+
   useEffect(() => {
-    registerBlocker(() => dirty)
-    return () => registerBlocker(null)
-  }, [dirty, registerBlocker])
+    let active = true
+    merchantHasOrders(merchant!.id).then(has => { if (active) setCurrencyLocked(has) })
+    return () => { active = false }
+  }, [merchant!.id])
 
-  // Warn on browser close/reload while there are unsaved edits.
-  useEffect(() => {
-    if (!dirty) return
-    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = '' }
-    window.addEventListener('beforeunload', handler)
-    return () => window.removeEventListener('beforeunload', handler)
-  }, [dirty])
-
-  // Switching sub-tab routes through the guard; on Discard the old tab unmounts
-  // (resetting its fields from the saved snapshot) and the new one mounts clean.
-  const changeTab = (next: TabKey) => {
-    if (next === tab) return
-    guard(() => { setDirty(false); setTab(next) })
+  async function save(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault(); setBusy(true)
+    try {
+      await updateMerchantConfig(merchant!.id, {
+        // Guard against a stale locked value slipping through: only persist the
+        // currency when it is still editable.
+        ...(currencyLocked ? {} : { currency: fields.currency }),
+        payment_bank: fields.bank,
+        payment_note: fields.note,
+        // A blank rate box is 0, and 0 is "no tax" — the same collapse `shopTax` makes when it
+        // reads the row back. The checkbox is stored as typed.
+        tax_enabled: fields.taxEnabled,
+        tax_rate: Number(fields.taxRate) || 0,
+      })
+      await refreshMerchant()
+      // Tax goes through shopTax so a ticked-but-blank rate (`{tax_enabled: true, tax_rate: 0}`)
+      // reads back as OFF — carrying `fields.taxEnabled` verbatim would show CHECKED here and
+      // UNCHECKED after a refresh.
+      const tax = shopTax({ tax_enabled: fields.taxEnabled, tax_rate: Number(fields.taxRate) || 0 })
+      const applied = {
+        ...fields,
+        taxEnabled: tax.enabled,
+        taxRate: tax.rate ? String(tax.rate) : '',
+      }
+      setFields(applied)
+      setSaved(applied)
+      toast.success(t('Payment saved', '付款已保存'))
+    } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
+    finally { setBusy(false) }
   }
 
-  const TABS: { key: TabKey; label: string }[] = [
-    { key: 'shipping', label: t('Shipping', '运费') },
-    { key: 'fulfilment', label: t('Fulfilment', '取货') },
-    { key: 'payment', label: t('Payment', '付款') },
-    { key: 'notifications', label: t('Notifications', '通知') },
-    { key: 'referral', label: t('Referral', '推荐') },
-  ]
-
   return (
-    <div className="w-full">
-      <Tabs value={tab} onValueChange={(v) => changeTab(v as TabKey)} className="mb-6">
-        {/* Mobile: 4 nowrap tabs exceed the narrow column, so scroll horizontally
-            with natural widths instead of clipping the last tab off-screen. */}
-        <TabsList className="max-sm:justify-start max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
-          {TABS.map(({ key, label }) => (
-            <TabsTrigger key={key} value={key} className="max-sm:flex-none">{label}</TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      {tab === 'shipping' && <ShippingTab onDirtyChange={setDirty} />}
-      {tab === 'fulfilment' && <FulfilmentTab onDirtyChange={setDirty} />}
-      {tab === 'payment' && <PaymentTab onDirtyChange={setDirty} />}
-      {tab === 'notifications' && <NotificationsTab onDirtyChange={setDirty} />}
-      {tab === 'referral' && <ReferralTab />}
-    </div>
+    <form onSubmit={save}>
+      <div className={CARD}>
+        <h3 className={HEADING}>{t('Currency', '货币')}</h3>
+        <div className="flex flex-col gap-[6px]">
+          <Label htmlFor="shop-currency">{t('Base currency', '基础货币')}</Label>
+          <Select
+            value={fields.currency}
+            onValueChange={(v) => setFields(f => ({ ...f, currency: v }))}
+            disabled={currencyLocked}
+          >
+            <SelectTrigger id="shop-currency" className="w-full max-w-[280px]" aria-label={t('Base currency', '基础货币')}>
+              <span className="truncate">
+                {currencyDef(fields.currency).code} — {currencyDef(fields.currency).symbol}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCY_CODES.map(code => (
+                <SelectItem key={code} value={code}>
+                  {CURRENCIES[code].code} — {CURRENCIES[code].symbol} · {CURRENCIES[code].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
+            {currencyLocked
+              ? t('Currency is locked because your shop has orders — changing it would re-denominate past totals.',
+                  '因店铺已有订单，货币已锁定 — 更改会重新换算历史金额。')
+              : t('The unit for your prices and what customers see. Locked once your first order is placed.',
+                  '您的价格和顾客看到的金额单位。首笔订单后将锁定。')}
+          </p>
+        </div>
+      </div>
+      <div className={CARD}>
+        <h3 className={HEADING}>{t('Tax', '税')}</h3>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-[14px] text-ink">
+            <input
+              type="checkbox"
+              checked={fields.taxEnabled}
+              onChange={e => setFields(f => ({ ...f, taxEnabled: e.target.checked }))}
+            />
+            {t('Charge tax on orders', '订单收取税费')}
+          </label>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-tax-rate">{t('Tax rate (%)', '税率 (%)')}</Label>
+            <Input
+              id="shop-tax-rate" type="number" step="0.01" min="0" max="100"
+              value={fields.taxRate}
+              disabled={!fields.taxEnabled}
+              onChange={e => setFields(f => ({ ...f, taxRate: e.target.value }))}
+              variant="compact"
+            />
+            <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
+              {t('Added on top of your item prices, after any voucher discount. Delivery fees are not taxed. Leave blank, or enter 0, to turn tax off.',
+                 '在商品价格之上加收，扣除优惠券后计算。运费不征税。留空或填 0 即可关闭税费。')}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className={CARD}>
+        <h3 className={HEADING}>{t('Payment', '付款')}</h3>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-bank">{t('Bank / payment details', '银行/付款信息')}</Label>
+            <Input id="shop-bank" value={fields.bank}
+              onChange={e => setFields(f => ({ ...f, bank: e.target.value }))} variant="compact" />
+          </div>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-note">{t('Payment note (shown to customers)', '付款备注（顾客可见）')}</Label>
+            <Input id="shop-note" value={fields.note}
+              onChange={e => setFields(f => ({ ...f, note: e.target.value }))} variant="compact" />
+          </div>
+        </div>
+      </div>
+      <SaveRow busy={busy} label={{ idle: t('Save payment', '保存付款'), busy: t('Saving…', '保存中…') }} />
+    </form>
   )
 }
+```
 
-interface TabProps { onDirtyChange: (dirty: boolean) => void }
+- [ ] **Step 2: Typecheck**
 
-const CARD = 'bg-surface-raised border-[1.5px] border-rose-border rounded-2xl p-5 mb-8 w-full box-border max-sm:p-4 max-sm:mb-6'
-const HEADING = 'font-heading text-[15px] font-medium text-oxblood mb-4 flex items-center gap-2'
+Run: `pnpm typecheck`
+Expected: PASS, no errors. (`taxEnabled`/`taxRate`/`currency` are all in `SettingsFields`; `updateMerchantConfig`'s config arg already accepted these exact shapes from ShippingTab.)
 
-// `SettingsFields`' index signature is `string | boolean | undefined`, wide enough to cover
-// every tab in this file, but a key with no EXPLICIT declaration there resolves to that whole
-// union — too wide for `Input`/`AddressAutocomplete`'s strictly-`string` `value` props. This
-// local intersection narrows just the distance-policy keys this tab owns to `string` (matching
-// every other numeric field this form already carries as text), without widening the shared
-// type every other tab in this file also uses.
-type ShippingFields = SettingsFields & {
-  baseFee?: string
-  ratePerKm?: string
-  maxKm?: string
-  originPlaceId?: string
-  originAddress?: string
-  originLat?: string
-  originLng?: string
-}
+- [ ] **Step 3: Frontend unit tests still green**
 
-// Reports dirty state up whenever `saved` vs `fields` diverge. Returns a stable helper set.
-function useTabDirty(saved: SettingsFields, fields: SettingsFields, onDirtyChange: (d: boolean) => void) {
-  const dirty = isDirty(saved, fields)
-  useEffect(() => { onDirtyChange(dirty) }, [dirty, onDirtyChange])
-  return dirty
-}
+Run: `pnpm --filter @bitetime/frontend test`
+Expected: PASS (no test targets this JSX; confirms nothing else broke).
 
-function SaveRow({ busy, label }: { busy: boolean; label: { idle: string; busy: string } }) {
-  return (
-    <Button type="submit" size="md" className="mt-1" disabled={busy}>
-      {busy ? label.busy : label.idle}
-    </Button>
-  )
-}
+- [ ] **Step 4: Commit**
 
+```bash
+git add apps/frontend/src/merchant/ShopSettings.tsx
+git commit -m "feat(settings): add currency + tax to Payment tab"
+```
+
+Note: at this point Currency/Tax also still show on Shipping (duplicate) — resolved in Task 2.
+
+---
+
+### Task 2: Strip Currency + Tax from ShippingTab and reorder method-first
+
+**Files:**
+- Modify: `apps/frontend/src/merchant/ShopSettings.tsx` — replace the whole `ShippingTab` function (currently ~117–542).
+
+**Interfaces:**
+- Consumes: `shopRates`, `shopDistance`, `shopMethods`, `currencyDef`, `DEFAULT_CURRENCY`, `updateMerchantConfig`, `refreshMerchant`, `AddressAutocomplete`, `useTabDirty`, `SaveRow`, `CARD`, `HEADING` — all already imported. Drops use of `shopTax`, `merchantHasOrders`, `CURRENCIES`, `CURRENCY_CODES`, `Select*` **within this function** (still imported at top for PaymentTab — do NOT remove imports).
+- Produces: none.
+
+- [ ] **Step 1: Replace the `ShippingTab` function**
+
+Replace the entire existing `ShippingTab` (from `function ShippingTab({ onDirtyChange }: TabProps) {` through its closing `}` before `function PaymentTab`) with:
+
+```tsx
 function ShippingTab({ onDirtyChange }: TabProps) {
   const { t, merchant, refreshMerchant } = useSession()
   const [saved, setSaved] = useState<ShippingFields>(() => {
@@ -389,192 +485,72 @@ function ShippingTab({ onDirtyChange }: TabProps) {
     </form>
   )
 }
+```
 
-function PaymentTab({ onDirtyChange }: TabProps) {
-  const { t, merchant, refreshMerchant } = useSession()
-  const [saved, setSaved] = useState<SettingsFields>(() => {
-    // shopTax, not a local `?? 0`: this form shows the merchant what their shop CHARGES, and the
-    // charge is decided by that one function on both sides of the wire.
-    const tax = shopTax(merchant!)
-    return {
-      currency: merchant!.currency ?? DEFAULT_CURRENCY,
-      taxEnabled: tax.enabled,
-      taxRate: tax.rate ? String(tax.rate) : '',
-      bank: merchant!.payment_bank ?? '',
-      note: merchant!.payment_note ?? '',
-    }
-  })
-  const [fields, setFields] = useState<SettingsFields>(saved)
-  const [busy, setBusy] = useState(false)
-  // Currency locks after the first order so past orders/aggregates never
-  // re-denominate. Assume locked until the check clears, so it can't flip open.
-  const [currencyLocked, setCurrencyLocked] = useState(true)
-  useTabDirty(saved, fields, onDirtyChange)
+Note the one copy change forced by the reorder: the Delivery-origin footnote now says "your pickup address **above**" (was "below"), because Pickup address now renders before Delivery origin. This is a directional-reference fix, not a wording change.
 
-  useEffect(() => {
-    let active = true
-    merchantHasOrders(merchant!.id).then(has => { if (active) setCurrencyLocked(has) })
-    return () => { active = false }
-  }, [merchant!.id])
+- [ ] **Step 2: Typecheck**
 
-  async function save(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setBusy(true)
-    try {
-      await updateMerchantConfig(merchant!.id, {
-        // Guard against a stale locked value slipping through: only persist the
-        // currency when it is still editable.
-        ...(currencyLocked ? {} : { currency: fields.currency }),
-        payment_bank: fields.bank,
-        payment_note: fields.note,
-        // A blank rate box is 0, and 0 is "no tax" — the same collapse `shopTax` makes when it
-        // reads the row back. The checkbox is stored as typed.
-        tax_enabled: fields.taxEnabled,
-        tax_rate: Number(fields.taxRate) || 0,
-      })
-      await refreshMerchant()
-      // Tax goes through shopTax so a ticked-but-blank rate (`{tax_enabled: true, tax_rate: 0}`)
-      // reads back as OFF — carrying `fields.taxEnabled` verbatim would show CHECKED here and
-      // UNCHECKED after a refresh.
-      const tax = shopTax({ tax_enabled: fields.taxEnabled, tax_rate: Number(fields.taxRate) || 0 })
-      const applied = {
-        ...fields,
-        taxEnabled: tax.enabled,
-        taxRate: tax.rate ? String(tax.rate) : '',
-      }
-      setFields(applied)
-      setSaved(applied)
-      toast.success(t('Payment saved', '付款已保存'))
-    } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
-    finally { setBusy(false) }
-  }
+Run: `pnpm typecheck`
+Expected: PASS. `ShippingFields` still declares `currency`/`taxEnabled`/`taxRate` as optional (inherited from `SettingsFields`) — leaving them unpopulated is valid; no type edit needed.
 
-  return (
-    <form onSubmit={save}>
-      <div className={CARD}>
-        <h3 className={HEADING}>{t('Currency', '货币')}</h3>
-        <div className="flex flex-col gap-[6px]">
-          <Label htmlFor="shop-currency">{t('Base currency', '基础货币')}</Label>
-          <Select
-            value={fields.currency}
-            onValueChange={(v) => setFields(f => ({ ...f, currency: v }))}
-            disabled={currencyLocked}
-          >
-            <SelectTrigger id="shop-currency" className="w-full max-w-[280px]" aria-label={t('Base currency', '基础货币')}>
-              <span className="truncate">
-                {currencyDef(fields.currency).code} — {currencyDef(fields.currency).symbol}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {CURRENCY_CODES.map(code => (
-                <SelectItem key={code} value={code}>
-                  {CURRENCIES[code].code} — {CURRENCIES[code].symbol} · {CURRENCIES[code].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
-            {currencyLocked
-              ? t('Currency is locked because your shop has orders — changing it would re-denominate past totals.',
-                  '因店铺已有订单，货币已锁定 — 更改会重新换算历史金额。')
-              : t('The unit for your prices and what customers see. Locked once your first order is placed.',
-                  '您的价格和顾客看到的金额单位。首笔订单后将锁定。')}
-          </p>
-        </div>
-      </div>
-      <div className={CARD}>
-        <h3 className={HEADING}>{t('Tax', '税')}</h3>
-        <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-[14px] text-ink">
-            <input
-              type="checkbox"
-              checked={fields.taxEnabled}
-              onChange={e => setFields(f => ({ ...f, taxEnabled: e.target.checked }))}
-            />
-            {t('Charge tax on orders', '订单收取税费')}
-          </label>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-tax-rate">{t('Tax rate (%)', '税率 (%)')}</Label>
-            <Input
-              id="shop-tax-rate" type="number" step="0.01" min="0" max="100"
-              value={fields.taxRate}
-              disabled={!fields.taxEnabled}
-              onChange={e => setFields(f => ({ ...f, taxRate: e.target.value }))}
-              variant="compact"
-            />
-            <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
-              {t('Added on top of your item prices, after any voucher discount. Delivery fees are not taxed. Leave blank, or enter 0, to turn tax off.',
-                 '在商品价格之上加收，扣除优惠券后计算。运费不征税。留空或填 0 即可关闭税费。')}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className={CARD}>
-        <h3 className={HEADING}>{t('Payment', '付款')}</h3>
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-bank">{t('Bank / payment details', '银行/付款信息')}</Label>
-            <Input id="shop-bank" value={fields.bank}
-              onChange={e => setFields(f => ({ ...f, bank: e.target.value }))} variant="compact" />
-          </div>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-note">{t('Payment note (shown to customers)', '付款备注（顾客可见）')}</Label>
-            <Input id="shop-note" value={fields.note}
-              onChange={e => setFields(f => ({ ...f, note: e.target.value }))} variant="compact" />
-          </div>
-        </div>
-      </div>
-      <SaveRow busy={busy} label={{ idle: t('Save payment', '保存付款'), busy: t('Saving…', '保存中…') }} />
-    </form>
-  )
-}
+- [ ] **Step 3: Confirm imports still all used (no unused-import lint error)**
 
-function NotificationsTab({ onDirtyChange }: TabProps) {
-  const { t, merchant } = useSession()
-  const [saved, setSaved] = useState<SettingsFields>({ tgToken: '', tgChat: '' })
-  const [fields, setFields] = useState<SettingsFields>({ tgToken: '', tgChat: '' })
-  const [busy, setBusy] = useState(false)
-  const loaded = useRef(false)
-  useTabDirty(saved, fields, onDirtyChange)
+Run: `pnpm lint`
+Expected: PASS. `shopTax`, `merchantHasOrders`, `CURRENCIES`, `CURRENCY_CODES`, `Select*` are still used by `PaymentTab`, so the shared imports at the top of the file stay live.
 
-  useEffect(() => {
-    fetchMerchantSecret(merchant!.id).then((s: any) => {
-      const v = { tgToken: s?.tg_token ?? '', tgChat: s?.tg_chat_id ?? '' }
-      setSaved(v)
-      // Only overwrite in-flight edits if the user hasn't started typing yet.
-      if (!loaded.current) setFields(v)
-      loaded.current = true
-    })
-  }, [merchant!.id])
+- [ ] **Step 4: Frontend unit tests still green**
 
-  async function save(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault(); setBusy(true)
-    try {
-      await upsertMerchantSecret(merchant!.id, { tg_token: fields.tgToken, tg_chat_id: fields.tgChat })
-      setSaved(fields)
-      toast.success(t('Notifications saved', '通知已保存'))
-    } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
-    finally { setBusy(false) }
-  }
+Run: `pnpm --filter @bitetime/frontend test`
+Expected: PASS.
 
-  return (
-    <form onSubmit={save}>
-      <div className={CARD}>
-        <h3 className={HEADING}>{t('Order notifications', '订单通知')}</h3>
-        <p className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-3">Telegram</p>
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-tgtoken">{t('Bot token', '机器人令牌')}</Label>
-            <Input id="shop-tgtoken" value={fields.tgToken}
-              onChange={e => setFields(f => ({ ...f, tgToken: e.target.value }))} variant="compact" />
-          </div>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-tgchat">{t('Chat ID', '聊天 ID')}</Label>
-            <Input id="shop-tgchat" value={fields.tgChat}
-              onChange={e => setFields(f => ({ ...f, tgChat: e.target.value }))} variant="compact" />
-          </div>
-        </div>
-      </div>
-      <SaveRow busy={busy} label={{ idle: t('Save notifications', '保存通知'), busy: t('Saving…', '保存中…') }} />
-    </form>
-  )
-}
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/frontend/src/merchant/ShopSettings.tsx
+git commit -m "feat(settings): make Shipping tab method-first, drop currency + tax"
+```
+
+---
+
+### Task 3: Run-and-verify the reorganised settings
+
+**Files:** none (verification only).
+
+- [ ] **Step 1: Run the app end-to-end**
+
+Use the `verify` skill (per CLAUDE.md, UI is verified by running the app). Sign in as a merchant, open Shop Settings, and confirm:
+
+1. **Shipping tab** card order top→bottom: *What customers can choose* → *Pickup address* → *Delivery origin* → (*Delivery rates* if delivery on) → (*Express delivery rates* if express on). No Currency card, no Tax card.
+2. **Payment tab** card order: *Currency* → *Tax* → *Payment* (bank/note).
+3. Currency select is **disabled** when the shop has orders, enabled otherwise.
+4. Payment tab: tick Tax, enter a rate, Save → reload → rate persists, checkbox stays ticked. Then blank the rate, Save → reload → checkbox reads **unticked** (shopTax collapse).
+5. Payment tab (shop with no orders): change currency, Save → reload → new currency shown; Shipping tab rate labels show the **new** currency symbol.
+6. Shipping tab: change a delivery rate / toggle a method / edit origin, Save → reload → persists.
+7. Dirty guard: dirty a field on Shipping, click Payment tab → blocked with the unsaved warning. Same the other way.
+
+- [ ] **Step 2: Final full checks**
+
+Run: `pnpm typecheck && pnpm lint && pnpm --filter @bitetime/frontend test`
+Expected: all PASS.
+
+---
+
+## Self-Review
+
+**Spec coverage:**
+- Shipping → pure fulfilment, method-first, drops currency/tax → Task 2. ✓
+- Payment → Currency + Tax + Bank/note → Task 1. ✓
+- Symbol reads saved `merchant.currency` → Task 2, `symbol` line. ✓
+- Currency lock logic preserved → Task 1, `currencyLocked` + effect. ✓
+- Tax via `shopTax` write-back → Task 1, `save`. ✓
+- No `settingsDirty.ts` change; boolean-key-present invariant → Task 1 inits `taxEnabled` in both snapshots. ✓
+- Conditional visibility unchanged (rates gated, origin/pickup always shown) → Task 2 JSX. ✓
+- No tab rename → Task 1 keeps "Payment"/"付款". ✓
+- Verification via run-app → Task 3. ✓
+
+**Placeholder scan:** none — every step has full code or an exact command.
+
+**Type consistency:** `currency`/`taxEnabled`/`taxRate`/`bank`/`note` all in `SettingsFields`. `ShippingFields = SettingsFields & {...distance keys}`. `shopTax`/`shopRates`/`shopDistance`/`shopMethods` signatures match existing usage (copied verbatim from the current working code). No new symbols introduced.
+
+**One deliberate copy edit:** Delivery-origin footnote "below" → "above" (Task 2), because Pickup address now precedes Delivery origin. Flagged in-task.
