@@ -70,7 +70,15 @@ The promo's end-of-day is in the timezone of the browser the **merchant** set it
 
 ## Order intake
 
-The flow that collects a cart and customer details and commits an order: `collect → priceOrder → placeOrder → notifyOrder`. The multi-tenant **Storefront** (`store/Storefront.tsx`) is the only intake path; the legacy single-tenant order form has been deleted.
+The flow that collects a cart and customer details and commits an order: `collect → priceOrder → placeOrder → notifyOrder`. The multi-tenant **Storefront** (`store/Storefront.tsx`) is the only intake path; the legacy single-tenant order form has been deleted. `notifyOrder` is a single post-commit call that fans out to two recipients — see *Order notifications*.
+
+## Order notifications
+
+The messages sent **after** an order commits, never inside its transaction — a notification outage must never roll back a paid order. One post-commit call (`POST /api/notify/order`, anonymous) fans out to two independent, best-effort recipients; either can fail or skip without touching the order or the other.
+
+**Merchant notification** — a Telegram message to the shop. The shop's surface: English only, carries operational detail (WhatsApp, distance). Skips when the merchant has no Telegram configured. Not deduplicated — a repeat is merchant-facing noise.
+
+**Order confirmation email** — a bilingual receipt to the **customer**, and only to a **signed-in** one: the recipient is the account email read server-side from `order.user_id` via Auth, so a guest order (`user_id` null) skips *structurally*, never by a check that can be forgotten. Sent once per order — stamped `orders.confirmation_emailed_at` under an atomic guard, because a customer receiving the same receipt twice reads as broken. Language rides in the request body (presentation only, safe to trust); the recipient never does.
 
 ## Voucher
 
@@ -96,7 +104,7 @@ How a customer account comes into being. Email confirmation is on **project-wide
 
 Three trade-offs are load-bearing, not incidental:
 
-- **A customer's email is never verified.** Self-correcting: whoever owns the address reclaims it by password reset, and we send customers no other mail.
+- **A customer's email is never verified.** Self-correcting: whoever owns the address reclaims it by password reset. We do send customers order-confirmation mail (see *Order notifications*), so a mistyped or unowned address means a stranger receives that order's details (name, delivery address, items, total) — but this is the **same exposure the reset link already carries**, and a reset link is the graver of the two. It adds no new category of risk, so the unverified-email stance stands; making it airtight means real verification, which reverses this deliberate decision.
 - **A duplicate email is disclosed** ("You already have an account — sign in"), which makes the endpoint an email-enumeration oracle. Accepted: the alternative strands a returning customer with no session and no actionable error. Password reset deliberately does *not* disclose — do not "fix" the asymmetry.
 - **The rate limit is the only control** (CORS constrains browsers, not servers), and it is **in-memory**. It resets on redeploy (harmless) and silently stops protecting anything if the backend is scaled past one instance (not harmless). Its IP key reads the *rightmost* `X-Forwarded-For` entry, because the leftmost is caller-supplied.
 
