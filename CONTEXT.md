@@ -156,3 +156,43 @@ through a fresh Checkout that never re-grants a trial (`canStartTrial`). Failed
 renewals go `past_due` (red banner) and ride Stripe dunning. Stripe is the
 single source of billing truth; `merchant_billing` mirrors it. Pure seams:
 `billingLifecycle` (backend) and `billingBannerState` (frontend).
+
+## Plan entitlement
+
+Which **features** a shop may use, as opposed to whether its subscription is
+*live* (that is *Billing lifecycle* above). Two tiers — `basic` and `pro` — and
+the entitlement signal is a single field, **`merchants.plan === 'pro'`**. It is
+trustworthy because it is the field, not a request: the browser holds no grant
+on `merchants`, and `plan` is written in exactly three places — signup (the
+owner's chosen tier, `POST /api/merchants`), superadmin `comp-merchant`, and a
+future checkout/webhook reconciliation. **An owner request never writes it** —
+the same rule that governs `orders.user_id` and `promo_sold`. A shop cannot
+self-upgrade to Pro; a paid Pro checkout or a comp is the only way the field
+becomes `'pro'` on a live shop.
+
+**The gate is the backend, not the UI.** `requirePro` chains after
+`requireMerchantOwns` (reusing the merchant it already loaded, superadmin
+bypassing) and **refuses** a non-Pro caller with `403 requires_pro`. It guards
+the three Pro features that exist today: Telegram alerts (`PUT …/secret`),
+vouchers (`POST`/`DELETE …/vouchers`) and product promos. Promos are the
+awkward one — they ride the **shared** product upsert (`PUT …/products/:id`,
+which basic shops legitimately use), so the gate lives *inside* that handler: a
+non-Pro row carrying a non-null `promo_price` is **refused, not silently
+stripped** (the cart-key rule — refuse, don't normalise). The frontend
+show-but-locks the same features (Pro badge + upgrade CTA) so the 403 is never
+hit blind, but that is UX; the refusal is what actually shuts the door.
+
+**Reads stay open and the hot paths are untouched.** The Telegram send, voucher
+redemption and promo pricing carry no plan check — grandfathering pre-gate data
+was moot pre-launch, and pushing plan logic into the priced order transaction is
+exactly the load-bearing code the sections above guard. The advertised Pro
+features that do **not** yet exist — email order alerts, multiple shops,
+custom-link edit UI, priority support — are gated when they are built, not
+before; a lock on an unreachable feature is dead code.
+
+**In-place basic→pro upgrade is deferred.** `POST /api/checkout` refuses a shop
+that already has a live subscription, so an existing basic shop cannot reach Pro
+through it; the real path is a Stripe subscription price-swap plus a webhook that
+reconciles `merchants.plan` from the new price (the "future reconciliation" the
+invariant names). Until that lands, the upgrade CTA opens the billing portal and
+the only route from basic to Pro is a superadmin comp.
