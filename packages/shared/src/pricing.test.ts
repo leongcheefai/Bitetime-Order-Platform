@@ -538,7 +538,7 @@ const DISTANCE_ROW = {
 describe('shopDistance', () => {
   it('maps a distance-mode row and reports it usable', () => {
     expect(shopDistance(DISTANCE_ROW)).toEqual({
-      enabled: true, mode: 'distance', base: 6, ratePerKm: 1, maxKm: null,
+      enabled: true, base: 6, ratePerKm: 1, maxKm: null,
       originPlaceId: 'ChIJorigin', usable: true,
     })
   })

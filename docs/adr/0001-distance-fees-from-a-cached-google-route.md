@@ -1,5 +1,7 @@
 # Distance delivery fees are priced from a cached Google route
 
+> **Amended by [ADR 0002](0002-fulfilment-methods-coexist.md) (2026-07-22, before either shipped).** This ADR assumed one shipping policy per shop, named by `merchants.shipping_mode`. That column never reached production and is gone: distance pricing is now the `express` method, which coexists with flat-rate `delivery`. Everything else here — the cached Google route, the 30-day TTL, rounding before the multiply, failing closed — is unchanged and current.
+
 Distance-based delivery fees (#100) need a road distance, which is I/O — but `priceOrder` is pure and runs on **both** sides of the wire, where any disagreement between the browser's quote and the backend's charge is a hard `price_changed` refusal. So the distance enters pricing as a plain input, and the two sides get the same input from a **distance cache** keyed by `(origin place id, destination place id)`: the storefront's quote endpoint calls Google Routes and writes the row, order intake reads it. One Google call per address pair, no drift by construction, and repeat customers cost nothing.
 
 ## Considered options

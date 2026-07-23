@@ -311,10 +311,10 @@ describe('POST /api/orders', () => {
   // never reaches that check at all. A regression that moved the check below the spend would
   // leave every test above still green.
   //
-  // A first version of this test used `mode: 'delivery'` against the plain (non-distance)
+  // A first version of this test used `mode: 'delivery'` against the plain (non-express)
   // `suspendedShop` over HTTP — CONFIRMED BY EXPERIMENT (not reasoned) to be insufficient: with
   // the status check moved below the spend, `resolveRoutedMetres` still returns `null` at its
-  // `policy.mode !== 'distance'` line (this shop is region-priced) regardless of where the
+  // `input.mode !== 'express'` line (this order is not express) regardless of where the
   // status check sits relative to that, so the request proceeds into the transaction and
   // `assertOrderableMerchant`'s own status check — the authoritative backstop, kept
   // deliberately — throws the SAME `merchant_inactive` with the SAME HTTP shape. The response

@@ -191,11 +191,6 @@ export function shopTax(row: unknown): ShopTax {
 export interface ShopDistance {
   /** Express delivery is switched on for this shop. Its configuration stays stored when off. */
   enabled: boolean
-  /**
-   * @deprecated Derived from `enabled` purely so #103's cascade can land in small commits.
-   * Delete this field, and its last readers, in Task 10.
-   */
-  mode: 'region' | 'distance'
   base: number
   ratePerKm: number
   /** null = no limit. Never 0 — a 0 would be an honest "deliver nowhere". */
@@ -214,7 +209,7 @@ export interface ShopDistance {
 }
 
 /**
- * A merchant row → the distance policy `priceOrder` charges. The third of `shopRates`'
+ * A merchant row → the express policy `priceOrder` charges. The third of `shopRates`'
  * and `shopTax`'s family, and it exists for the identical reason: the browser quotes and the
  * backend charges, and a disagreement between them is a `price_changed` refusal for every
  * order at that shop, not a rounding gap.
@@ -242,7 +237,6 @@ export function shopDistance(row: unknown): ShopDistance {
 
   return {
     enabled,
-    mode: enabled ? 'distance' : 'region',
     base: base ?? 0,
     ratePerKm: ratePerKm ?? 0,
     maxKm: maxKmRaw !== null && maxKmRaw > 0 ? maxKmRaw : null,
