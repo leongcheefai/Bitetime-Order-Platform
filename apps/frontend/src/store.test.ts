@@ -1090,6 +1090,24 @@ describe('fetchMerchantCustomers', () => {
     expect(result[0].orderCount).toBe(2)
     expect(result[0].name).toBe('Charlie')
   })
+
+  it('keeps each customer\'s orders newest-first and a stable key', async () => {
+    __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
+    const orders = [
+      { id: 'o1', customer_name: 'Alice', customer_wa: '601', created_at: '2025-01-01' },
+      { id: 'o3', customer_name: 'Alice', customer_wa: '601', created_at: '2025-01-03' },
+      { id: 'o2', customer_name: 'Bob',   customer_wa: '602', created_at: '2025-01-02' },
+    ]
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({ ok: true, json: async () => orders }))
+
+    const result = await fetchMerchantCustomers('m1')
+
+    const alice = result.find(c => c.wa === '601')!
+    expect(alice.key).toBe('601')
+    expect(alice.orders.map((o: any) => o.id)).toEqual(['o3', 'o1']) // newest-first
+    const bob = result.find(c => c.wa === '602')!
+    expect(bob.orders.map((o: any) => o.id)).toEqual(['o2'])
+  })
 })
 
 // ── Multi-tenant vouchers ─────────────────────────────────────────────────────
