@@ -8,11 +8,13 @@ export const ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed', 'cancel
 
 // Owner-editable shop config. Deliberately EXCLUDES status, owner_id, slug, plan, billing_*, id.
 // Mirrors what the browser could safely write under the old RLS+trigger regime. This is the
-// EXACT union of the THREE updateMerchantConfig call sites (ShopSettings.tsx:141 writes
-// { currency?, shipping, pickup_address }; :243 writes { payment_bank, payment_note }; the Tax
-// tab (#88 Task 4) writes { tax_enabled, tax_rate }) — verified 2026-07-20. `shipping` is a
-// jsonb column (shopRates output); `currency` is dropped client-side once locked, but allowlist
-// it anyway — the lock is a UI concern, and the currency column is not a privilege.
+// union of every updateMerchantConfig call site: ShopSettings.tsx Shipping tab writes
+// { shipping, pickup_address, method flags, distance pricing, origin_*, onboarding_shipping_set };
+// the Payment tab writes { currency?, payment_bank, payment_note, tax_enabled, tax_rate }; the
+// Fulfilment tab writes { config, timezone }; and the onboarding checklist (#102) writes
+// { onboarding_link_shared } (ShareStorefront) and { onboarding_dismissed } (OnboardingChecklist).
+// `shipping` is a jsonb column (shopRates output); `currency` is dropped client-side once locked,
+// but allowlist it anyway — the lock is a UI concern, and the currency column is not a privilege.
 const MERCHANT_CONFIG_FIELDS = [
   'currency', 'shipping', 'pickup_address', 'payment_bank', 'payment_note', 'config', 'timezone',
   'tax_enabled', 'tax_rate',

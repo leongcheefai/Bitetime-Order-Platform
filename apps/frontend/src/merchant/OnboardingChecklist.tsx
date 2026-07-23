@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Circle, CheckCircle2, PartyPopper, ChevronRight, Copy } from 'lucide-react'
+import { Circle, CheckCircle2, ChevronRight, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
 import { fetchProducts, updateMerchantConfig } from '../store'
@@ -59,9 +59,7 @@ export default function OnboardingChecklist({ onNavigate }: { onNavigate: (secti
     return (
       <Card className="mb-5">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <PartyPopper {...ICON} /> {t('Your shop is ready!', '您的店铺已就绪！')}
-          </CardTitle>
+          <CardTitle>{t('🎉 Your shop is ready!', '🎉 您的店铺已就绪！')}</CardTitle>
           <CardDescription>
             {t('Copy your order link and start accepting orders.', '复制您的下单链接，开始接单。')}
           </CardDescription>
