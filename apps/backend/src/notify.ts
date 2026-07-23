@@ -48,6 +48,15 @@ export function formatAddress(addr: unknown): string {
   return [a.unit, a.line1, cityLine, a.state].filter(Boolean).join(', ')
 }
 
+// The merchant-facing name for each method. English only, and deliberately a local map rather
+// than an import: this file already keeps its own `formatMoney` twin for the same reason —
+// Telegram is the backend's own surface and the frontend's translator does not reach it.
+const MODE_LABELS: Record<string, string> = {
+  pickup: 'Pickup',
+  delivery: 'Delivery',
+  express: 'Express delivery',
+}
+
 // Pure: render the Telegram message from an order row, in the order's own
 // stamped currency (falls back to MYR for legacy rows without one).
 export function buildOrderMessage(order: any, merchantName?: string): string {
@@ -63,7 +72,7 @@ export function buildOrderMessage(order: any, merchantName?: string): string {
   msg += `*Order No.:* ${order.order_number}\n`
   msg += `*Name:* ${order.customer_name ?? ''}\n`
   if (order.customer_wa) msg += `*WhatsApp:* ${order.customer_wa}\n`
-  if (order.mode) msg += `*Mode:* ${order.mode}\n`
+  if (order.mode) msg += `*Mode:* ${MODE_LABELS[order.mode as string] ?? order.mode}\n`
   // The merchant reading this on their phone is the person scheduling around it, so it sits
   // with the mode rather than down by the totals. Omitted rather than blanked for rows written
   // before #91 — `orders.fulfil_date` is null for every one of them, and a `*Date:* ` with

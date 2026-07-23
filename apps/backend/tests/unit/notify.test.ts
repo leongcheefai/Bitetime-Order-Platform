@@ -79,6 +79,18 @@ describe('buildOrderMessage', () => {
     expect(buildOrderMessage({ ...ORDER, delivery_distance_km: null }, 'Cookie Corner')).not.toContain('Distance')
   })
 
+  it('names the fulfilment method rather than printing the column value', () => {
+    expect(buildOrderMessage({ ...ORDER, mode: 'express' })).toContain('*Mode:* Express delivery')
+    expect(buildOrderMessage({ ...ORDER, mode: 'delivery' })).toContain('*Mode:* Delivery')
+    expect(buildOrderMessage({ ...ORDER, mode: 'pickup' })).toContain('*Mode:* Pickup')
+  })
+
+  it('prints an unknown mode as-is rather than dropping the line', () => {
+    // A row written by an older build still has to say something. Losing the line entirely is
+    // worse than an unpolished one — the merchant reads this to know whether to expect a rider.
+    expect(buildOrderMessage({ ...ORDER, mode: 'sameday' })).toContain('*Mode:* sameday')
+  })
+
   it('carries the unit/floor so the rider can complete the drop', () => {
     const msg = buildOrderMessage({
       ...ORDER,
