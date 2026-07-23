@@ -3,6 +3,7 @@ import {
   priceOrder, voucherError, voucherFromRow, shopRates, shopTax, DEFAULT_WM_RATE,
   promoClaims, productFromRow, promoState,
   shopDistance, routedKm, distanceFee, exceedsMaxKm,
+  shopMethods, offersMethod, firstOfferedMethod,
 } from './pricing.js'
 import type { PricedProduct } from './pricing.js'
 
@@ -706,6 +707,63 @@ describe('priceOrder under a distance policy', () => {
     })
     expect(r.shipping).toBe(0)
     expect(r.shippingPending).toBe(true)
+  })
+})
+
+describe('shopMethods', () => {
+  it('reads the three flags off the row', () => {
+    expect(shopMethods({ pickup_enabled: true, delivery_enabled: false, express_enabled: true }))
+      .toEqual({ pickup: true, delivery: false, express: true })
+  })
+
+  it('falls back to each column\'s own default for a row that predates them', () => {
+    // A pre-#103 row, or a fixture that names none of them: the shop is exactly what it was
+    // before this feature — pickup and delivery on, express off.
+    expect(shopMethods({})).toEqual({ pickup: true, delivery: true, express: false })
+    expect(shopMethods(null)).toEqual({ pickup: true, delivery: true, express: false })
+  })
+
+  it('honours an explicit false', () => {
+    expect(shopMethods({ pickup_enabled: false }).pickup).toBe(false)
+  })
+
+  it('treats a non-boolean as absent rather than coercing it', () => {
+    // Both drivers hand these back as real booleans. Anything else is a fixture or a bug, and
+    // guessing what 'false' or 0 meant is how a shop starts offering a method it switched off.
+    expect(shopMethods({ pickup_enabled: 'false' }).pickup).toBe(true)
+    expect(shopMethods({ express_enabled: 1 }).express).toBe(false)
+  })
+
+  it('reports all-false as all-false — it does not fall back to pickup', () => {
+    // FAILS CLOSED. A shop offering nothing takes no order; inventing pickup here would offer a
+    // method the merchant switched off. Unreachable past merchants_one_fulfilment_method, and
+    // guarded anyway, because that is the direction this whole family fails in.
+    const none = { pickup_enabled: false, delivery_enabled: false, express_enabled: false }
+    expect(shopMethods(none)).toEqual({ pickup: false, delivery: false, express: false })
+    expect(firstOfferedMethod(shopMethods(none))).toBeNull()
+  })
+})
+
+describe('offersMethod', () => {
+  const methods = { pickup: true, delivery: false, express: true }
+
+  it('answers for each of the three methods', () => {
+    expect(offersMethod(methods, 'pickup')).toBe(true)
+    expect(offersMethod(methods, 'delivery')).toBe(false)
+    expect(offersMethod(methods, 'express')).toBe(true)
+  })
+
+  it('refuses a mode that is not a method at all', () => {
+    expect(offersMethod(methods, 'sameday')).toBe(false)
+    expect(offersMethod(methods, '')).toBe(false)
+  })
+})
+
+describe('firstOfferedMethod', () => {
+  it('prefers pickup, then delivery, then express', () => {
+    expect(firstOfferedMethod({ pickup: true, delivery: true, express: true })).toBe('pickup')
+    expect(firstOfferedMethod({ pickup: false, delivery: true, express: true })).toBe('delivery')
+    expect(firstOfferedMethod({ pickup: false, delivery: false, express: true })).toBe('express')
   })
 })
 

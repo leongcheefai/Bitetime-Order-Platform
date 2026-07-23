@@ -263,6 +263,58 @@ export function exceedsMaxKm(policy: ShopDistance, km: number): boolean {
   return policy.maxKm !== null && km > policy.maxKm
 }
 
+/** The three things a customer can choose. A closed set: `mode` selects the shipping fee. */
+export type FulfilmentMethod = 'pickup' | 'delivery' | 'express'
+
+/** Precedence order, and the order the storefront renders them in. */
+export const FULFILMENT_METHODS: readonly FulfilmentMethod[] = ['pickup', 'delivery', 'express']
+
+export interface ShopMethods {
+  pickup: boolean
+  /** Flat region rate (WM/EM). */
+  delivery: boolean
+  /** Distance-priced: `base + rate × routed km`. Read the rates through `shopDistance`. */
+  express: boolean
+}
+
+/**
+ * A merchant row → the methods this shop offers. The fourth of `shopRates`', `shopTax`'s and
+ * `shopDistance`'s family, and it exists for the identical reason: the storefront decides which
+ * buttons to render from it and the backend refuses an unoffered method from it, and the two
+ * disagreeing is a refused checkout, not a cosmetic gap.
+ *
+ * A NON-BOOLEAN reads as absent, so it takes that column's own default. Both drivers hand these
+ * columns back as real booleans, so anything else is a fixture or a bug — and coercing `'false'`
+ * or `0` is how a shop starts offering a method its merchant switched off.
+ *
+ * ALL THREE FALSE IS RETURNED AS-IS. It is not repaired into pickup: a shop that offers nothing
+ * takes no order, and the callers refuse. That is the same direction `ShopDistance.usable` fails
+ * in, for the same reason. `merchants_one_fulfilment_method` makes it unconstructible anyway.
+ */
+export function shopMethods(row: unknown): ShopMethods {
+  const r = (row && typeof row === 'object' ? row : {}) as Record<string, unknown>
+  const flag = (v: unknown, fallback: boolean) => (typeof v === 'boolean' ? v : fallback)
+  return {
+    pickup: flag(r.pickup_enabled, true),
+    delivery: flag(r.delivery_enabled, true),
+    express: flag(r.express_enabled, false),
+  }
+}
+
+/** Does this shop offer the method the customer asked for? Any other string is not a method. */
+export function offersMethod(methods: ShopMethods, mode: string): boolean {
+  return (FULFILMENT_METHODS as readonly string[]).includes(mode)
+    && methods[mode as FulfilmentMethod]
+}
+
+/**
+ * The method a storefront lands on. `null` when the shop offers none — which is a REFUSAL to
+ * take an order, never a reason to invent pickup.
+ */
+export function firstOfferedMethod(methods: ShopMethods): FulfilmentMethod | null {
+  return FULFILMENT_METHODS.find(m => methods[m]) ?? null
+}
+
 export function priceOrder(input: PriceInput): PriceBreakdown {
   const now = input.now ?? new Date()
 
