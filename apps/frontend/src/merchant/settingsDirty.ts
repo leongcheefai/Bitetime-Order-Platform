@@ -1,9 +1,9 @@
 // Pure dirty-detection for the tabbed Shop Settings forms.
 // Each settings tab owns a flat map of its field values, held by ONE shared type across
 // every tab — a tab only ever sets the subset of keys its own fields use, so every key is
-// optional. Almost all fields are strings, as held by text/number inputs; `taxEnabled` is
-// the one boolean, for the Tax card's checkbox. The index signature keeps `isDirty` below
-// generic over whichever keys a tab actually populates. A tab is "dirty" when any current
+// optional. Almost all fields are strings, as held by text/number inputs; the booleans are the
+// tax toggle and the three fulfilment-method checkboxes. The index signature keeps `isDirty`
+// below generic over whichever keys a tab actually populates. A tab is "dirty" when any current
 // field differs from the snapshot taken at last save/load. Kept UI-free and pure so it is
 // unit-testable — sibling pattern to pricing.ts. See docs issue #19.
 
@@ -14,6 +14,10 @@ export type SettingsFields = {
   em?: string
   pickupAddress?: string
   taxEnabled?: boolean
+  /** The three fulfilment-method checkboxes (#103). */
+  pickupEnabled?: boolean
+  deliveryEnabled?: boolean
+  expressEnabled?: boolean
   taxRate?: string
   bank?: string
   note?: string

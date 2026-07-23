@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
 import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret, merchantHasOrders } from '../store'
-import { shopRates, shopTax, shopDistance } from '@bitetime/shared'
+import { shopRates, shopTax, shopDistance, shopMethods } from '@bitetime/shared'
 import { CURRENCIES, CURRENCY_CODES, DEFAULT_CURRENCY, currencyDef } from '../currency'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -90,7 +90,6 @@ const HEADING = 'font-heading text-[15px] font-medium text-oxblood mb-4 flex ite
 // every other numeric field this form already carries as text), without widening the shared
 // type every other tab in this file also uses.
 type ShippingFields = SettingsFields & {
-  shippingMode?: 'region' | 'distance'
   baseFee?: string
   ratePerKm?: string
   maxKm?: string
@@ -131,6 +130,10 @@ function ShippingTab({ onDirtyChange }: TabProps) {
     // shopTax are used above: this form shows the merchant what their shop CHARGES, and the
     // charge is decided by that one function on both sides of the wire.
     const distance = shopDistance(merchant!)
+    // shopMethods, not a local read of these columns, for exactly the reason shopRates, shopTax
+    // and shopDistance are used above: this form shows the merchant what their shop OFFERS, and
+    // what it offers is decided by that one function on both sides of the wire.
+    const methods = shopMethods(merchant!)
     return {
       currency: merchant!.currency ?? DEFAULT_CURRENCY,
       wm: String(rates.WM),
@@ -138,7 +141,9 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       pickupAddress: merchant!.pickup_address ?? '',
       taxEnabled: tax.enabled,
       taxRate: tax.rate ? String(tax.rate) : '',
-      shippingMode: distance.mode,
+      pickupEnabled: methods.pickup,
+      deliveryEnabled: methods.delivery,
+      expressEnabled: methods.express,
       baseFee: String(distance.base),
       ratePerKm: String(distance.ratePerKm),
       maxKm: distance.maxKm === null ? '' : String(distance.maxKm),
@@ -167,6 +172,12 @@ function ShippingTab({ onDirtyChange }: TabProps) {
 
   // Live symbol drives the shipping-rate input labels.
   const symbol = currencyDef(fields.currency).symbol
+
+  // The one method still on, if exactly one is — the checkbox that must not be untickable.
+  // `null` whenever two or more are on, which is when every box is free to move.
+  const enabledMethods = (['pickup', 'delivery', 'express'] as const)
+    .filter(m => fields[`${m}Enabled` as const])
+  const onlyMethod = enabledMethods.length === 1 ? enabledMethods[0] : null
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
@@ -208,9 +219,12 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         // row, and reads it back as OFF because `shopTax` gates on the flag.
         tax_enabled: fields.taxEnabled,
         tax_rate: Number(fields.taxRate) || 0,
-        // The REGION rates above are written on every save, distance mode or not: the dormant
-        // policy's configuration is kept so switching back does not mean retyping it (story 10).
-        shipping_mode: fields.shippingMode,
+        // Every rate is written on every save, whichever methods are on: a disabled method's
+        // configuration is kept so switching it back does not mean retyping it (story 10) —
+        // the same arrangement a disabled tax's rate already has.
+        pickup_enabled: fields.pickupEnabled,
+        delivery_enabled: fields.deliveryEnabled,
+        express_enabled: fields.expressEnabled,
         delivery_base_fee: Number(fields.baseFee) || 0,
         delivery_rate_per_km: Number(fields.ratePerKm) || 0,
         // A BLANK maximum is "deliver anywhere with a road" — null, not 0. A typed 0 would be
@@ -236,7 +250,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       // Same reasoning again, distance leg: show back what was actually written, read through
       // the one function that also reads it on reload, not the raw strings that were typed.
       const distance = shopDistance({
-        shipping_mode: fields.shippingMode,
+        express_enabled: fields.expressEnabled,
         delivery_base_fee: Number(fields.baseFee) || 0,
         delivery_rate_per_km: Number(fields.ratePerKm) || 0,
         delivery_max_km: (fields.maxKm ?? '').trim() === '' ? null : Number(fields.maxKm),
@@ -248,7 +262,6 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         em: String(shipping.EM),
         taxEnabled: tax.enabled,
         taxRate: tax.rate ? String(tax.rate) : '',
-        shippingMode: distance.mode,
         baseFee: String(distance.base),
         ratePerKm: String(distance.ratePerKm),
         maxKm: distance.maxKm === null ? '' : String(distance.maxKm),
@@ -302,35 +315,50 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         </div>
       </div>
       <div className={CARD}>
-        <h3 className={HEADING}>{t('How you charge for delivery', '运费计算方式')}</h3>
+        <h3 className={HEADING}>{t('What customers can choose', '顾客可选的方式')}</h3>
         <div className="flex flex-col gap-2">
           <label className="flex items-start gap-2 text-[14px] text-ink">
-            <input type="radio" name="shipping-mode" className="mt-1"
-              checked={fields.shippingMode === 'region'}
-              onChange={() => setFields(f => ({ ...f, shippingMode: 'region' }))} />
+            <input type="checkbox" className="mt-1"
+              checked={fields.pickupEnabled}
+              // The LAST ticked box cannot be unticked. Min-one is a CHECK constraint and the
+              // backend refuses a save that breaks it, but a merchant should meet that rule as
+              // an input that will not turn off, not as an error after they pressed Save.
+              disabled={onlyMethod === 'pickup'}
+              onChange={e => setFields(f => ({ ...f, pickupEnabled: e.target.checked }))} />
+            <span>{t('Pickup — customers collect from you.', '自取 — 顾客自行前来领取。')}</span>
+          </label>
+          <label className="flex items-start gap-2 text-[14px] text-ink">
+            <input type="checkbox" className="mt-1"
+              checked={fields.deliveryEnabled}
+              disabled={onlyMethod === 'delivery'}
+              onChange={e => setFields(f => ({ ...f, deliveryEnabled: e.target.checked }))} />
             <span>
-              {t('By region — one flat rate for West Malaysia, one for East Malaysia.',
-                 '按区域 — 西马一个统一运费，东马一个。')}
+              {t('Delivery — one flat rate for West Malaysia, one for East Malaysia.',
+                 '送货 — 西马一个统一运费，东马一个。')}
             </span>
           </label>
           <label className="flex items-start gap-2 text-[14px] text-ink">
-            <input type="radio" name="shipping-mode" className="mt-1"
-              checked={fields.shippingMode === 'distance'}
-              disabled={!fields.originPlaceId}
-              onChange={() => setFields(f => ({ ...f, shippingMode: 'distance' }))} />
+            <input type="checkbox" className="mt-1"
+              checked={fields.expressEnabled}
+              disabled={onlyMethod === 'express' || !fields.originPlaceId}
+              onChange={e => setFields(f => ({ ...f, expressEnabled: e.target.checked }))} />
             <span>
-              {t('By distance — a base fee plus a rate for every kilometre your rider drives.',
-                 '按距离 — 基本运费加上每公里费率。')}
+              {t('Express delivery — a base fee plus a rate for every kilometre your rider drives.',
+                 '快速配送 — 基本运费加上每公里费率。')}
             </span>
           </label>
           {!fields.originPlaceId && (
             /* Says WHY the option is disabled. Without an origin there is nowhere to measure
-               from, and a shop that switched over anyway would quote nothing at all. */
+               from, and a shop that switched it on anyway would quote nothing at all. */
             <p className="text-[12px] text-rose-muted leading-[1.5]">
-              {t('Set your delivery origin below before you can charge by distance.',
-                 '请先在下方设置配送起点，才能按距离收费。')}
+              {t('Set your delivery origin below before you can offer express delivery.',
+                 '请先在下方设置配送起点，才能提供快速配送。')}
             </p>
           )}
+          <p className="text-[12px] text-rose-muted leading-[1.5]">
+            {t('You must offer at least one. A method you switch off keeps its settings.',
+               '至少须提供一种。关闭的方式会保留其设置。')}
+          </p>
         </div>
       </div>
 
@@ -344,12 +372,11 @@ function ShippingTab({ onDirtyChange }: TabProps) {
           placeholder={t('Start typing your shop address…', '输入店铺地址…')}
           onTextChange={text => setFields(f => (
             // Typing invalidates any prior pick: a place id must never survive its own text
-            // changing under it. It does NOT also flip `shippingMode` back to 'region' — that is
-            // the live pricing policy, and demoting the whole shop over one stray keystroke plus
-            // an absent-minded Save would silently change every customer's fee with no other
-            // signal (#101 review, Finding 5). Leaving the mode alone is safe: the radio stays
-            // disabled without a usable origin, and the backend/DB CHECK both refuse a save of
-            // distance mode with no origin id — see those refusals for why.
+            // changing under it. It does NOT also untick `expressEnabled` — demoting the whole
+            // shop over one stray keystroke plus an absent-minded Save would silently change
+            // every customer's fee with no other signal (#101 review, Finding 5). Leaving the
+            // checkbox alone is safe: it goes disabled the moment the origin id is gone, and the
+            // backend/DB CHECK both refuse a save of express with no origin id.
             { ...f, originAddress: text, originPlaceId: '', originLat: '', originLng: '' }
           ))}
           onPick={d => setFields(f => ({
@@ -373,9 +400,12 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         </p>
       </div>
 
-      {fields.shippingMode === 'region' ? (
+      {/* Both cards can be on screen at once now — a shop may post parcels at a flat rate AND run
+          a rider by the kilometre. Each names the method whose fee it sets: with both showing,
+          "Shipping rates" would not say WHICH shipping. */}
+      {fields.deliveryEnabled && (
         <div className={CARD}>
-          <h3 className={HEADING}>{t('Shipping rates', '运费')}</h3>
+          <h3 className={HEADING}>{t('Delivery rates', '送货费')}</h3>
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-[6px]">
               <Label htmlFor="shop-wm">{t(`West Malaysia (${symbol})`, `西马运费 (${symbol})`)}</Label>
@@ -395,9 +425,11 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {fields.expressEnabled && (
         <div className={CARD}>
-          <h3 className={HEADING}>{t('Distance rates', '距离费率')}</h3>
+          <h3 className={HEADING}>{t('Express delivery rates', '快速配送费率')}</h3>
           <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-[6px]">
               <Label htmlFor="shop-base-fee">{t(`Base fee (${symbol})`, `基本运费 (${symbol})`)}</Label>
