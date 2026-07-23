@@ -159,6 +159,18 @@ export interface Order {
   [key: string]: any
 }
 
+// A shop's customers, aggregated from its orders (`fetchMerchantCustomers`).
+// Keyed by WhatsApp number, falling back to name — `key` is that grouping key.
+// `orders` are this customer's orders at this shop, newest-first.
+export interface MerchantCustomer {
+  key: string
+  name?: string
+  wa?: string
+  orderCount: number
+  lastOrder: string
+  orders: Order[]
+}
+
 export interface Voucher {
   code: string
   used?: boolean
