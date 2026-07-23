@@ -194,6 +194,9 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       const shipping = shopRates({ WM: fields.wm, EM: fields.em })
       await updateMerchantConfig(merchant!.id, {
         shipping,
+        // Saving the Shipping tab completes the onboarding "set pickup / delivery"
+        // step (#102). Idempotent — already true after the first save.
+        onboarding_shipping_set: true,
         pickup_address: (fields.pickupAddress ?? '').trim() || null,
         // A disabled method keeps its configuration so switching it back does not mean retyping it.
         pickup_enabled: fields.pickupEnabled,
@@ -240,7 +243,7 @@ function ShippingTab({ onDirtyChange }: TabProps) {
 
   return (
     <form onSubmit={save}>
-      <div className={CARD}>
+      <div className={CARD} data-tour="set-shipping">
         <h3 className={HEADING}>{t('What customers can choose', '顾客可选的方式')}</h3>
         <div className="flex flex-col gap-2">
           <label className="flex items-start gap-2 text-[14px] text-ink">

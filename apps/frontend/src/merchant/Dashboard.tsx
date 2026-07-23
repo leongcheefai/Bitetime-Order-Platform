@@ -4,6 +4,7 @@ import { LayoutDashboard, ReceiptText, Cake, Ticket, Users, Settings } from 'luc
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import BillingBanner from './BillingBanner'
 import Overview from './Overview'
+import OnboardingChecklist from './OnboardingChecklist'
 import ProductsManager from './ProductsManager'
 import VouchersManager from './VouchersManager'
 import ShopSettings from './ShopSettings'
@@ -53,6 +54,7 @@ function DashboardInner() {
       backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
     >
       <BillingBanner />
+      <OnboardingChecklist section={section} onNavigate={selectSection} />
       <div key={section} {...enter}>
         {section === 'overview'  && <Overview />}
         {section === 'orders'    && <OrdersView />}

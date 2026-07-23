@@ -76,3 +76,34 @@ describe('pickMerchantConfig — tax (#88)', () => {
     expect(pickMerchantConfig({ tax_rate: 6 })).toEqual({ ok: true, patch: { tax_rate: 6 } })
   })
 })
+
+describe('pickMerchantConfig — onboarding flags (#102)', () => {
+  it('accepts the three onboarding booleans', () => {
+    expect(pickMerchantConfig({
+      onboarding_shipping_set: true,
+      onboarding_link_shared: true,
+      onboarding_dismissed: true,
+    })).toEqual({
+      ok: true,
+      patch: {
+        onboarding_shipping_set: true,
+        onboarding_link_shared: true,
+        onboarding_dismissed: true,
+      },
+    })
+  })
+
+  it('passes a field through untouched when absent', () => {
+    expect(pickMerchantConfig({ onboarding_link_shared: true })).toEqual({
+      ok: true,
+      patch: { onboarding_link_shared: true },
+    })
+  })
+
+  it('refuses a non-boolean onboarding flag rather than coercing it', () => {
+    expect(pickMerchantConfig({ onboarding_shipping_set: 'yes' }))
+      .toEqual({ ok: false, error: expect.any(String) })
+    expect(pickMerchantConfig({ onboarding_dismissed: 1 }))
+      .toEqual({ ok: false, error: expect.any(String) })
+  })
+})

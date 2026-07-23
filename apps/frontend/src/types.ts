@@ -45,6 +45,11 @@ export interface Merchant {
   delivery_max_km?: number | string | null
   origin_place_id?: string | null
   origin_address?: string | null
+  /** Onboarding checklist flags (#102). Read via `onboardingSteps`; absent means false. */
+  onboarding_shipping_set?: boolean
+  onboarding_link_shared?: boolean
+  onboarding_dismissed?: boolean
+  onboarding_tour_seen?: boolean
   [key: string]: any
 }
 
