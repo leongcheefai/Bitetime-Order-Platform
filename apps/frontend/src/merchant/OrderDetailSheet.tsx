@@ -4,6 +4,7 @@ import { setOrderStatus, setOrderNote, setOrderTracking } from '../store'
 import { formatMoney } from '../currency'
 import { formatAddress } from '../address'
 import { formatCalendarDate } from '../orderDate'
+import { fmtDateTime } from '../merchantDate'
 import { formatTaxRate } from '../receipt'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,7 @@ import {
 import { COURIERS, trackingUrl, courierName } from '../couriers'
 import { ORDER_STATUSES, STATUS_LABELS, StatusBadge } from '../orderStatus'
 import { fulfilmentLabel } from '../fulfilmentLabel'
+import WaLink from './WaLink'
 
 // 11px semibold uppercase rose-muted label.
 const LBL = 'text-[11px] font-semibold uppercase tracking-[0.06em] text-rose-muted shrink-0'
@@ -26,12 +28,6 @@ const SELECT_CLS =
   'focus:outline-none focus:border-oxblood focus:shadow-[0_0_0_2px_rgba(122,16,40,0.1)]'
 
 const CHEVRON_SVG = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%237A4F55' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E")`
-
-function fmtTime(iso: string | null | undefined) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleString('en-MY', { dateStyle: 'short', timeStyle: 'short' })
-}
 
 // A labelled key/value line in the detail sheet — label in a fixed left column,
 // value aligned in the right column so rows scan like a receipt.
@@ -131,7 +127,7 @@ export default function OrderDetailSheet({
                 <SheetTitle className="text-[15px]">{order.order_number || '—'}</SheetTitle>
                 <StatusBadge status={order.status || 'new'} t={t} />
               </div>
-              <span className="text-[12px] text-text-tertiary">{fmtTime(order.created_at)}</span>
+              <span className="text-[12px] text-text-tertiary">{fmtDateTime(order.created_at)}</span>
             </SheetHeader>
 
             <div className="flex flex-col px-4 pb-4">
@@ -139,14 +135,7 @@ export default function OrderDetailSheet({
               <Section title={t('Customer', '顾客')}>
                 <span className="text-[14px] font-medium text-ink">{order.customer_name || '—'}</span>
                 {order.customer_wa && (
-                  <a
-                    href={`https://wa.me/${order.customer_wa.replace(/\D/g, '')}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[13px] text-oxblood no-underline font-medium hover:underline w-fit"
-                  >
-                    {order.customer_wa}
-                  </a>
+                  <span className="text-[13px] w-fit"><WaLink wa={order.customer_wa} /></span>
                 )}
               </Section>
 

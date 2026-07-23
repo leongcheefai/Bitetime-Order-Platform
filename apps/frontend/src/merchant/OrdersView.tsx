@@ -5,17 +5,12 @@ import { useSession } from '../SessionContext'
 import { fetchMerchantOrders } from '../store'
 import { formatMoney } from '../currency'
 import { formatCalendarDate } from '../orderDate'
+import { fmtDateTime } from '../merchantDate'
 import { SkeletonText } from '../components/Loaders'
 import { DataTable, SortableHeader } from '@/components/ui/data-table'
 import { StatusBadge } from '../orderStatus'
 import { fulfilmentLabel } from '../fulfilmentLabel'
 import OrderDetailSheet from './OrderDetailSheet'
-
-function fmtTime(iso: string | null | undefined) {
-  if (!iso) return '—'
-  const d = new Date(iso)
-  return d.toLocaleString('en-MY', { dateStyle: 'short', timeStyle: 'short' })
-}
 
 // Handlers + language + currency ride on table.options.meta so the column defs
 // stay stable (defined once) and never reset sorting when the data refetches.
@@ -43,7 +38,7 @@ const columns: ColumnDef<any>[] = [
       <SortableHeader column={column} label={(table.options.meta as OrderTableMeta).t('Time', '时间')} />
     ),
     cell: ({ row }) => (
-      <span className="whitespace-nowrap text-text-tertiary">{fmtTime(row.original.created_at)}</span>
+      <span className="whitespace-nowrap text-text-tertiary">{fmtDateTime(row.original.created_at)}</span>
     ),
   },
   {

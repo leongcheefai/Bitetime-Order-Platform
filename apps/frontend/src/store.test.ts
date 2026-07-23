@@ -1063,8 +1063,8 @@ describe('fetchMerchantCustomers', () => {
     const result = await fetchMerchantCustomers('m1')
 
     expect(result).toHaveLength(2)
-    const alice = result.find(c => c.wa === '601')
-    const bob   = result.find(c => c.wa === '602')
+    const alice = result.find(c => c.wa === '601')!
+    const bob   = result.find(c => c.wa === '602')!
     expect(alice.orderCount).toBe(2)
     expect(alice.lastOrder).toBe('2025-01-03')
     expect(bob.orderCount).toBe(1)

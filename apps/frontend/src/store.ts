@@ -4,7 +4,7 @@ import type { FeedbackDraft, FeedbackStatus } from '@bitetime/shared';
 import { supabase } from './supabase';
 import { RESERVED_SLUGS } from './slug';
 import { SignupError, signupErrorCode } from './signupError'
-import type { AddressParts, EarnedReward, FeedbackItem, Order, ReferredShop, Voucher } from './types';
+import type { AddressParts, EarnedReward, FeedbackItem, MerchantCustomer, Order, ReferredShop, Voucher } from './types';
 import type { SavedDetails } from './savedDetails';
 import { resetRedirectUrl } from './resetPassword';
 import { API_URL, apiGet, apiTry, apiSend } from './api'
@@ -770,20 +770,20 @@ export async function fetchOrderTracking(merchantId: string, orderNumber: string
   } | null
 }
 
-export async function fetchMerchantCustomers(merchantId: string) {
+export async function fetchMerchantCustomers(merchantId: string): Promise<MerchantCustomer[]> {
   const orders = await fetchMerchantOrders(merchantId)
-  const byWa = new Map()
+  const byWa = new Map<string, MerchantCustomer>()
   for (const o of orders) {
     const key = o.customer_wa || o.customer_name || '—'
-    const cur = byWa.get(key) || { key, name: o.customer_name, wa: o.customer_wa, orderCount: 0, lastOrder: o.created_at, orders: [] }
+    const cur: MerchantCustomer = byWa.get(key) ?? { key, name: o.customer_name, wa: o.customer_wa, orderCount: 0, lastOrder: o.created_at ?? '', orders: [] }
     cur.orderCount += 1
     cur.orders.push(o)
-    if (o.created_at > cur.lastOrder) cur.lastOrder = o.created_at
+    if ((o.created_at ?? '') > cur.lastOrder) cur.lastOrder = o.created_at ?? ''
     byWa.set(key, cur)
   }
   // Newest-first within each customer — the drawer lists them top-down.
   for (const c of byWa.values()) {
-    c.orders.sort((a: any, b: any) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0))
+    c.orders.sort((a, b) => ((a.created_at ?? '') < (b.created_at ?? '') ? 1 : (a.created_at ?? '') > (b.created_at ?? '') ? -1 : 0))
   }
   return [...byWa.values()]
 }
