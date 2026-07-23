@@ -99,7 +99,9 @@ const columns: ColumnDef<any>[] = [
   },
 ]
 
-export default function OrdersView({ readOnly = false }: { readOnly?: boolean } = {}) {
+export default function OrdersView(
+  { readOnly = false, onOrdersChanged }: { readOnly?: boolean; onOrdersChanged?: () => void } = {},
+) {
   const { t, lang, merchant } = useSession()
   const [orders, setOrders] = useState<any[] | null>(null)
   const [selected, setSelected] = useState<any | null>(null)
@@ -111,6 +113,8 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
   function patchOrder(updated: any) {
     setOrders(prev => (prev ? prev.map(o => (o.id === updated.id ? updated : o)) : prev))
     setSelected((cur: any) => (cur && cur.id === updated.id ? updated : cur))
+    // Status may have changed the "new" order count — let the shell refresh its badge.
+    onOrdersChanged?.()
   }
 
   const meta: OrderTableMeta = { t, lang, currency: merchant?.currency }

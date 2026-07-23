@@ -5,9 +5,10 @@ import { useSession } from '../SessionContext'
 import { signOut } from '../store'
 import LanguageSelect from './LanguageSelect'
 import Wordmark from './Wordmark'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 
-export interface NavItem { key: string; label: string; icon: ReactNode }
+export interface NavItem { key: string; label: string; icon: ReactNode; badge?: number }
 
 interface DashboardShellProps {
   title?: string
@@ -178,6 +179,10 @@ export default function DashboardShell({ title, role, nav, active, onSelect, bac
               </span>
               {/* Label */}
               <span>{n.label}</span>
+              {/* Count badge — e.g. pending "new" orders */}
+              {n.badge != null && n.badge > 0 && (
+                <Badge className="ml-auto tabular-nums">{n.badge > 99 ? '99+' : n.badge}</Badge>
+              )}
             </button>
           ))}
         </nav>

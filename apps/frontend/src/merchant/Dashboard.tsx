@@ -1,4 +1,6 @@
+import { useCallback, useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
+import { fetchMerchantOrders } from '../store'
 import { useEnterTransition } from '../motion'
 import { LayoutDashboard, ReceiptText, Cake, Ticket, Users, Settings } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
@@ -38,7 +40,24 @@ function DashboardInner() {
   const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
   const enter = useEnterTransition()
 
-  const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
+  // Count of pending "new" orders — surfaced as a badge on the Orders nav item.
+  // Refetched whenever an order's status changes so the badge stays live.
+  const [newOrders, setNewOrders] = useState(0)
+  const refreshNewOrders = useCallback(() => {
+    const id = merchant?.id
+    if (!id) return
+    fetchMerchantOrders(id).then(orders => {
+      setNewOrders(orders.filter(o => (o.status ?? 'new') === 'new').length)
+    })
+  }, [merchant?.id])
+  useEffect(() => { refreshNewOrders() }, [refreshNewOrders])
+
+  const nav: NavItem[] = SECTIONS.map(s => ({
+    key: s.key,
+    label: t(s.en, s.zh),
+    icon: s.icon,
+    badge: s.key === 'orders' ? newOrders : undefined,
+  }))
 
   // Route sidebar section switches through the unsaved-changes guard so a dirty
   // Settings tab cannot be silently discarded by navigating away.
@@ -57,7 +76,7 @@ function DashboardInner() {
       <OnboardingChecklist section={section} onNavigate={selectSection} />
       <div key={section} {...enter}>
         {section === 'overview'  && <Overview />}
-        {section === 'orders'    && <OrdersView />}
+        {section === 'orders'    && <OrdersView onOrdersChanged={refreshNewOrders} />}
         {section === 'products'  && <ProductsManager />}
         {section === 'vouchers'  && <VouchersManager />}
         {section === 'customers' && <CustomersView />}
