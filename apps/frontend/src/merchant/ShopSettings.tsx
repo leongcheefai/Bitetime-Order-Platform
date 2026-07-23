@@ -117,30 +117,16 @@ function SaveRow({ busy, label }: { busy: boolean; label: { idle: string; busy: 
 function ShippingTab({ onDirtyChange }: TabProps) {
   const { t, merchant, refreshMerchant } = useSession()
   const [saved, setSaved] = useState<ShippingFields>(() => {
-    // shopRates, not a local `?? 8` / `?? 18`: this form shows the merchant what a row with a
-    // missing key CHARGES, and the charge is decided by that one function on both sides of the
-    // wire. A third fallback rule here would show a rate (EM 18) that nobody quotes and nobody
-    // bills — and saving it would move a real price the merchant never meant to touch.
+    // shopRates/shopDistance/shopMethods, not local fallbacks: this form shows the merchant what
+    // a row with a missing key CHARGES/OFFERS, and that is decided by these functions on both
+    // sides of the wire — a third fallback rule here would show a price nobody bills.
     const rates = shopRates(merchant!.shipping)
-    // shopTax, not a local `?? 0`, for the same reason shopRates is used one line up: this form
-    // shows the merchant what their shop CHARGES, and the charge is decided by that one function
-    // on both sides of the wire.
-    const tax = shopTax(merchant!)
-    // shopDistance, not a local read of these columns, for exactly the reason shopRates and
-    // shopTax are used above: this form shows the merchant what their shop CHARGES, and the
-    // charge is decided by that one function on both sides of the wire.
     const distance = shopDistance(merchant!)
-    // shopMethods, not a local read of these columns, for exactly the reason shopRates, shopTax
-    // and shopDistance are used above: this form shows the merchant what their shop OFFERS, and
-    // what it offers is decided by that one function on both sides of the wire.
     const methods = shopMethods(merchant!)
     return {
-      currency: merchant!.currency ?? DEFAULT_CURRENCY,
       wm: String(rates.WM),
       em: String(rates.EM),
       pickupAddress: merchant!.pickup_address ?? '',
-      taxEnabled: tax.enabled,
-      taxRate: tax.rate ? String(tax.rate) : '',
       pickupEnabled: methods.pickup,
       deliveryEnabled: methods.delivery,
       expressEnabled: methods.express,
@@ -149,32 +135,20 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       maxKm: distance.maxKm === null ? '' : String(distance.maxKm),
       originPlaceId: merchant!.origin_place_id ?? '',
       originAddress: merchant!.origin_address ?? '',
-      // Held as strings, like every other numeric field this form's inputs already carry
-      // (`wm`, `taxRate`, `baseFee`…) — `SettingsFields`'s index signature is `string | boolean`,
-      // shared by every tab in this file, so lat/lng round-trip through `String()`/`Number()`
-      // at the two edges (a pick, and save) rather than widening that shared type for one tab.
       originLat: merchant!.origin_lat != null ? String(merchant!.origin_lat) : '',
       originLng: merchant!.origin_lng != null ? String(merchant!.origin_lng) : '',
     }
   })
   const [fields, setFields] = useState<ShippingFields>(saved)
   const [busy, setBusy] = useState(false)
-  // Currency locks after the first order so past orders/aggregates never
-  // re-denominate. Assume locked until the check clears, so it can't flip open.
-  const [currencyLocked, setCurrencyLocked] = useState(true)
   useTabDirty(saved, fields, onDirtyChange)
 
-  useEffect(() => {
-    let active = true
-    merchantHasOrders(merchant!.id).then(has => { if (active) setCurrencyLocked(has) })
-    return () => { active = false }
-  }, [merchant!.id])
-
-  // Live symbol drives the shipping-rate input labels.
-  const symbol = currencyDef(fields.currency).symbol
+  // Rate-input labels show the shop's saved currency symbol. Currency is edited on the Payment
+  // tab now, so this reads the persisted value, not a live field. (Currency locks after the
+  // first order anyway, so this is stable in practice.)
+  const symbol = currencyDef(merchant!.currency ?? DEFAULT_CURRENCY).symbol
 
   // The one method still on, if exactly one is — the checkbox that must not be untickable.
-  // `null` whenever two or more are on, which is when every box is free to move.
   const enabledMethods = (['pickup', 'delivery', 'express'] as const)
     .filter(m => fields[`${m}Enabled` as const])
   const onlyMethod = enabledMethods.length === 1 ? enabledMethods[0] : null
@@ -182,12 +156,8 @@ function ShippingTab({ onDirtyChange }: TabProps) {
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
     try {
-      // A typed origin that was never confirmed against the map has no place id. The save would
-      // otherwise DROP it silently and still report success — the merchant watches their address
-      // vanish on the next reload under a "Settings saved" toast. Refuse instead, and say what
-      // "confirmed" means: an origin must be PICKED from the suggestions, because it is the
-      // routing origin AND the distance-cache key and free text can be neither. (After a load the
-      // two fields are always consistent, so this only fires on live, unconfirmed typing.)
+      // A typed origin never confirmed against the map has no place id. Refuse rather than drop it
+      // silently under a success toast — the origin is the routing origin AND the cache key.
       if ((fields.originAddress ?? '').trim() !== '' && !fields.originPlaceId) {
         toast.error(t(
           'Pick your delivery origin from the suggestions — a typed address on its own cannot be saved.',
@@ -197,10 +167,8 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         return
       }
 
-      // Express requires an origin to route from. Checked here, in the merchant's language, while
-      // they are still looking at the form — the backend's `merchants_express_requires_origin`
-      // CHECK and its PATCH validation are the backstop, but a bare 400 after Save is a worse way
-      // to learn the origin was mandatory than a message that names the rule.
+      // Express requires an origin to route from. Backend CHECK is the backstop; this names the
+      // rule in the merchant's language while they still see the form.
       if (fields.expressEnabled && !fields.originPlaceId) {
         toast.error(t(
           'Set your delivery origin before switching on express delivery.',
@@ -210,12 +178,8 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         return
       }
 
-      // Guard against a 0 maximum distance: a blank field is "deliver anywhere with a road", but 0
-      // is "deliver nowhere". The backend refuses it, but this layer can show why in the merchant's
-      // language while they are still looking at the field, rather than a raw developer error string.
-      // TRIMMED, so this agrees with the blank test the save itself makes a few lines below. The
-      // two must use one notion of "blank" or a stray space would be refused here as "not greater
-      // than zero" while the save one screen down reads it as "no limit".
+      // Blank maxKm = "deliver anywhere with a road"; 0 = "deliver nowhere". Trimmed so this
+      // agrees with the blank test the save makes below.
       if ((fields.maxKm ?? '').trim() !== '' && Number(fields.maxKm) <= 0) {
         toast.error(t(
           'Maximum distance must be greater than zero, or leave blank to deliver anywhere.',
@@ -225,58 +189,29 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         return
       }
 
-      // shopRates is what READS this column on both sides of the wire, so it is what WRITES it
-      // too — the same function, so the form cannot save a row it then reads back differently.
-      //
-      // It used to be `Number(fields.em) || 0`, and that quietly defeated the one guarantee
-      // shopRates makes: a merchant who BLANKED the East-Malaysia field wrote an explicit 0 and
-      // shipped to East Malaysia for FREE. shopRates promises a missing EM falls back to WM
-      // precisely so that cannot happen, and the promise is worth nothing if the form in front
-      // of it writes the zero by hand. A blank field is now "I did not name a rate" (→ WM); a
-      // typed `0` is still an honest, deliberate zero.
+      // shopRates writes what it reads on both sides of the wire: a BLANK EM falls back to WM
+      // (not free EM shipping); a typed 0 is an honest zero.
       const shipping = shopRates({ WM: fields.wm, EM: fields.em })
       await updateMerchantConfig(merchant!.id, {
-        // Guard against a stale locked value slipping through: only persist the
-        // currency when it is still editable.
-        ...(currencyLocked ? {} : { currency: fields.currency }),
         shipping,
         pickup_address: (fields.pickupAddress ?? '').trim() || null,
-        // A blank rate box is 0, and 0 is "no tax" — the same collapse `shopTax` makes when it
-        // reads the row back, so the form cannot save a value it then displays differently.
-        // The checkbox is stored as typed: a merchant who unticks it keeps their rate on the
-        // row, and reads it back as OFF because `shopTax` gates on the flag.
-        tax_enabled: fields.taxEnabled,
-        tax_rate: Number(fields.taxRate) || 0,
-        // Every rate is written on every save, whichever methods are on: a disabled method's
-        // configuration is kept so switching it back does not mean retyping it (story 10) —
-        // the same arrangement a disabled tax's rate already has.
+        // A disabled method keeps its configuration so switching it back does not mean retyping it.
         pickup_enabled: fields.pickupEnabled,
         delivery_enabled: fields.deliveryEnabled,
         express_enabled: fields.expressEnabled,
         delivery_base_fee: Number(fields.baseFee) || 0,
         delivery_rate_per_km: Number(fields.ratePerKm) || 0,
-        // A BLANK maximum is "deliver anywhere with a road" — null, not 0. A typed 0 would be
-        // "deliver nowhere", and the backend refuses it rather than guessing which was meant.
+        // BLANK maximum is "anywhere with a road" — null, not 0.
         delivery_max_km: (fields.maxKm ?? '').trim() === '' ? null : Number(fields.maxKm),
         origin_place_id: fields.originPlaceId || null,
-        // An unmatched string is not an origin. Save address and coords only when place_id is
-        // confirmed by autocomplete; otherwise store null. This prevents a merchant from seeing
-        // a stale, unmatched string on reload and believing a place was confirmed when none was.
+        // An unmatched string is not an origin: store coords/address only when place_id is confirmed.
         origin_lat: fields.originPlaceId && (fields.originLat ?? '').trim() !== '' ? Number(fields.originLat) : null,
         origin_lng: fields.originPlaceId && (fields.originLng ?? '').trim() !== '' ? Number(fields.originLng) : null,
         origin_address: fields.originPlaceId ? (fields.originAddress || null) : null,
       })
       await refreshMerchant()
-      // Show back the rates that were actually SAVED, not the blank that was typed — a merchant
-      // must never be left looking at an empty box while their shop charges the WM rate.
-      //
-      // Tax goes through shopTax for the same reason: a ticked-but-blank rate is written as
-      // `{tax_enabled: true, tax_rate: 0}`, which shopTax collapses to OFF when it reads the row
-      // back on reload. Carrying `fields.taxEnabled` over verbatim would show CHECKED here and
-      // UNCHECKED after a refresh — shopTax is what the checkbox must agree with.
-      const tax = shopTax({ tax_enabled: fields.taxEnabled, tax_rate: Number(fields.taxRate) || 0 })
-      // Same reasoning again, distance leg: show back what was actually written, read through
-      // the one function that also reads it on reload, not the raw strings that were typed.
+      // Show back what was actually SAVED, read through the one function that also reads it on
+      // reload, not the raw strings that were typed.
       const distance = shopDistance({
         express_enabled: fields.expressEnabled,
         delivery_base_fee: Number(fields.baseFee) || 0,
@@ -288,13 +223,9 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         ...fields,
         wm: String(shipping.WM),
         em: String(shipping.EM),
-        taxEnabled: tax.enabled,
-        taxRate: tax.rate ? String(tax.rate) : '',
         baseFee: String(distance.base),
         ratePerKm: String(distance.ratePerKm),
         maxKm: distance.maxKm === null ? '' : String(distance.maxKm),
-        // Show what was actually SAVED for origin fields, not what was typed. If an unconfirmed
-        // address was cleared from storage, the display must reflect that too.
         originPlaceId: merchant!.origin_place_id ?? '',
         originAddress: merchant!.origin_address ?? '',
         originLat: merchant!.origin_lat != null ? String(merchant!.origin_lat) : '',
@@ -310,47 +241,11 @@ function ShippingTab({ onDirtyChange }: TabProps) {
   return (
     <form onSubmit={save}>
       <div className={CARD}>
-        <h3 className={HEADING}>{t('Currency', '货币')}</h3>
-        <div className="flex flex-col gap-[6px]">
-          <Label htmlFor="shop-currency">{t('Base currency', '基础货币')}</Label>
-          <Select
-            value={fields.currency}
-            onValueChange={(v) => setFields(f => ({ ...f, currency: v }))}
-            disabled={currencyLocked}
-          >
-            <SelectTrigger id="shop-currency" className="w-full max-w-[280px]" aria-label={t('Base currency', '基础货币')}>
-              {/* Trigger shows the short code + symbol so it never truncates the
-                  country name mid-word on mobile; the full label lives in the list. */}
-              <span className="truncate">
-                {currencyDef(fields.currency).code} — {currencyDef(fields.currency).symbol}
-              </span>
-            </SelectTrigger>
-            <SelectContent>
-              {CURRENCY_CODES.map(code => (
-                <SelectItem key={code} value={code}>
-                  {CURRENCIES[code].code} — {CURRENCIES[code].symbol} · {CURRENCIES[code].label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
-            {currencyLocked
-              ? t('Currency is locked because your shop has orders — changing it would re-denominate past totals.',
-                  '因店铺已有订单，货币已锁定 — 更改会重新换算历史金额。')
-              : t('The unit for your prices and what customers see. Locked once your first order is placed.',
-                  '您的价格和顾客看到的金额单位。首笔订单后将锁定。')}
-          </p>
-        </div>
-      </div>
-      <div className={CARD}>
         <h3 className={HEADING}>{t('What customers can choose', '顾客可选的方式')}</h3>
         <div className="flex flex-col gap-2">
           <label className="flex items-start gap-2 text-[14px] text-ink">
             <input type="checkbox" className="mt-1"
               checked={fields.pickupEnabled}
-              // The LAST ticked box cannot be unticked. Min-one is a CHECK constraint and the
-              // backend refuses a save that breaks it, but a merchant should meet that rule as
-              // an input that will not turn off, not as an error after they pressed Save.
               disabled={onlyMethod === 'pickup'}
               onChange={e => setFields(f => ({ ...f, pickupEnabled: e.target.checked }))} />
             <span>{t('Pickup — customers collect from you.', '自取 — 顾客自行前来领取。')}</span>
@@ -368,10 +263,6 @@ function ShippingTab({ onDirtyChange }: TabProps) {
           <label className="flex items-start gap-2 text-[14px] text-ink">
             <input type="checkbox" className="mt-1"
               checked={fields.expressEnabled}
-              // Tickable regardless of the origin: the merchant declares the INTENT first, and the
-              // origin becomes mandatory because of it — not the other way round. `save()` blocks
-              // until an origin is set (and the DB CHECK is the backstop). Only the last remaining
-              // method is locked on.
               disabled={onlyMethod === 'express'}
               onChange={e => setFields(f => ({ ...f, expressEnabled: e.target.checked }))} />
             <span>
@@ -380,8 +271,6 @@ function ShippingTab({ onDirtyChange }: TabProps) {
             </span>
           </label>
           {fields.expressEnabled && !fields.originPlaceId && (
-            /* Express is on but has nowhere to measure from. The origin is mandatory the moment
-               this is ticked; the save is blocked until one is picked below. */
             <p className="text-[12px] text-oxblood leading-[1.5]">
               {t('Express delivery needs a delivery origin. Pick one below to save.',
                  '快速配送需要一个配送起点，请在下方选择后保存。')}
@@ -395,6 +284,17 @@ function ShippingTab({ onDirtyChange }: TabProps) {
       </div>
 
       <div className={CARD}>
+        <h3 className={HEADING}>{t('Pickup address', '自取地址')}</h3>
+        <div className="flex flex-col gap-[6px]">
+          <Label htmlFor="shop-pickup">{t('Shown to customers who choose pickup', '选择自取的顾客可见')}</Label>
+          <Textarea id="shop-pickup" value={fields.pickupAddress}
+            onChange={e => setFields(f => ({ ...f, pickupAddress: e.target.value }))}
+            rows={3} placeholder={t('e.g. 12 Jalan Example, 50000 Kuala Lumpur', '例如：吉隆坡某某路12号')}
+            className="resize-y min-h-[72px] max-w-[420px]" />
+        </div>
+      </div>
+
+      <div className={CARD}>
         <h3 className={HEADING}>{t('Delivery origin', '配送起点')}</h3>
         <AddressAutocomplete
           id="shop-origin"
@@ -404,11 +304,8 @@ function ShippingTab({ onDirtyChange }: TabProps) {
           placeholder={t('Start typing your shop address…', '输入店铺地址…')}
           onTextChange={text => setFields(f => (
             // Typing invalidates any prior pick: a place id must never survive its own text
-            // changing under it. It does NOT also untick `expressEnabled` — demoting the whole
-            // shop over one stray keystroke plus an absent-minded Save would silently change
-            // every customer's fee with no other signal (#101 review, Finding 5). Leaving the
-            // checkbox alone is safe: it goes disabled the moment the origin id is gone, and the
-            // backend/DB CHECK both refuse a save of express with no origin id.
+            // changing. It does NOT untick expressEnabled — the checkbox goes disabled the moment
+            // the origin id is gone, and the backend/DB CHECK refuse a save of express with no origin.
             { ...f, originAddress: text, originPlaceId: '', originLat: '', originLng: '' }
           ))}
           onPick={d => setFields(f => ({
@@ -420,21 +317,18 @@ function ShippingTab({ onDirtyChange }: TabProps) {
           }))}
         />
         {fields.originPlaceId && (
-          /* Show back what was MATCHED, not what was typed: it is the only way a merchant can
-             tell the pin landed on the wrong shoplot (story 4). */
           <p className="text-[12px] text-rose-muted mt-2 leading-[1.5]">
             {t('Routes are measured from: ', '距离从此地址起算：')}<strong>{fields.originAddress}</strong>
           </p>
         )}
         <p className="text-[12px] text-rose-muted mt-2 leading-[1.5]">
-          {t('This is separate from your pickup address below, which is free text and is only shown to pickup customers.',
-             '此地址与下方的自取地址不同 — 自取地址是纯文字，仅显示给自取顾客。')}
+          {t('This is separate from your pickup address above, which is free text and is only shown to pickup customers.',
+             '此地址与上方的自取地址不同 — 自取地址是纯文字，仅显示给自取顾客。')}
         </p>
       </div>
 
-      {/* Both cards can be on screen at once now — a shop may post parcels at a flat rate AND run
-          a rider by the kilometre. Each names the method whose fee it sets: with both showing,
-          "Shipping rates" would not say WHICH shipping. */}
+      {/* Both rate cards can be on screen at once — a shop may post parcels at a flat rate AND run
+          a rider by the kilometre. Each names the method whose fee it sets. */}
       {fields.deliveryEnabled && (
         <div className={CARD}>
           <h3 className={HEADING}>{t('Delivery rates', '送货费')}</h3>
@@ -448,8 +342,6 @@ function ShippingTab({ onDirtyChange }: TabProps) {
               <Label htmlFor="shop-em">{t(`East Malaysia (${symbol})`, `东马运费 (${symbol})`)}</Label>
               <Input id="shop-em" type="number" step="0.01" value={fields.em}
                 onChange={e => setFields(f => ({ ...f, em: e.target.value }))} variant="compact" />
-              {/* Says what a blank field does, because a blank field DOES something: it charges the
-                  West Malaysia rate. Free shipping to East Malaysia has to be typed as a 0. */}
               <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
                 {t('Blank East Malaysia charges the same as West Malaysia. Enter 0 for free East Malaysia delivery.',
                    '东马留空则按西马运费收取。填 0 表示东马免运费。')}
@@ -481,7 +373,6 @@ function ShippingTab({ onDirtyChange }: TabProps) {
               <Label htmlFor="shop-max-km">{t('Maximum distance (km)', '最远配送距离 (公里)')}</Label>
               <Input id="shop-max-km" type="number" step="0.1" min="0.1" value={fields.maxKm}
                 onChange={e => setFields(f => ({ ...f, maxKm: e.target.value }))} variant="compact" />
-              {/* Says what a blank field DOES, the same reason the East-Malaysia hint does. */}
               <p className="text-[12px] text-rose-muted leading-[1.5]">
                 {t('Leave blank to deliver anywhere with a road. Customers past this distance are told you do not deliver to them.',
                    '留空表示只要有路就送。超过此距离的顾客会被告知不在配送范围。')}
@@ -494,48 +385,6 @@ function ShippingTab({ onDirtyChange }: TabProps) {
           </div>
         </div>
       )}
-      <div className={CARD}>
-        <h3 className={HEADING}>{t('Tax', '税')}</h3>
-        <div className="flex flex-col gap-2">
-          <label className="flex items-center gap-2 text-[14px] text-ink">
-            <input
-              type="checkbox"
-              checked={fields.taxEnabled}
-              onChange={e => setFields(f => ({ ...f, taxEnabled: e.target.checked }))}
-            />
-            {t('Charge tax on orders', '订单收取税费')}
-          </label>
-          <div className="flex flex-col gap-[6px]">
-            <Label htmlFor="shop-tax-rate">{t('Tax rate (%)', '税率 (%)')}</Label>
-            <Input
-              id="shop-tax-rate" type="number" step="0.01" min="0" max="100"
-              value={fields.taxRate}
-              disabled={!fields.taxEnabled}
-              onChange={e => setFields(f => ({ ...f, taxRate: e.target.value }))}
-              variant="compact"
-            />
-            {/* Says what the rate DOES, because the base is not obvious: it is charged on the
-                food after any voucher, and never on the delivery fee. Also says what a BLANK (or
-                zero) rate does, same reason as the East-Malaysia hint above: shopTax collapses
-                a blank/0 rate to tax OFF, so the checkbox pops back unticked after save — this
-                is what stops that from reading as an unexplained bug. */}
-            <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
-              {t('Added on top of your item prices, after any voucher discount. Delivery fees are not taxed. Leave blank, or enter 0, to turn tax off.',
-                 '在商品价格之上加收，扣除优惠券后计算。运费不征税。留空或填 0 即可关闭税费。')}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className={CARD}>
-        <h3 className={HEADING}>{t('Pickup address', '自取地址')}</h3>
-        <div className="flex flex-col gap-[6px]">
-          <Label htmlFor="shop-pickup">{t('Shown to customers who choose pickup', '选择自取的顾客可见')}</Label>
-          <Textarea id="shop-pickup" value={fields.pickupAddress}
-            onChange={e => setFields(f => ({ ...f, pickupAddress: e.target.value }))}
-            rows={3} placeholder={t('e.g. 12 Jalan Example, 50000 Kuala Lumpur', '例如：吉隆坡某某路12号')}
-            className="resize-y min-h-[72px] max-w-[420px]" />
-        </div>
-      </div>
       <SaveRow busy={busy} label={{ idle: t('Save', '保存'), busy: t('Saving…', '保存中…') }} />
     </form>
   )
