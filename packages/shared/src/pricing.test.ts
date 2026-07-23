@@ -51,15 +51,6 @@ describe('priceOrder', () => {
     expect(r.total).toBe(22)
   })
 
-  it('sameday uses the passed-in quote fee', () => {
-    const r = priceOrder({
-      products: [product('a', 10)], cart: { a: 1 },
-      mode: 'sameday', samedayFee: 15, rates: RATES, now: NOW,
-    })
-    expect(r.shipping).toBe(15)
-    expect(r.total).toBe(25)
-  })
-
   it('resolvedShipping overrides region logic (storefront with no state)', () => {
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 },
@@ -635,24 +626,37 @@ describe('routedKm / distanceFee', () => {
   })
 })
 
-describe('priceOrder under a distance policy', () => {
-  const distance = shopDistance(DISTANCE_ROW)
+describe('priceOrder — express', () => {
+  const distance = shopDistance(DISTANCE_ROW)   // base 6, rate 1/km in the fixture
 
-  it('charges base + rate x rounded km for a delivery', () => {
+  it('prices express by distance: base + rate x rounded km', () => {
+    const r = priceOrder({
+      products: [product('a', 10)], cart: { a: 1 },
+      mode: 'express', rates: RATES, now: NOW,
+      distance, routedMetres: 25216,
+    })
+    // routedKm rounds to 25.2 BEFORE the rate multiplies it.
+    expect(r.shipping).toBe(6 + 1 * 25.2)   // 31.2
+    expect(r.shippingPending).toBe(false)
+    expect(r.total).toBe(41.2)
+  })
+
+  it('leaves a plain delivery on the region rate at a shop that also offers express', () => {
+    // The whole point of #103: the fee rule follows the METHOD, not the shop. This shop offers
+    // express (DISTANCE_ROW), but a `delivery` order is priced by the flat region rate regardless.
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 },
       mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
       distance, routedMetres: 25216,
     })
-    expect(r.shipping).toBe(31.2)
+    expect(r.shipping).toBe(RATES.WM)
     expect(r.shippingPending).toBe(false)
-    expect(r.total).toBe(41.2)
   })
 
-  it('ignores the shop region rates entirely — the dormant policy must never leak into a total', () => {
+  it('ignores the shop region rates entirely on an express order', () => {
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 },
-      mode: 'delivery', state: 'Sabah', rates: { WM: 8, EM: 999 }, now: NOW,
+      mode: 'express', rates: { WM: 8, EM: 999 }, now: NOW,
       distance, routedMetres: 25216,
     })
     expect(r.shipping).toBe(31.2)
@@ -661,25 +665,25 @@ describe('priceOrder under a distance policy', () => {
   it('charges NOTHING and flags the fee pending when the distance is not known yet', () => {
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 },
-      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      mode: 'express', rates: RATES, now: NOW,
       distance, routedMetres: null,
     })
-    expect(r.shipping).toBe(0)
+    expect(r.shipping).toBe(0)   // NOT a fee — see PriceBreakdown.shippingPending
     expect(r.shippingPending).toBe(true)
   })
 
-  it('flags pending — never a fee — for a distance shop whose configuration cannot price', () => {
-    const broken = shopDistance({ ...DISTANCE_ROW, delivery_rate_per_km: null })
+  it('flags pending — never a fee — when express is priced by an unusable configuration', () => {
+    const broken = shopDistance({ ...DISTANCE_ROW, origin_place_id: null })
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 },
-      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      mode: 'express', rates: RATES, now: NOW,
       distance: broken, routedMetres: 25216,
     })
     expect(r.shipping).toBe(0)
     expect(r.shippingPending).toBe(true)
   })
 
-  it('charges no shipping on a pickup at a distance shop, and never flags it pending', () => {
+  it('charges no shipping on a pickup at an express shop, and never flags it pending', () => {
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 },
       mode: 'pickup', rates: RATES, now: NOW, distance, routedMetres: null,
@@ -688,12 +692,12 @@ describe('priceOrder under a distance policy', () => {
     expect(r.shippingPending).toBe(false)
   })
 
-  it('discounts a percent voucher off subtotal PLUS the distance fee, unchanged', () => {
+  it('discounts a percent voucher off subtotal PLUS the express fee, unchanged', () => {
     // Deliberately unchanged (#101 "What deliberately does not change"): moving the discount
     // base would shift totals at every shop that never asked for distance pricing.
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 },
-      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      mode: 'express', rates: RATES, now: NOW,
       distance, routedMetres: 25216,
       voucher: { code: 'X', type: 'percent', value: 20 },
     })
@@ -703,7 +707,7 @@ describe('priceOrder under a distance policy', () => {
   it('flags pending — never a reduced fee — for a negative routed distance', () => {
     const r = priceOrder({
       products: [product('a', 10)], cart: { a: 1 },
-      mode: 'delivery', state: 'Selangor', rates: RATES, now: NOW,
+      mode: 'express', rates: RATES, now: NOW,
       distance, routedMetres: -5000,
     })
     expect(r.shipping).toBe(0)

@@ -63,8 +63,8 @@ export interface PriceBreakdown {
   taxRate: number
   total: number
   /**
-   * TRUE when this shop prices by distance, the mode is delivery, and no fee could be derived —
-   * either no routed distance is known yet or the shop's distance configuration cannot price.
+   * TRUE when the mode is `express` and no fee could be derived — either no routed distance is
+   * known yet or the shop's distance configuration cannot price.
    *
    * `shipping` is 0 in that state and IS NOT A FEE. The storefront must say the fee is not yet
    * calculated and block submission; the backend refuses before it ever prices in this state.
@@ -76,10 +76,16 @@ export interface PriceBreakdown {
 export interface PriceInput {
   products: PricedProduct[]
   cart: Record<string, number>
-  mode: 'pickup' | 'delivery' | 'sameday'
+  /**
+   * Which method the customer chose. An ALLOWLIST, and it is a price rule: `mode` selects the
+   * shipping fee, so any unrecognised value prices shipping at 0.
+   *
+   * `delivery` is the flat region rate; `express` is distance-priced. Both may be offered by the
+   * same shop — see `shopMethods`.
+   */
+  mode: FulfilmentMethod
   state?: string | null
   rates: { WM: number; EM: number }
-  samedayFee?: number
   resolvedShipping?: number // caller-resolved flat fee; wins over region logic
   voucher?: PricedVoucher | null
   /** The shop's tax, mapped through `shopTax`. Absent means no tax. */
@@ -111,10 +117,8 @@ export function shippingFee(
   mode: PriceInput['mode'],
   state: string | null | undefined,
   rates: { WM: number; EM: number },
-  samedayFee = 0,
 ): number {
   if (mode === 'delivery' && state) return rates[EM_STATES.includes(state) ? 'EM' : 'WM'] || 0
-  if (mode === 'sameday') return samedayFee
   return 0
 }
 
@@ -361,7 +365,9 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
   // that override exists so the storefront can show a region placeholder before a state is known,
   // and routing a real charge through it would put the fee formula back in the callers — the one
   // thing this module exists to prevent.
-  const distancePriced = input.mode === 'delivery' && input.distance?.mode === 'distance'
+  // The fee rule follows the METHOD the customer chose, not a policy on the shop: one shop can
+  // offer flat-rate `delivery` and distance-priced `express` side by side (#103).
+  const distancePriced = input.mode === 'express'
   const canPriceDistance =
     distancePriced && input.distance!.usable &&
     // `>= 0`, not merely finite: a NEGATIVE distance would price the delivery DOWNWARDS — a
@@ -376,7 +382,7 @@ export function priceOrder(input: PriceInput): PriceBreakdown {
       ? distanceFee(input.distance!, routedKm(input.routedMetres as number))
       : shippingPending
         ? 0
-        : shippingFee(input.mode, input.state, input.rates, input.samedayFee)
+        : shippingFee(input.mode, input.state, input.rates)
   )
 
   const beforeDiscount = subtotal + shipping

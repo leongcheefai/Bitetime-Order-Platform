@@ -360,7 +360,7 @@ describe('POST /api/orders', () => {
             userEmail: null,
             customerName: 'Ah Meng',
             customerWa: '60123456789',
-            mode: 'delivery',
+            mode: 'express',
             address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
             cart: { [suspendedDistanceProductId]: 2 },
             quotedTotal: 57.2,
@@ -1232,6 +1232,106 @@ describe('POST /api/orders', () => {
     })
   })
 
+  // ── Fulfilment method gating (#103) ─────────────────────────────────────────
+  //
+  // Intake refuses a method the shop does not offer, and refuses it BEFORE the fee rules. The
+  // flags live on the merchant row, which only the backend reads, so this is checked in the
+  // transaction rather than at the route.
+  describe('fulfilment method gating', () => {
+    const METHOD_SLUGS = ['ord-pickup-only', 'ord-flat-only', 'ord-both']
+    const BOTH_ORIGIN = 'ChIJord-both-origin'
+    const BOTH_DEST = 'ChIJord-both-dest'
+    let pickupOnlyId = '', pickupOnlyProduct = ''
+    let flatOnlyId = '', flatOnlyProduct = ''
+    let bothId = '', bothProduct = ''
+
+    beforeAll(async () => {
+      const mk = async (slug: string, flags: Record<string, unknown>) => {
+        const owner = await makeUser(`${slug}-owner@test.dev`, 'password123')
+        const ownerId = (await owner.auth.getUser()).data.user!.id
+        const id = await seedMerchant({ slug, owner_id: ownerId, order_prefix: 'MG', ...flags })
+        const pid = await seedProduct({ merchant_id: id, price: 13 })
+        return { id, pid }
+      }
+      ;({ id: pickupOnlyId, pid: pickupOnlyProduct } =
+        await mk('ord-pickup-only', { pickup_enabled: true, delivery_enabled: false, express_enabled: false }))
+      ;({ id: flatOnlyId, pid: flatOnlyProduct } =
+        await mk('ord-flat-only', { pickup_enabled: false, delivery_enabled: true, express_enabled: false }))
+      ;({ id: bothId, pid: bothProduct } =
+        await mk('ord-both', {
+          pickup_enabled: false, delivery_enabled: true, express_enabled: true,
+          delivery_base_fee: 6, delivery_rate_per_km: 1, delivery_max_km: 30,
+          origin_place_id: BOTH_ORIGIN,
+        }))
+      await svc().from('distance_quotes').upsert({
+        origin_place_id: BOTH_ORIGIN, destination_place_id: BOTH_DEST, metres: 25216,
+        created_at: new Date().toISOString(),
+      })
+    }, 60_000)
+
+    afterAll(async () => {
+      for (const slug of METHOD_SLUGS) await resetMerchant(slug)
+      const { error } = await svc().from('distance_quotes').delete().eq('origin_place_id', BOTH_ORIGIN)
+      if (error) throw new Error(`cleaning up distance_quotes for ${BOTH_ORIGIN}: ${error.message}`)
+    })
+
+    it('refuses a method the shop does not offer', async () => {
+      const res = await post(body(pickupOnlyId, pickupOnlyProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'delivery',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL', state: 'Selangor' }, quotedTotal: 34,
+      }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('method_not_offered')
+    })
+
+    it('refuses express at a shop that only offers flat delivery', async () => {
+      const res = await post(body(flatOnlyId, flatOnlyProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'express',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL', place_id: BOTH_DEST }, quotedTotal: 57.2,
+      }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('method_not_offered')
+    })
+
+    it('stamps the distance snapshot on an express order, and leaves it null on a flat delivery at the same shop', async () => {
+      // One shop, both methods live. The express order carries the distance line; the flat
+      // delivery at the same shop carries none — a reader must never see 0 km where the answer
+      // is "not priced by distance".
+      const expressRes = await post(body(bothId, bothProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'express',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL', place_id: BOTH_DEST },
+        quotedTotal: 57.2,   // 26 + (6 + 1 x 25.2)
+      }))
+      expect(expressRes.status).toBe(200)
+      const expressNo = ((await expressRes.json()) as { orderNumber: string }).orderNumber
+      const expressOrder = (await ordersOf(bothId)).find(o => o.order_number === expressNo)!
+      expect(Number(expressOrder.delivery_distance_km)).toBe(25.2)
+      expect(Number(expressOrder.delivery_base_fee)).toBe(6)
+      expect(Number(expressOrder.delivery_rate_per_km)).toBe(1)
+
+      const flatRes = await post(body(bothId, bothProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'delivery',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL', state: 'Selangor' },
+        quotedTotal: 34,   // 26 + flat WM 8
+      }))
+      expect(flatRes.status).toBe(200)
+      const flatNo = ((await flatRes.json()) as { orderNumber: string }).orderNumber
+      const flatOrder = (await ordersOf(bothId)).find(o => o.order_number === flatNo)!
+      expect(flatOrder.delivery_distance_km).toBeNull()
+      expect(flatOrder.delivery_base_fee).toBeNull()
+      expect(flatOrder.delivery_rate_per_km).toBeNull()
+    })
+
+    it('still refuses a flat delivery with no state', async () => {
+      const res = await post(body(bothId, bothProduct, {
+        fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()), mode: 'delivery',
+        address: { line1: '1 Jalan Test', postcode: '50000', city: 'KL' }, quotedTotal: 34,
+      }))
+      expect(res.status).toBe(409)
+      expect(await errorOf(res)).toBe('delivery_state_required')
+    })
+  })
+
   // ── Distance-priced intake (#101 Task 7) ────────────────────────────────────
   //
   // A distance shop's fee is `base + rate x km`, and the km comes from a routed lookup the
@@ -1250,7 +1350,7 @@ describe('POST /api/orders', () => {
       merchantId: distanceId,
       customerName: 'Ah Meng',
       customerWa: '60123456789',
-      mode: 'delivery',
+      mode: 'express',
       address: { line1: '12 Jalan Test', unit: 'A-3-2', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor', place_id: NEAR },
       cart: { [distanceProductId]: 2 },
       // 2 x 13 = 26 subtotal, plus 6.00 + 1.00 x 25.2 = 31.20 shipping.
@@ -1377,7 +1477,7 @@ describe('POST /api/orders', () => {
         userEmail: null,
         customerName: 'Ah Meng',
         customerWa: '60123456789',
-        mode: 'delivery',
+        mode: 'express',
         address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
         cart: { [distanceProductId]: 2 },
         quotedTotal: 57.2,
@@ -1520,7 +1620,7 @@ describe('POST /api/orders', () => {
         userEmail: null,
         customerName: 'Ah Meng',
         customerWa: '60123456789',
-        mode: 'delivery',
+        mode: 'express',
         address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
         cart: { [productId]: 2 },
         quotedTotal: 57.2,
@@ -1688,7 +1788,7 @@ describe('POST /api/orders', () => {
         userEmail: null,
         customerName: 'Ah Meng',
         customerWa: '60123456789',
-        mode: 'delivery',
+        mode: 'express',
         address: { line1: '12 Jalan Test', postcode: '50000', city: 'Kuala Lumpur', state: 'Selangor' },
         cart: { [productId]: 2 },
         quotedTotal: 57.2,

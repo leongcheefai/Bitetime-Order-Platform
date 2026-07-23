@@ -894,15 +894,14 @@ app.post('/api/orders', async (c) => {
     ? b.quotedTotal
     : null
 
-  // An ALLOWLIST, not a string check: `mode` SELECTS THE SHIPPING FEE. Any value other than
-  // 'delivery' prices shipping at 0, so a free string is a client-chosen value that zeroes a
-  // fee — the same hole as a client-supplied `total`, and `mode: 'sameday'` walked straight
-  // through it with an address attached.
+  // An ALLOWLIST, not a string check: `mode` SELECTS THE SHIPPING FEE. Any unrecognised value
+  // prices shipping at 0, so a free string is a client-chosen value that zeroes a fee — the same
+  // hole as a client-supplied `total`, and `mode: 'sameday'` walked straight through it with an
+  // address attached.
   //
-  // 'sameday' is DELIBERATELY not here: it is unreachable from the Storefront (which offers
-  // exactly these two) and has no rate behind it. Adding it back without a real fee re-opens
-  // the hole.
-  const mode = b.mode === 'pickup' || b.mode === 'delivery' ? b.mode : null
+  // Whether the SHOP offers the method it names is `placeOrder`'s call, not HTTP's — the same
+  // split as the delivery region, allowlisted for shape here and refused there.
+  const mode = b.mode === 'pickup' || b.mode === 'delivery' || b.mode === 'express' ? b.mode : null
 
   // A string or nothing. The SHAPE is checked here; whether the shop is actually taking that
   // date is `placeOrder`'s call, because the window is the shop's rule and not HTTP's — the
@@ -1037,7 +1036,9 @@ app.post('/api/shipping/quote', async (c) => {
   // function and order intake charges from it, and a third reading here is a third rule the
   // customer meets as a `price_changed` refusal.
   const policy = shopDistance(merchant)
-  if (policy.mode !== 'distance' || !policy.usable) return c.json({ error: 'not_distance_priced' }, 409)
+  // `not_distance_priced` keeps its wire name — the storefront already branches on it, and
+  // renaming a refusal code is a separate, customer-visible change.
+  if (!policy.enabled || !policy.usable) return c.json({ error: 'not_distance_priced' }, 409)
 
   // The ceiling is checked against PROVIDER CALLS, so a cache hit is free. Peek at the cache
   // first for exactly that reason.
