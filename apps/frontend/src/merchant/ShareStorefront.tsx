@@ -39,7 +39,7 @@ export default function ShareStorefront() {
   }
 
   return (
-    <Card>
+    <Card data-tour="share-link">
       <CardHeader>
         <CardTitle>{t('Your storefront link', '您的店铺链接')}</CardTitle>
         <CardDescription>{t('Share this link with your customers so they can order.', '把这个链接分享给顾客即可下单。')}</CardDescription>

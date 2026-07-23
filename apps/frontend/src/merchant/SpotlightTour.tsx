@@ -25,17 +25,32 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
   const [rect, setRect] = useState<DOMRect | null>(null)
 
   useLayoutEffect(() => {
-    const target = document.querySelector(targetSelector) as HTMLElement | null
-    if (!target) return
-    target.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    const measure = () => setRect(target.getBoundingClientRect())
-    // First measure is deferred to the next frame (not called synchronously in the
-    // effect body), and re-run after the smooth scroll settles and on viewport moves.
-    const raf = requestAnimationFrame(measure)
-    const settle = window.setTimeout(measure, 320)
-    window.addEventListener('resize', measure)
-    window.addEventListener('scroll', measure, true)
+    let alive = true
+    let raf = 0
+    let settle = 0
+    let tries = 0
+    let target: HTMLElement | null = null
+    const measure = () => { if (alive && target) setRect(target.getBoundingClientRect()) }
+    // The target may not be mounted yet — a step navigates to another section and its
+    // control mounts a frame or two later. Poll on animation frames until it appears
+    // (~1.5s cap), then measure and track it. measure() runs inside the rAF callback,
+    // never synchronously in the effect body, so it doesn't trip the cascading-render rule.
+    const find = () => {
+      if (!alive) return
+      target = document.querySelector(targetSelector) as HTMLElement | null
+      if (target) {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' })
+        measure()
+        settle = window.setTimeout(measure, 320)   // re-measure once the smooth scroll settles
+        window.addEventListener('resize', measure)
+        window.addEventListener('scroll', measure, true)
+        return
+      }
+      if (tries++ < 90) raf = requestAnimationFrame(find)
+    }
+    raf = requestAnimationFrame(find)
     return () => {
+      alive = false
       cancelAnimationFrame(raf)
       window.clearTimeout(settle)
       window.removeEventListener('resize', measure)

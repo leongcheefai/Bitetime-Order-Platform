@@ -54,7 +54,7 @@ function DashboardInner() {
       backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
     >
       <BillingBanner />
-      {section === 'overview' && <OnboardingChecklist onNavigate={selectSection} />}
+      <OnboardingChecklist section={section} onNavigate={selectSection} />
       <div key={section} {...enter}>
         {section === 'overview'  && <Overview />}
         {section === 'orders'    && <OrdersView />}
