@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import type { Lang } from '../types'
+import type { Lang, Translate } from '../types'
 import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, setOrderStatus, setOrderNote, setOrderTracking } from '../store'
 import { formatMoney } from '../currency'
@@ -18,19 +18,7 @@ import {
 } from '@/components/ui/sheet'
 import { COURIERS, trackingUrl, courierName } from '../couriers'
 import { ORDER_STATUSES, STATUS_LABELS, StatusBadge } from '../orderStatus'
-
-// Delivery mode → display label. Unknown modes fall back to capitalized raw.
-const MODE_LABELS: Record<string, { en: string; zh: string }> = {
-  pickup:   { en: 'Pickup',   zh: '自取' },
-  delivery: { en: 'Delivery', zh: '送货' },
-  sameday:  { en: 'Same-day', zh: '当日送达' },
-}
-
-function modeLabel(mode: string | null | undefined, t: (en: string, zh: string) => string) {
-  if (!mode) return '—'
-  const m = MODE_LABELS[mode]
-  return m ? t(m.en, m.zh) : mode.charAt(0).toUpperCase() + mode.slice(1)
-}
+import { fulfilmentLabel } from '../fulfilmentLabel'
 
 // 11px semibold uppercase rose-muted label.
 const LBL = 'text-[11px] font-semibold uppercase tracking-[0.06em] text-rose-muted shrink-0'
@@ -52,7 +40,7 @@ function fmtTime(iso: string | null | undefined) {
 // Handlers + language + currency ride on table.options.meta so the column defs
 // stay stable (defined once) and never reset sorting when the data refetches.
 interface OrderTableMeta {
-  t: (en: string, zh: string) => string
+  t: Translate
   lang: Lang
   currency?: string
 }
@@ -121,7 +109,7 @@ const columns: ColumnDef<any>[] = [
       <span>{(table.options.meta as OrderTableMeta).t('Mode', '方式')}</span>
     ),
     cell: ({ row, table }) => (
-      <span>{modeLabel(row.original.mode, (table.options.meta as OrderTableMeta).t)}</span>
+      <span>{fulfilmentLabel(row.original.mode, (table.options.meta as OrderTableMeta).t)}</span>
     ),
   },
   {
@@ -334,7 +322,7 @@ export default function OrdersView({ readOnly = false }: { readOnly?: boolean } 
 
                 {/* Fulfilment */}
                 <Section title={t('Fulfilment', '配送')}>
-                  <DetailRow label={t('Mode', '方式')}>{modeLabel(selected.mode, t)}</DetailRow>
+                  <DetailRow label={t('Mode', '方式')}>{fulfilmentLabel(selected.mode, t)}</DetailRow>
                   {selected.region && <DetailRow label={t('Region', '地区')}>{selected.region}</DetailRow>}
                   {selected.address && <DetailRow label={t('Address', '地址')}>{formatAddress(selected.address)}</DetailRow>}
                   {/* The date the CUSTOMER asked for — what the merchant is scheduling around —

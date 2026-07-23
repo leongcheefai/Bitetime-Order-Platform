@@ -6,6 +6,7 @@ import { formatAddress } from '../address'
 import { formatOrderDateTime, formatCalendarDate } from '../orderDate'
 import { receiptSubtotal, formatTaxRate } from '../receipt'
 import MoneyLine from './MoneyLine'
+import { fulfilmentLabel, feeLineLabel } from '../fulfilmentLabel'
 import type { Merchant, Order, OrderItem } from '../types'
 
 interface ReceiptDialogProps {
@@ -122,12 +123,11 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
               // region-priced order, and every order placed before #101) prints the plain label —
               // never `0.0 km`, which would read as a distance we measured and lost.
               <MoneyLine
-                label={
-                  order.delivery_distance_km != null
-                    ? t(`Delivery fee (${Number(order.delivery_distance_km).toFixed(1)} km)`,
-                        `送货费（${Number(order.delivery_distance_km).toFixed(1)} 公里）`)
-                    : t('Delivery fee', '送货费')
-                }
+                label={feeLineLabel(
+                  order.mode,
+                  order.delivery_distance_km != null ? Number(order.delivery_distance_km) : null,
+                  t,
+                )}
                 value={money(shipping)}
               />
             )}
@@ -144,7 +144,7 @@ export default function ReceiptDialog({ order, merchant, itemName, onClose }: Re
 
           <div className="flex justify-between items-start gap-2 text-[15px] font-medium text-ink border-t border-rose-border mt-2 pt-2">
             <span className="shrink-0">
-              {order.mode === 'delivery' ? t('Delivery', '送货') : t('Pickup', '自取')}
+              {fulfilmentLabel(order.mode, t)}
             </span>
             <span className="text-right">{money(order.total)}</span>
           </div>
