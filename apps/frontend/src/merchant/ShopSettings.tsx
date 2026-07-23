@@ -543,20 +543,57 @@ function ShippingTab({ onDirtyChange }: TabProps) {
 
 function PaymentTab({ onDirtyChange }: TabProps) {
   const { t, merchant, refreshMerchant } = useSession()
-  const [saved, setSaved] = useState<SettingsFields>(() => ({
-    bank: merchant!.payment_bank ?? '',
-    note: merchant!.payment_note ?? '',
-  }))
+  const [saved, setSaved] = useState<SettingsFields>(() => {
+    // shopTax, not a local `?? 0`: this form shows the merchant what their shop CHARGES, and the
+    // charge is decided by that one function on both sides of the wire.
+    const tax = shopTax(merchant!)
+    return {
+      currency: merchant!.currency ?? DEFAULT_CURRENCY,
+      taxEnabled: tax.enabled,
+      taxRate: tax.rate ? String(tax.rate) : '',
+      bank: merchant!.payment_bank ?? '',
+      note: merchant!.payment_note ?? '',
+    }
+  })
   const [fields, setFields] = useState<SettingsFields>(saved)
   const [busy, setBusy] = useState(false)
+  // Currency locks after the first order so past orders/aggregates never
+  // re-denominate. Assume locked until the check clears, so it can't flip open.
+  const [currencyLocked, setCurrencyLocked] = useState(true)
   useTabDirty(saved, fields, onDirtyChange)
+
+  useEffect(() => {
+    let active = true
+    merchantHasOrders(merchant!.id).then(has => { if (active) setCurrencyLocked(has) })
+    return () => { active = false }
+  }, [merchant!.id])
 
   async function save(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault(); setBusy(true)
     try {
-      await updateMerchantConfig(merchant!.id, { payment_bank: fields.bank, payment_note: fields.note })
+      await updateMerchantConfig(merchant!.id, {
+        // Guard against a stale locked value slipping through: only persist the
+        // currency when it is still editable.
+        ...(currencyLocked ? {} : { currency: fields.currency }),
+        payment_bank: fields.bank,
+        payment_note: fields.note,
+        // A blank rate box is 0, and 0 is "no tax" — the same collapse `shopTax` makes when it
+        // reads the row back. The checkbox is stored as typed.
+        tax_enabled: fields.taxEnabled,
+        tax_rate: Number(fields.taxRate) || 0,
+      })
       await refreshMerchant()
-      setSaved(fields)
+      // Tax goes through shopTax so a ticked-but-blank rate (`{tax_enabled: true, tax_rate: 0}`)
+      // reads back as OFF — carrying `fields.taxEnabled` verbatim would show CHECKED here and
+      // UNCHECKED after a refresh.
+      const tax = shopTax({ tax_enabled: fields.taxEnabled, tax_rate: Number(fields.taxRate) || 0 })
+      const applied = {
+        ...fields,
+        taxEnabled: tax.enabled,
+        taxRate: tax.rate ? String(tax.rate) : '',
+      }
+      setFields(applied)
+      setSaved(applied)
       toast.success(t('Payment saved', '付款已保存'))
     } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
     finally { setBusy(false) }
@@ -564,6 +601,64 @@ function PaymentTab({ onDirtyChange }: TabProps) {
 
   return (
     <form onSubmit={save}>
+      <div className={CARD}>
+        <h3 className={HEADING}>{t('Currency', '货币')}</h3>
+        <div className="flex flex-col gap-[6px]">
+          <Label htmlFor="shop-currency">{t('Base currency', '基础货币')}</Label>
+          <Select
+            value={fields.currency}
+            onValueChange={(v) => setFields(f => ({ ...f, currency: v }))}
+            disabled={currencyLocked}
+          >
+            <SelectTrigger id="shop-currency" className="w-full max-w-[280px]" aria-label={t('Base currency', '基础货币')}>
+              <span className="truncate">
+                {currencyDef(fields.currency).code} — {currencyDef(fields.currency).symbol}
+              </span>
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCY_CODES.map(code => (
+                <SelectItem key={code} value={code}>
+                  {CURRENCIES[code].code} — {CURRENCIES[code].symbol} · {CURRENCIES[code].label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
+            {currencyLocked
+              ? t('Currency is locked because your shop has orders — changing it would re-denominate past totals.',
+                  '因店铺已有订单，货币已锁定 — 更改会重新换算历史金额。')
+              : t('The unit for your prices and what customers see. Locked once your first order is placed.',
+                  '您的价格和顾客看到的金额单位。首笔订单后将锁定。')}
+          </p>
+        </div>
+      </div>
+      <div className={CARD}>
+        <h3 className={HEADING}>{t('Tax', '税')}</h3>
+        <div className="flex flex-col gap-2">
+          <label className="flex items-center gap-2 text-[14px] text-ink">
+            <input
+              type="checkbox"
+              checked={fields.taxEnabled}
+              onChange={e => setFields(f => ({ ...f, taxEnabled: e.target.checked }))}
+            />
+            {t('Charge tax on orders', '订单收取税费')}
+          </label>
+          <div className="flex flex-col gap-[6px]">
+            <Label htmlFor="shop-tax-rate">{t('Tax rate (%)', '税率 (%)')}</Label>
+            <Input
+              id="shop-tax-rate" type="number" step="0.01" min="0" max="100"
+              value={fields.taxRate}
+              disabled={!fields.taxEnabled}
+              onChange={e => setFields(f => ({ ...f, taxRate: e.target.value }))}
+              variant="compact"
+            />
+            <p className="text-[12px] text-rose-muted mt-1 leading-[1.5]">
+              {t('Added on top of your item prices, after any voucher discount. Delivery fees are not taxed. Leave blank, or enter 0, to turn tax off.',
+                 '在商品价格之上加收，扣除优惠券后计算。运费不征税。留空或填 0 即可关闭税费。')}
+            </p>
+          </div>
+        </div>
+      </div>
       <div className={CARD}>
         <h3 className={HEADING}>{t('Payment', '付款')}</h3>
         <div className="flex flex-col gap-2">
