@@ -93,6 +93,36 @@ describe('subscriptionTabState', () => {
     expect(state).toMatchObject({ kind: 'trial', daysLeft: 0 })
   })
 
+  // The trial banner's bar drains as the trial runs out: fraction remaining = daysLeft / 7.
+  it('reports trial progress as the fraction of the 7-day trial remaining', () => {
+    const state = subscriptionTabState(
+      { status: 'trialing', stripe_customer_id: 'cus_1', trial_ends_at: '2026-08-04T00:00:00Z' },
+      'basic',
+      NOW, // 2026-08-01 → 3 days left
+    )
+    expect(state).toMatchObject({ kind: 'trial', daysLeft: 3 })
+    expect(state.kind === 'trial' && state.progress).toBeCloseTo(3 / 7)
+  })
+
+  it('drains trial progress to zero once the trial has lapsed', () => {
+    const state = subscriptionTabState(
+      { status: 'trialing', stripe_customer_id: 'cus_1', trial_ends_at: '2026-07-30T00:00:00Z' },
+      'basic',
+      NOW,
+    )
+    expect(state.kind === 'trial' && state.progress).toBe(0)
+  })
+
+  // A trial longer than 7 days (Stripe could be told otherwise) must not overflow the bar.
+  it('clamps trial progress to a full bar when more than 7 days remain', () => {
+    const state = subscriptionTabState(
+      { status: 'trialing', stripe_customer_id: 'cus_1', trial_ends_at: '2026-08-11T00:00:00Z' },
+      'basic',
+      NOW, // 10 days left
+    )
+    expect(state.kind === 'trial' && state.progress).toBe(1)
+  })
+
   // Past due is the one state where "change plan" is the wrong advice — the card is the problem.
   it('flags past-due and does not invite an upgrade', () => {
     const state = subscriptionTabState(

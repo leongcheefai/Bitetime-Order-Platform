@@ -52,13 +52,18 @@ interface Actions {
 export type SubscriptionState = Actions &
   (
     | { kind: 'none'; plan: string }
-    | { kind: 'trial'; plan: string; daysLeft: number; trialEndsAt: string }
+    | { kind: 'trial'; plan: string; daysLeft: number; trialEndsAt: string; progress: number }
     | { kind: 'live'; plan: string; renewsAt: string | null }
     | { kind: 'past-due'; plan: string }
     | { kind: 'ending'; plan: string; endsAt: string | null }
   )
 
 const DAY = 24 * 60 * 60 * 1000
+
+// The trial length granted at superadmin approval (backend `trial_period_days: 7`), and the
+// denominator of the banner's draining progress bar. The module does not assume the row matches
+// it — progress is clamped, so a differently-sized trial shows a full or empty bar, never overflow.
+const TRIAL_TOTAL_DAYS = 7
 
 // Statuses where a subscription is actually running. Twin of `LIVE_STATUSES` in the backend's
 // billing.ts, which is what the cancel/downgrade/resume routes refuse on — a button this module
@@ -115,12 +120,14 @@ export function subscriptionTabState(
 
   if (status === 'trialing' && billing?.trial_ends_at) {
     const msLeft = Math.max(0, new Date(billing.trial_ends_at).getTime() - now.getTime())
+    const daysLeft = Math.floor(msLeft / DAY)
     return {
       ...actions,
       kind: 'trial',
       plan: tier,
-      daysLeft: Math.floor(msLeft / DAY),
+      daysLeft,
       trialEndsAt: billing.trial_ends_at,
+      progress: Math.min(1, Math.max(0, daysLeft / TRIAL_TOTAL_DAYS)),
     }
   }
 
