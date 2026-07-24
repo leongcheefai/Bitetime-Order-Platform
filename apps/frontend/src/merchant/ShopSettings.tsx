@@ -78,9 +78,18 @@ export default function ShopSettings() {
             with natural widths instead of clipping the last tab off-screen. */}
         <TabsList className="max-sm:justify-start max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
           {TABS.map(({ key, label, tag }) => (
-            <TabsTrigger key={key} value={key} className="max-sm:flex-none">
+            <TabsTrigger key={key} value={key} className="group/tab max-sm:flex-none">
               {label}
-              {tag && <Badge variant="outline" className="ml-2 uppercase tracking-[0.08em]">{tag}</Badge>}
+              {/* The active trigger fills with oxblood, so the outline badge's `text-ink` would
+                  sit near-invisible on it — invert to cream while the tab is selected. */}
+              {tag && (
+                <Badge
+                  variant="outline"
+                  className="ml-2 uppercase tracking-[0.08em] group-data-active/tab:border-cream/40 group-data-active/tab:text-cream"
+                >
+                  {tag}
+                </Badge>
+              )}
             </TabsTrigger>
           ))}
         </TabsList>
