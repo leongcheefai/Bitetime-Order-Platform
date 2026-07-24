@@ -63,11 +63,14 @@ export default function Landing() {
     {
       id: 'basic',
       name: t('Basic', '基础版'),
-      blurb: t('For getting started.', '适合刚起步的你。'),
+      blurb: t(
+        'Get your orders out of the chat group.',
+        '让订单不再淹没在聊天群里。',
+      ),
       features: [
-        t('1 shop', '1 间店铺'),
-        t('Product catalog', '产品目录'),
-        t('Order management', '订单管理'),
+        t('An order page of your own', '拥有自己的点单页面'),
+        t('Your menu, updated in seconds', '菜单几秒钟就能更新'),
+        t('Every order in one tidy list', '所有订单，一目了然'),
       ],
       cta: t('Start your shop', '开始建店'),
       to: '/merchant/signup',
@@ -76,14 +79,16 @@ export default function Landing() {
     {
       id: 'pro',
       name: 'Pro',
-      blurb: t('For growing shops.', '为成长中的店铺打造。'),
+      blurb: t(
+        'For when the orders start piling up.',
+        '当订单越来越多，就该升级了。',
+      ),
+      inherits: t('Everything in Basic, plus', '基础版的一切，再加上'),
       features: [
-        t('Everything in Basic', '包含基础版所有功能'),
-        t('Telegram + email alerts', 'Telegram + 邮件通知'),
-        t('Vouchers & promotions', '优惠券与促销'),
-        t('Custom shop link', '自定义店铺链接'),
-        t('Multiple shops', '多间店铺'),
-        t('Priority support', '优先客服支持'),
+        t('Know the second an order lands', '订单一进来，马上知道'),
+        t('Bring customers back with vouchers', '用优惠券把顾客带回来'),
+        t('A shop link that looks like you', '专属于你的店铺链接'),
+        t('We answer you first', '有问题，我们先回你'),
       ],
       cta: t('Start your shop', '开始建店'),
       to: '/merchant/signup',
@@ -239,16 +244,16 @@ export default function Landing() {
         <Reveal>
         <dl className="grid [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))] gap-x-12 gap-y-10 max-[600px]:[grid-template-columns:1fr] max-[600px]:gap-8">
           <div>
-            <dt className="font-heading text-base font-medium text-ink mb-2">{t('Your own storefront link', '专属店面链接')}</dt>
-            <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('Share a clean, branded URL — no marketplace fees, no listing competition.', '干净的品牌网址，无平台抽成，无竞争对手。')}</dd>
+            <dt className="font-heading text-[19px] font-semibold text-oxblood leading-[1.3] mb-2.5">{t('Keep what you earn', '赚的钱，都是你的')}</dt>
+            <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('Your own link, your own customers — no marketplace cut, nobody undercutting you next to your listing.', '专属链接，专属顾客——没有平台抽成，也没有人在你旁边抢单。')}</dd>
           </div>
           <div>
-            <dt className="font-heading text-base font-medium text-ink mb-2">{t('Simple order management', '简洁订单管理')}</dt>
-            <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('See every order at a glance. Update statuses and send tracking numbers with one tap.', '一目了然查看所有订单，一键更新状态与物流号。')}</dd>
+            <dt className="font-heading text-[19px] font-semibold text-oxblood leading-[1.3] mb-2.5">{t('Nothing slips through', '一单都不会漏')}</dt>
+            <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('Every order in one list. Mark it done or send a tracking number in one tap — no scrolling back through chats.', '所有订单集中一处。一键标记完成或发送物流号，不必再翻聊天记录。')}</dd>
           </div>
           <div>
-            <dt className="font-heading text-base font-medium text-ink mb-2">{t('Bilingual, out of the box', '中英双语，开箱即用')}</dt>
-            <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('Your storefront speaks both English and Chinese — perfect for bilingual food businesses.', '店面自动支持中英文，专为双语小食企业设计。')}</dd>
+            <dt className="font-heading text-[19px] font-semibold text-oxblood leading-[1.3] mb-2.5">{t('Your customers read it in their own language', '顾客用自己的语言下单')}</dt>
+            <dd className="text-sm leading-[1.65] text-ink-soft m-0">{t('Your shop shows up in English or Chinese, whichever your customer prefers. You only write it once.', '店铺自动以中文或英文呈现，顾客看得懂，你只需写一次。')}</dd>
           </div>
         </dl>
         </Reveal>
@@ -307,6 +312,7 @@ export default function Landing() {
 
         {/* Pricing cards */}
         <Reveal>
+        {/* Cards stretch to a shared height; cardCta* pins each CTA to the bottom edge */}
         <div className="grid [grid-template-columns:repeat(auto-fit,minmax(240px,1fr))] gap-6 mt-10 text-left">
           {tiers.map(tier => {
             const tierPrices = pricing.prices[tier.id as 'basic' | 'pro']
@@ -342,6 +348,12 @@ export default function Landing() {
                     : ' '}
                 </p>
                 <p className="text-sm leading-[1.6] text-ink-soft mt-3 mb-5">{tier.blurb}</p>
+                {/* Inherited-tier label — a heading for the list, not a feature, so no ✓ */}
+                {tier.inherits && (
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-rose-muted mt-0 mb-3">
+                    {tier.inherits}
+                  </p>
+                )}
                 <ul className="list-none m-0 mb-7 p-0 flex flex-col gap-[0.6rem]">
                   {tier.features.map((f, i) => (
                     <li
@@ -358,12 +370,16 @@ export default function Landing() {
                 >
                   {tier.cta}
                 </Link>
+                {/* Risk reversal sits at the click, not at the foot of the section */}
+                <p className="mt-2.5 mb-0 text-center text-xs text-rose-muted">
+                  {t('Free for 7 days · no card', '免费试用 7 天 · 无需信用卡')}
+                </p>
               </div>
             )
           })}
         </div>
         <p className="mt-8 text-[13px] text-rose-muted">
-          {t('7-day free trial · No card required · Cancel anytime.', '7 天免费试用 · 无需信用卡 · 随时取消。')}
+          {t('Cancel anytime — no contracts, no lock-in.', '随时取消——无合约，不绑定。')}
         </p>
         </Reveal>
       </section>
