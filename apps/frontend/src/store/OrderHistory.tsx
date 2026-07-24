@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import { Truck, ExternalLink } from 'lucide-react'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { fetchMyOrdersAtShop, fetchProducts, signOut, ORDER_HISTORY_LIMIT } from '../store'
@@ -271,21 +272,36 @@ function Tracking({ order, t }: { order: Order; t: Translate }) {
   const { courier, awb } = order
   if (!awb) return null
   const link = trackingUrl(courier, awb)
+  const courierLabel = courierName(courier) || courier
   return (
-    <div className="flex items-center justify-between gap-2 text-[13px] text-rose-muted mt-2">
-      <span className="truncate">
-        {courierName(courier) || courier} · <span className="font-mono">{awb}</span>
-      </span>
-      {link && (
-        <a
-          href={link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-oxblood underline underline-offset-2 shrink-0"
-        >
-          {t('Track', '追踪')}
-        </a>
-      )}
+    <div className="mt-3">
+      <div className="text-[11px] font-medium text-oxblood uppercase tracking-[0.09em] mb-1.5">
+        {t('Tracking number', '物流单号')}
+      </div>
+      {/* A real field, not a line of text: truck + AWB on the left, the courier link as a button on
+          the right — the shape a customer reads as "here is the number, tap to follow it". */}
+      <div className="flex items-stretch gap-2 rounded-lg border border-clay-border bg-surface-raised p-1 pl-3">
+        <span className="flex flex-1 min-w-0 items-center gap-2">
+          <Truck className="size-4 shrink-0 text-oxblood" strokeWidth={1.75} />
+          <span className="font-mono text-[13px] text-ink truncate">{awb}</span>
+        </span>
+        {link && (
+          <a
+            href={link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex shrink-0 items-center gap-1 rounded-md border border-clay-border bg-surface-high px-3 py-1.5 text-[13px] font-medium text-oxblood transition-colors hover:bg-oxblood-tint"
+          >
+            {t('Track', '追踪')}
+            <ExternalLink className="size-3.5" strokeWidth={2} />
+          </a>
+        )}
+      </div>
+      {/* Which courier's site, and that it leaves the shop — a tracking link that silently hands
+          off is a small surprise this one line removes. */}
+      <div className="text-[12px] text-rose-muted mt-1.5">
+        {courierLabel} · {t("Track on the courier's website.", '在物流商网站追踪。')}
+      </div>
     </div>
   )
 }
