@@ -6,6 +6,7 @@ import { fetchMerchantVouchers, createMerchantVoucher, deleteMerchantVoucher } f
 import { formatMoney, currencyDef } from '../currency'
 import { isRequiresPro } from '../plan'
 import { SkeletonText } from '../components/Loaders'
+import { Badge } from '../components/ui/badge'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -128,7 +129,18 @@ export default function VouchersManager() {
                 className="flex items-center gap-3 px-[14px] py-[10px] bg-cream border-[1.5px] border-clay-border rounded-lg transition-colors max-[480px]:flex-wrap"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-[14px] font-medium text-ink">{v.code}</div>
+                  <div className="text-[14px] font-medium text-ink flex items-center gap-2 flex-wrap">
+                    {v.code}
+                    {/* A voucher a shop's customers already hold, which no longer redeems
+                        because the shop stepped down from Pro. Shown rather than hidden: the
+                        merchant needs to know the codes they have handed out are dead, and a
+                        silently missing row reads as a bug in the dashboard. */}
+                    {(v as any).active === false && (
+                      <Badge variant="outline" className="uppercase tracking-[0.08em]">
+                        {t('Inactive', '已停用')}
+                      </Badge>
+                    )}
+                  </div>
                   <div className="text-[12px] text-rose-muted mt-0.5">{valueLabel(v)} · {usesLabel(v)}</div>
                 </div>
                 <div className="flex gap-[6px] shrink-0 max-[480px]:w-full max-[480px]:justify-end">

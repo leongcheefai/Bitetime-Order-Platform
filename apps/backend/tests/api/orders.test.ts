@@ -579,6 +579,27 @@ describe('POST /api/orders', () => {
     expect(await res.json()).toEqual({ error: 'voucher_not_found' })
   })
 
+  // The Pro artifact cutoff, seen from the order path. A shop that steps down to Basic has its
+  // vouchers deactivated in bulk (revokeProArtifacts), and the codes are already in customers'
+  // hands — so redemption has to refuse them from that moment on.
+  //
+  // Note WHAT is being asserted: the transaction filters a COLUMN it was already selecting. It
+  // does not read the shop's plan, and it must never start to — a billing lookup on the checkout
+  // path is a slow or wrong answer costing a real order.
+  it('rejects a voucher that has been deactivated', async () => {
+    await seedVoucher(shop, 'DEAD5', null)
+    await svc().from('vouchers').update({ active: false }).eq('merchant_id', shop).eq('code', 'DEAD5')
+
+    const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'DEAD5' }), customerToken)
+
+    // Indistinguishable from a code that never existed, on purpose: a customer holding a dead
+    // voucher learns it does not work, not that the shop changed its billing plan.
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'voucher_not_found' })
+    // And the refusal rolled everything back — no order, and the dead voucher not marked used.
+    expect((await voucherOf(shop, 'DEAD5'))!.used_by).toEqual([])
+  })
+
   it('rejects a voucher this customer already used', async () => {
     await seedVoucher(shop, 'SAVE5', null)
     await post(body(shop, productId, { fulfilDate: tomorrowInShopZone(), quotedTotal: 21, voucherCode: 'SAVE5' }), customerToken)

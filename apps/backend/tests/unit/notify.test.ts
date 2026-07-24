@@ -129,7 +129,7 @@ describe('notifyOrderPlaced', () => {
     const db = fakeDb({
       orders: { data: ORDER, error: null },
       merchant_secrets: { data: { tg_token: 'TOK', tg_chat_id: 'CHAT' }, error: null },
-      merchants: { data: { name: 'Cookie Corner' }, error: null },
+      merchants: { data: { name: 'Cookie Corner', plan: 'pro' }, error: null },
     })
     const result = await notifyOrderPlaced(db, spy, { merchantId: 'm1', orderNumber: ORDER.order_number })
     expect(result).toEqual({ ok: true })
@@ -141,9 +141,37 @@ describe('notifyOrderPlaced', () => {
     const db = fakeDb({
       orders: { data: ORDER, error: null },
       merchant_secrets: { data: { tg_token: 'TOK', tg_chat_id: 'CHAT' }, error: null },
-      merchants: { data: { name: 'X' }, error: null },
+      merchants: { data: { name: 'X', plan: 'pro' }, error: null },
     })
     expect(await notifyOrderPlaced(db, boom, { merchantId: 'm1', orderNumber: ORDER.order_number }))
       .toEqual({ ok: false, error: 'Telegram sendMessage failed: 401' })
+  })
+
+  // The downgrade cutoff. A shop that was Pro keeps its token — it is a credential, and
+  // deleting it would make re-upgrading mean re-doing BotFather — so the token is present and
+  // valid here, and the tier alone has to stop the send.
+  it('does not send for a shop that is no longer pro', async () => {
+    const spy = vi.fn(async () => {})
+    const db = fakeDb({
+      orders: { data: ORDER, error: null },
+      merchant_secrets: { data: { tg_token: 'TOK', tg_chat_id: 'CHAT' }, error: null },
+      merchants: { data: { name: 'Cookie Corner', plan: 'basic' }, error: null },
+    })
+    expect(await notifyOrderPlaced(db, spy, { merchantId: 'm1', orderNumber: ORDER.order_number }))
+      .toEqual({ ok: true, skipped: true })
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  // Fails closed, matching hasProAccess: entitlement is never assumed from an absent value.
+  it('does not send when the plan is missing', async () => {
+    const spy = vi.fn(async () => {})
+    const db = fakeDb({
+      orders: { data: ORDER, error: null },
+      merchant_secrets: { data: { tg_token: 'TOK', tg_chat_id: 'CHAT' }, error: null },
+      merchants: { data: { name: 'Cookie Corner', plan: null }, error: null },
+    })
+    expect(await notifyOrderPlaced(db, spy, { merchantId: 'm1', orderNumber: ORDER.order_number }))
+      .toEqual({ ok: true, skipped: true })
+    expect(spy).not.toHaveBeenCalled()
   })
 })

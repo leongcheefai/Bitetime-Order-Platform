@@ -5,6 +5,7 @@ import { useEnterTransition } from '../motion'
 import { LayoutDashboard, ReceiptText, Cake, Ticket, Users, Settings } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import BillingBanner from './BillingBanner'
+import DeactivatedVouchers from './DeactivatedVouchers'
 import Overview from './Overview'
 import OnboardingChecklist from './OnboardingChecklist'
 import ProductsManager from './ProductsManager'
@@ -109,11 +110,18 @@ function DashboardInner() {
             is the upgrade prompt. The backend refuses the writes either way. */}
         {section === 'vouchers'  && (pro
           ? <VouchersManager />
-          : <ProLock
-              what={t('Vouchers', '优惠券')}
-              why={t('Run promotions with discount codes your customers enter at checkout. Available on the Pro plan.',
-                '使用折扣码开展促销，顾客可在结账时输入。Pro 方案专享。')}
-            />)}
+          : <>
+              <ProLock
+                what={t('Vouchers', '优惠券')}
+                why={t('Run promotions with discount codes your customers enter at checkout. Available on the Pro plan.',
+                  '使用折扣码开展促销，顾客可在结账时输入。Pro 方案专享。')}
+              />
+              {/* A shop that USED to be Pro has codes in customers' hands that no longer redeem.
+                  The lock alone would hide exactly the thing it needs to explain, and the
+                  merchant would hear about it from a complaint instead. Renders nothing for a
+                  shop that was never Pro. */}
+              <DeactivatedVouchers />
+            </>)}
         {section === 'customers' && <CustomersView />}
         {section === 'settings'  && <ShopSettings />}
       </div>

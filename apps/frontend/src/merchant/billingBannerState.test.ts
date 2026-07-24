@@ -52,3 +52,42 @@ describe('billingBannerState', () => {
     expect(billingBannerState({ status: 'past_due' }, NOW)).toEqual({ kind: 'past-due' })
   })
 })
+
+// A cancelled subscription reports `status: 'trialing'` or `'active'` right up to the day it
+// lapses, so without the flag the banner counted down a trial and told a merchant who had just
+// cancelled to ADD A PAYMENT METHOD — asking for a card to keep something they chose to end.
+describe('billingBannerState — winding down', () => {
+  const ending = {
+    status: 'active',
+    cancel_at_period_end: true,
+    current_period_end: '2026-08-01T00:00:00.000Z',
+  }
+
+  it('reports an ending subscription with the date the shop is suspended', () => {
+    expect(billingBannerState(ending, NOW))
+      .toEqual({ kind: 'ending', endsAt: '2026-08-01T00:00:00.000Z' })
+  })
+
+  // Outranks the trial branch: a cancelling trial ends in a suspended shop, and counting down
+  // the free days without saying that is the more misleading of the two messages.
+  it('outranks a running trial', () => {
+    expect(billingBannerState({ ...ending, status: 'trialing', trial_ends_at: hoursFromNow(48) }, NOW).kind)
+      .toBe('ending')
+  })
+
+  // And past-due: the card stops mattering once the subscription is ending anyway.
+  it('outranks past-due', () => {
+    expect(billingBannerState({ ...ending, status: 'past_due' }, NOW).kind).toBe('ending')
+  })
+
+  it('still reports no date when the period end is missing', () => {
+    expect(billingBannerState({ status: 'active', cancel_at_period_end: true }, NOW))
+      .toEqual({ kind: 'ending', endsAt: null })
+  })
+
+  // The flag is false for the overwhelming majority of rows; it must not disturb them.
+  it('leaves an ordinary trial alone', () => {
+    expect(billingBannerState({ status: 'trialing', trial_ends_at: hoursFromNow(48), cancel_at_period_end: false }, NOW).kind)
+      .toBe('trial')
+  })
+})

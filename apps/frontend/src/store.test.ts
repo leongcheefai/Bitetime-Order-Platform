@@ -1119,13 +1119,20 @@ describe('voucherFromRow', () => {
       max_uses: 50, used_by: ['a@x.com'],
     })).toEqual({
       id: 'v1', code: 'SAVE10', type: 'percent', value: 10,
-      maxUses: 50, usedBy: ['a@x.com'],
+      maxUses: 50, usedBy: ['a@x.com'], active: true,
     })
   })
   it('defaults usedBy to an empty array and tolerates null max_uses', () => {
     const v = voucherFromRow({ id: 'v2', code: 'X', kind: 'fixed', amount: 5, max_uses: null, used_by: null })
     expect(v.usedBy).toEqual([])
     expect(v.maxUses).toBeNull()
+  })
+
+  // Only an explicit `false` means deactivated. A row selected without the column — an older
+  // query, a cached payload — must not be rendered as a dead voucher the merchant never killed.
+  it('treats a missing active column as active', () => {
+    expect(voucherFromRow({ code: 'A', kind: 'fixed', amount: 5 }).active).toBe(true)
+    expect(voucherFromRow({ code: 'A', kind: 'fixed', amount: 5, active: false }).active).toBe(false)
   })
 })
 
@@ -1149,7 +1156,7 @@ describe('fetchMerchantVouchers', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toMatch(/\/api\/merchants\/m1\/vouchers$/)
     expect(init.headers.Authorization).toBe('Bearer tok')
-    expect(result).toEqual([{ id: 'v1', code: 'A', type: 'fixed', value: 5, maxUses: null, usedBy: [] }])
+    expect(result).toEqual([{ id: 'v1', code: 'A', type: 'fixed', value: 5, maxUses: null, usedBy: [], active: true }])
   })
   it('returns [] on a failed request', async () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
@@ -1182,7 +1189,7 @@ describe('lookupMerchantVoucher', () => {
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toMatch(/\/api\/merchants\/m1\/vouchers\/A$/)
     expect(init.headers).toEqual({})
-    expect(result).toEqual({ ok: true, voucher: { id: 'v1', code: 'A', type: 'fixed', value: 5, maxUses: null, usedBy: [] } })
+    expect(result).toEqual({ ok: true, voucher: { id: 'v1', code: 'A', type: 'fixed', value: 5, maxUses: null, usedBy: [], active: true } })
   })
 
   it('returns { ok:true, voucher:null } on a 200 with a null body (the real answer: no such voucher)', async () => {
@@ -1221,7 +1228,7 @@ describe('createMerchantVoucher', () => {
     expect(init.headers.Authorization).toBe('Bearer tok')
     // code is sent as-typed — uppercasing/trimming happens server-side now.
     expect(JSON.parse(init.body)).toEqual({ code: 'save10', kind: 'percent', amount: 10, maxUses: 100 })
-    expect(result).toEqual({ id: 'v9', code: 'SAVE10', type: 'percent', value: 10, maxUses: 100, usedBy: [] })
+    expect(result).toEqual({ id: 'v9', code: 'SAVE10', type: 'percent', value: 10, maxUses: 100, usedBy: [], active: true })
   })
 
   it('defaults maxUses to null', async () => {

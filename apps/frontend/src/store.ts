@@ -319,6 +319,36 @@ export async function openBillingPortal(): Promise<string> {
   return url
 }
 
+/**
+ * The three wind-down actions, which unlike the portal stay inside the dashboard: cancelling and
+ * downgrading both land on a period boundary, so no money moves and there is nothing a payment
+ * screen needs to explain. See CONTEXT.md → Plan entitlement.
+ *
+ * Each returns nothing and throws the backend's error code on failure — the caller decides what
+ * `no_live_subscription` should say, because it means "the subscription changed under this tab",
+ * not "something broke".
+ */
+async function billingAction(path: 'cancel' | 'resume' | 'downgrade'): Promise<void> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const token = session?.access_token
+  if (!token) throw new Error('Not signed in')
+  const res = await fetch(`${API_URL}/api/billing/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({}))
+    throw new Error(error || `Could not ${path} the subscription`)
+  }
+}
+
+/** Step down to Basic when the paid-for period ends. Pro features stay until then. */
+export const downgradeToBasic = () => billingAction('downgrade')
+/** End the subscription when the paid-for period ends. The shop is suspended at that point. */
+export const cancelSubscription = () => billingAction('cancel')
+/** Undo whichever wind-down is pending — a cancellation, a scheduled downgrade, or both. */
+export const resumeSubscription = () => billingAction('resume')
+
 export async function updateMerchantSlug(id: string, slug: string) {
   const s = (slug || '').trim().toLowerCase()
   if (!s || RESERVED_SLUGS.includes(s)) throw new Error('Reserved or empty slug')

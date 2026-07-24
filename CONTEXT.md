@@ -203,10 +203,41 @@ stripped** (the cart-key rule — refuse, don't normalise). The frontend
 show-but-locks the same features (Pro badge + upgrade CTA) so the 403 is never
 hit blind, but that is UX; the refusal is what actually shuts the door.
 
-**Reads stay open and the hot paths are untouched.** The Telegram send, voucher
-redemption and promo pricing carry no plan check — grandfathering pre-gate data
-was moot pre-launch, and pushing plan logic into the priced order transaction is
-exactly the load-bearing code the sections above guard. The advertised Pro
+**Winding down happens here, not in the portal.** Three routes —
+`POST /api/billing/{cancel,downgrade,resume}` — cancel at period end, schedule
+the step down to Basic at period end, and undo whichever is pending. They are
+ours rather than Stripe's because they land on a **period boundary**: cancelling
+is a flag, and the downgrade is a two-phase Subscription Schedule with
+`proration_behavior: 'none'`, so no money moves at the click and there is nothing
+a payment screen must explain. What that buys is the sentence the portal cannot
+say — *cancelling suspends this shop, on this date*. The **upgrade** still goes
+through the portal, which owns the mid-period proration argument.
+`merchant_billing.cancel_at_period_end` is what makes a winding-down subscription
+visible at all: Stripe leaves `status` on `'active'` until the day it ends, which
+is how the Subscription tab once promised "Renews on 1 Sep" to a merchant whose
+shop was suspended on 1 Sep. `pending_plan` is **intent, never entitlement** — a
+shop that has scheduled a downgrade keeps every Pro feature until the period it
+paid for runs out, and nothing may gate on it. See
+[ADR 0005](docs/adr/0005-winding-down-happens-in-the-dashboard.md).
+
+**Stepping down to Basic revokes the artifacts, once, at the transition.**
+`revokeProArtifacts` (called from `reconcileMerchantPlan` only when the tier
+actually moves `pro → basic`) sets `vouchers.active = false` in bulk and moves a
+running promo's `promo_end` to now — the configured `promo_price` survives as the
+merchant's own record, and `promoState` already reads a past end date as no
+promo. Telegram is the exception: it is gated at the notify route rather than
+revoked, because the token is a **credential, not an artifact** and deleting it
+would make re-upgrading mean re-doing BotFather. The cutoff is **not symmetric** —
+re-subscribing does not resurrect dead vouchers or restart ended sales.
+
+**Reads stay open and the hot paths are untouched.** Voucher redemption and promo
+pricing still carry no plan check. Redemption filters `vouchers.active` — a
+**column filter on a row the transaction was already reading**, which is the
+whole reason the cutoff is shaped as data rather than as a tier lookup: pushing
+plan logic into the priced order transaction is exactly the load-bearing code the
+sections above guard. The Telegram send is the one place that does read the tier,
+and it can afford to, being a separate call made *after* the order has landed.
+The advertised Pro
 features that do **not** yet exist — email order alerts, multiple shops,
 custom-link edit UI, priority support — are gated when they are built, not
 before; a lock on an unreachable feature is dead code.

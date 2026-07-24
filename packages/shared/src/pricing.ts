@@ -535,5 +535,9 @@ export function voucherFromRow(row: Record<string, unknown>): PricedVoucher {
     value: Number(row.amount),
     maxUses: (row.max_uses ?? null) as number | null,
     usedBy: Array.isArray(row.used_by) ? (row.used_by as string[]) : [],
+    // Deactivated in bulk when a shop steps down from Pro. Defaults TRUE on a missing column so
+    // a row read from anywhere that does not select it is never mistaken for a dead voucher —
+    // the redemption path filters `active` in SQL, and this field exists to be DISPLAYED.
+    active: row.active !== false,
   }
 }

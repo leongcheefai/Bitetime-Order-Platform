@@ -117,7 +117,20 @@ export async function notifyOrderPlaced(db: any, send: TelegramSend, input: Noti
     .eq('merchant_id', merchantId).maybeSingle()
   if (!secret?.tg_token || !secret?.tg_chat_id) return { ok: true, skipped: true }
 
-  const { data: merchant } = await db.from('merchants').select('name').eq('id', merchantId).maybeSingle()
+  const { data: merchant } = await db.from('merchants').select('name, plan').eq('id', merchantId).maybeSingle()
+
+  // Telegram alerts are Pro (#110). Only the token WRITE was gated there, on the reasoning that
+  // a shop with a token configured must keep receiving its orders — true while no shop could
+  // ever leave Pro, and false the moment downgrades existed. A shop that steps down keeps its
+  // token (a credential, not an artifact: deleting it would make re-upgrading mean re-doing
+  // BotFather) and simply stops being sent to.
+  //
+  // Fails CLOSED on a null or unknown plan, matching `hasProAccess`: entitlement is never
+  // assumed from an absent value. Safe to check here in a way it would not be inside the order
+  // transaction, because notify is a separate call made after the order has already landed —
+  // this can refuse without an order being lost.
+  if (merchant?.plan !== 'pro') return { ok: true, skipped: true }
+
   try {
     await send(secret.tg_token, secret.tg_chat_id, buildOrderMessage(order, merchant?.name))
     return { ok: true }

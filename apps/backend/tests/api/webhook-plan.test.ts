@@ -32,7 +32,11 @@ async function userIdOf(client: Awaited<ReturnType<typeof makeUser>>) {
  * A `customer.subscription.updated` event carrying one price, signed the way Stripe signs.
  * `default_payment_method` is always set — see the file header.
  */
-function subscriptionUpdated(merchantId: string, priceId: string) {
+function subscriptionUpdated(
+  merchantId: string,
+  priceId: string,
+  over: Record<string, unknown> = {},
+) {
   return {
     id: 'evt_test_plan',
     object: 'event',
@@ -50,6 +54,7 @@ function subscriptionUpdated(merchantId: string, priceId: string) {
           object: 'list',
           data: [{ id: 'si_test', price: { id: priceId }, current_period_end: 1893456000 }],
         },
+        ...over,
       },
     },
   }
@@ -139,6 +144,112 @@ describe('POST /api/stripe/webhook — plan reconciliation', () => {
     expect((await planOf(id)).plan).toBe('pro')
 
     await serviceClient().from('merchants').delete().eq('id', id)
+  })
+
+  // THE bug the cancel work exists for. Stripe leaves `status` on 'active' for a subscription
+  // cancelling at period end, so without this flag the Subscription tab went on promising
+  // "Renews on 1 Sep" right up to the morning `customer.subscription.deleted` suspended the shop.
+  it('records that a subscription is cancelling at period end', async () => {
+    await resetMerchant('wh-cancelling-shop')
+    const owner = await makeUser('wh-cancelling@example.com', 'password123')
+    const id = await seedMerchant({ slug: 'wh-cancelling-shop', owner_id: await userIdOf(owner), plan: 'pro' })
+
+    const event = subscriptionUpdated(id, PRICES.proMonthly, { cancel_at_period_end: true })
+    expect((await postWebhook(event)).status).toBe(200)
+
+    const { data } = await serviceClient()
+      .from('merchant_billing').select('status, cancel_at_period_end').eq('merchant_id', id).single()
+    // Status stays 'active' — which is exactly why the flag has to be stored separately.
+    expect(data).toMatchObject({ status: 'active', cancel_at_period_end: true })
+
+    await serviceClient().from('merchants').delete().eq('id', id)
+  })
+
+  // ── Artifact cutoff ─────────────────────────────────────────────────────────
+  // #110 gated only the WRITES, which left the reverse direction open: a shop that had been Pro
+  // kept its vouchers redeemable and its promos discounting forever, because the order path is
+  // plan-blind by design. The cutoff is data-level and fires here, once, at the transition —
+  // never as a plan check inside the priced order transaction.
+  it('deactivates vouchers and ends running promos when a shop drops to basic', async () => {
+    await resetMerchant('wh-artifacts-shop')
+    const owner = await makeUser('wh-artifacts@example.com', 'password123')
+    const id = await seedMerchant({ slug: 'wh-artifacts-shop', owner_id: await userIdOf(owner), plan: 'pro' })
+    const svc = serviceClient()
+    await svc.from('vouchers').insert({ merchant_id: id, code: 'SAVE10', kind: 'percent', amount: 10 })
+    // No end date and no cap: a sale that would otherwise run forever, which is exactly the
+    // case a naive "expire what has an end date" cutoff would miss.
+    await svc.from('products').insert({
+      merchant_id: id, name: 'Matcha Cookie', price: 13, promo_price: 8, promo_end: null,
+    })
+
+    expect((await postWebhook(subscriptionUpdated(id, PRICES.basicMonthly))).status).toBe(200)
+
+    const { data: vouchers } = await svc.from('vouchers').select('active').eq('merchant_id', id)
+    expect(vouchers!.map(v => v.active)).toEqual([false])
+    const { data: products } = await svc.from('products').select('promo_price, promo_end').eq('merchant_id', id)
+    // The configured price survives — the merchant's own record of what the sale was — while the
+    // end date moves to now, which is what `promoState` already reads as "no promo".
+    expect(Number(products![0].promo_price)).toBe(8)
+    expect(new Date(products![0].promo_end as string).getTime()).toBeLessThanOrEqual(Date.now())
+
+    await svc.from('merchants').delete().eq('id', id)
+  })
+
+  // The `.or(promo_end.is.null, promo_end.gt.<now>)` half of the promo cutoff. A sale that had
+  // already finished must keep its historical end date: rewriting it would relabel last month's
+  // promotion as having ended at the downgrade, corrupting the merchant's own record of when
+  // they sold at what price.
+  it('does not rewrite the end date of a promo that had already finished', async () => {
+    await resetMerchant('wh-old-promo-shop')
+    const owner = await makeUser('wh-old-promo@example.com', 'password123')
+    const id = await seedMerchant({ slug: 'wh-old-promo-shop', owner_id: await userIdOf(owner), plan: 'pro' })
+    const svc = serviceClient()
+    const ENDED = '2026-01-01T00:00:00+00:00'
+    await svc.from('products').insert({
+      merchant_id: id, name: 'Last Year Sale', price: 13, promo_price: 8, promo_end: ENDED,
+    })
+
+    expect((await postWebhook(subscriptionUpdated(id, PRICES.basicMonthly))).status).toBe(200)
+
+    const { data } = await svc.from('products').select('promo_end').eq('merchant_id', id).single()
+    expect(new Date(data!.promo_end as string).toISOString()).toBe(new Date(ENDED).toISOString())
+
+    await svc.from('merchants').delete().eq('id', id)
+  })
+
+  // LOAD-BEARING. Every renewal of a Basic shop replays this event. A cutoff keyed on "is this
+  // shop basic" rather than on the TRANSITION would re-deactivate vouchers the merchant had
+  // re-enabled — silently, once a month, forever.
+  it('leaves a basic shop\'s vouchers alone when it merely renews', async () => {
+    await resetMerchant('wh-renew-shop')
+    const owner = await makeUser('wh-renew@example.com', 'password123')
+    const id = await seedMerchant({ slug: 'wh-renew-shop', owner_id: await userIdOf(owner), plan: 'basic' })
+    const svc = serviceClient()
+    await svc.from('vouchers').insert({ merchant_id: id, code: 'STILLGOOD', kind: 'percent', amount: 10 })
+
+    expect((await postWebhook(subscriptionUpdated(id, PRICES.basicMonthly))).status).toBe(200)
+
+    const { data } = await svc.from('vouchers').select('active').eq('merchant_id', id)
+    expect(data!.map(v => v.active)).toEqual([true])
+
+    await svc.from('merchants').delete().eq('id', id)
+  })
+
+  // The scheduled change has landed, so the intent is spent. A `pending_plan` left behind would
+  // keep the Subscription tab saying "Switching to Basic on…" after it already had.
+  it('clears the pending plan once the change has happened', async () => {
+    await resetMerchant('wh-pending-shop')
+    const owner = await makeUser('wh-pending@example.com', 'password123')
+    const id = await seedMerchant({ slug: 'wh-pending-shop', owner_id: await userIdOf(owner), plan: 'pro' })
+    const svc = serviceClient()
+    await svc.from('merchant_billing').upsert({ merchant_id: id, pending_plan: 'basic', status: 'active' })
+
+    expect((await postWebhook(subscriptionUpdated(id, PRICES.basicMonthly))).status).toBe(200)
+
+    const { data } = await svc.from('merchant_billing').select('pending_plan').eq('merchant_id', id).single()
+    expect(data!.pending_plan).toBeNull()
+
+    await svc.from('merchants').delete().eq('id', id)
   })
 
   // The signature check is the only thing standing between this endpoint and anyone on the

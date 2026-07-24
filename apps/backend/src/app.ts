@@ -10,13 +10,14 @@
 // without a Stripe key is worse than one that refuses to), and it is why vitest.db.config.ts
 // has to stub the Stripe keys before a test can import this module. Keep it to that — no
 // connections, no timers, no reads at import time.
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 import { cors } from 'hono/cors'
 import { env } from './env.js'
 import { admin, getUserFromToken } from './supabase.js'
 import { requireUser, requireSuperadmin, requireMerchantOwns, requirePro, hasProAccess, REQUIRES_PRO, type AppEnv } from './mw.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
-import { upsertBilling, setMerchantStatus, billingFromSubscription, reconcileMerchantPlan } from './billing.js'
+import { upsertBilling, setMerchantStatus, billingFromSubscription, reconcileMerchantPlan, LIVE_STATUSES } from './billing.js'
+import { downgradePhases, ScheduleError, type LivePhase } from './subscriptionSchedule.js'
 import { canStartTrial, buildTrialReminderEmail } from './billingLifecycle.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
@@ -28,7 +29,7 @@ import { liveDistanceDeps } from './distanceCache.js'
 import { quoteIpWindow, quoteMerchantWindow, placesGlobalWindow } from './quotaWindows.js'
 import { googlePlaceSuggest, googlePlaceDetail } from './maps.js'
 import { detectCountry } from './region.js'
-import { fetchBasePricing, createPricingCache, type PricingPayload } from './pricing.js'
+import { fetchBasePricing, createPricingCache, planFromPriceId, type PricingPayload } from './pricing.js'
 import { estimateFor } from './fx.js'
 import { listReferredShops, listEarnedRewards } from './referrals.js'
 import { processReferralReward } from './referralRewardGrant.js'
@@ -377,8 +378,12 @@ app.delete('/api/merchants/:id/products/:productId', requireMerchantOwns, async 
 app.get('/api/merchants/:id/vouchers/:code', async (c) => {
   const id = c.req.param('id')
   const code = c.req.param('code')
+  // `active` is filtered here, not just at redemption, so a customer typing a code from a shop
+  // that has stepped down to Basic is told it is not a code rather than being quoted a discount
+  // the order transaction will then refuse. Same answer, one screen earlier.
   const { data, error } = await admin
-    .from('vouchers').select('*').eq('merchant_id', id).eq('code', code).maybeSingle()
+    .from('vouchers').select('*').eq('merchant_id', id).eq('code', code)
+    .eq('active', true).maybeSingle()
   // Same contract: 5xx = could-not-ask; 200 null = shop has no such voucher.
   if (error) return c.json({ error: 'Lookup failed' }, 500)
   return c.json(data ?? null)
@@ -477,7 +482,7 @@ app.post('/api/checkout', async (c) => {
   // A live subscription means there is nothing to buy here — refuse rather
   // than create a second subscription (double-billing), e.g. for a shop an
   // admin suspended while its Stripe subscription is still running.
-  if (existing && ['trialing', 'active', 'past_due'].includes(existing.status ?? '')) {
+  if (existing && LIVE_STATUSES.includes(existing.status ?? '')) {
     return c.json({ error: 'This shop already has an active subscription' }, 409)
   }
 
@@ -704,6 +709,144 @@ app.post('/api/billing/portal', async (c) => {
     return_url: `${env.frontendUrl}/merchant`,
   })
   return c.json({ url: session.url })
+})
+
+// ── Downgrade and cancellation ─────────────────────────────────────────────────
+// ADR 0004 chose the Customer Portal over calling Stripe ourselves, and that still holds for the
+// UPGRADE: a mid-period tier increase is a proration argument, and the portal is a screen built
+// to have it. These three are the exception, for one reason — they all land on a period
+// boundary. `cancel_at_period_end` is a flag, and the downgrade is scheduled with
+// `proration_behavior: 'none'`, so no money moves and there is nothing for a payment screen to
+// explain. What is gained is the thing the portal cannot give: telling a merchant, in their own
+// dashboard and in their own language, that cancelling suspends their shop on a named date.
+//
+// Stripe remains authoritative. Each route writes the outcome back to `merchant_billing`
+// immediately so the tab does not lie for the seconds before the webhook lands, but
+// `customer.subscription.updated` is what confirms it, and the tier itself moves only through
+// `reconcileMerchantPlan`.
+
+/** The signed-in merchant's live subscription, or the response explaining why there isn't one. */
+async function liveSubscription(c: Context<AppEnv>) {
+  const token = (c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '')
+  const user = await getUserFromToken(token)
+  if (!user) return { res: c.json({ error: 'Unauthorized' }, 401) }
+  const { data: merchant } = await admin
+    .from('merchants').select('id').eq('owner_id', user.id).maybeSingle()
+  if (!merchant) return { res: c.json({ error: 'No merchant for this account' }, 404) }
+  const { data: billing } = await admin
+    .from('merchant_billing')
+    .select('stripe_subscription_id, status')
+    .eq('merchant_id', merchant.id).maybeSingle()
+  // 409 rather than 404: the shop is fine, the request just does not apply to it. The
+  // Subscription tab hides these buttons in that state, so this is the long-open-tab case.
+  if (!billing?.stripe_subscription_id || !LIVE_STATUSES.includes(billing.status ?? '')) {
+    return { res: c.json({ error: 'no_live_subscription' }, 409) }
+  }
+  return { merchantId: merchant.id, subscriptionId: billing.stripe_subscription_id }
+}
+
+/**
+ * Drop any scheduled phase change and hand the subscription back to itself.
+ *
+ * Releasing rather than cancelling is load-bearing: `subscriptionSchedules.cancel()` cancels the
+ * SUBSCRIPTION the schedule drives, which would end the shop's billing outright. `release()`
+ * detaches the schedule and leaves the subscription running exactly as it is.
+ */
+async function releaseSchedule(subscriptionId: string) {
+  const sub = await stripe.subscriptions.retrieve(subscriptionId)
+  const scheduleId = typeof sub.schedule === 'string' ? sub.schedule : sub.schedule?.id
+  if (!scheduleId) return
+  const schedule = await stripe.subscriptionSchedules.retrieve(scheduleId)
+  // A schedule that already ran (or was released) cannot be released again, and saying so would
+  // turn "undo my downgrade" into an error for a merchant whose downgrade has already happened.
+  if (schedule.status === 'active' || schedule.status === 'not_started') {
+    await stripe.subscriptionSchedules.release(scheduleId)
+  }
+}
+
+// Step down to Basic at the end of the period already paid for. Never immediate: the merchant
+// has been charged for Pro through this period, and taking the features now would drop live
+// vouchers under customers mid-checkout.
+app.post('/api/billing/downgrade', async (c) => {
+  const found = await liveSubscription(c)
+  if ('res' in found) return found.res
+  const { merchantId, subscriptionId } = found
+
+  const sub = await stripe.subscriptions.retrieve(subscriptionId)
+  if (sub.cancel_at_period_end) {
+    // The subscription is already ending. Scheduling a tier for a period that will never be
+    // billed is meaningless, and doing it silently would read as having un-cancelled.
+    return c.json({ error: 'subscription_ending' }, 409)
+  }
+
+  const currentPriceId = sub.items?.data?.[0]?.price?.id ?? ''
+  const tier = planFromPriceId(env.prices, currentPriceId)
+  // An unrecognised price is the same no-op it is in reconcileMerchantPlan — we cannot say what
+  // the Basic equivalent of a price we did not configure is, and guessing moves real money.
+  if (!tier) return c.json({ error: 'unknown_price' }, 409)
+  if (tier.plan === 'basic') return c.json({ error: 'already_basic' }, 409)
+
+  // Wrapping the live subscription in a schedule copies its current phase verbatim; reusing an
+  // existing schedule matters because `from_subscription` errors on a subscription that already
+  // has one (a second downgrade request, or a retry after a failed write below).
+  const existingId = typeof sub.schedule === 'string' ? sub.schedule : sub.schedule?.id
+  const schedule = existingId
+    ? await stripe.subscriptionSchedules.retrieve(existingId)
+    : await stripe.subscriptionSchedules.create({ from_subscription: subscriptionId })
+
+  let phases
+  try {
+    phases = downgradePhases(schedule.phases[0] as unknown as LivePhase, priceFor('basic', tier.cycle))
+  } catch (err) {
+    if (err instanceof ScheduleError) {
+      console.warn(`Downgrade refused for merchant ${merchantId}: ${err.message}`)
+      return c.json({ error: 'cannot_schedule' }, 409)
+    }
+    throw err
+  }
+
+  await stripe.subscriptionSchedules.update(schedule.id, {
+    phases,
+    // Once the Basic period has been billed the schedule lets go, leaving an ordinary
+    // subscription at the new price rather than one permanently driven by a schedule.
+    end_behavior: 'release',
+  })
+
+  // Intent only. `merchants.plan` is untouched — the shop keeps the Pro it paid for until
+  // `reconcileMerchantPlan` sees the price actually change.
+  await upsertBilling(merchantId, { pending_plan: 'basic' })
+  return c.json({ ok: true, pendingPlan: 'basic' })
+})
+
+// End the subscription when the current period runs out. The shop stays open and fully
+// functional until then; `customer.subscription.deleted` is what suspends it.
+app.post('/api/billing/cancel', async (c) => {
+  const found = await liveSubscription(c)
+  if ('res' in found) return found.res
+  const { merchantId, subscriptionId } = found
+
+  // Cancelling supersedes a scheduled downgrade — there is no period after this one for a new
+  // tier to apply to, and Stripe refuses to set the flag while a schedule drives the
+  // subscription. Released first so the two intents can never both be pending.
+  await releaseSchedule(subscriptionId)
+
+  const sub = await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true })
+  await upsertBilling(merchantId, { ...billingFromSubscription(sub), pending_plan: null })
+  return c.json({ ok: true, endsAt: billingFromSubscription(sub).current_period_end })
+})
+
+// Undo whichever wind-down is pending — a cancellation, a scheduled downgrade, or both. One
+// route because it answers one question ("keep things as they are"), and because leaving a
+// merchant to undo two pending changes in two clicks is how one of them gets forgotten.
+app.post('/api/billing/resume', async (c) => {
+  const found = await liveSubscription(c)
+  if ('res' in found) return found.res
+  const { merchantId, subscriptionId } = found
+
+  await releaseSchedule(subscriptionId)
+  const sub = await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: false })
+  await upsertBilling(merchantId, { ...billingFromSubscription(sub), pending_plan: null })
+  return c.json({ ok: true })
 })
 
 // ── Customer sign-up — creates the account pre-confirmed ───────────────────────
