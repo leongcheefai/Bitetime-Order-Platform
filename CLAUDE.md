@@ -27,7 +27,13 @@ pnpm --filter @bitetime/backend test        # backend unit tests (notify, etc.) 
 pnpm --filter @bitetime/backend test:db     # DB-backed tests: RLS + API (needs a running local Supabase; reads its keys itself)
 pnpm --filter @bitetime/backend db:migrate   # apply pending SQL migrations to the LOCAL Supabase DB
 pnpm --filter @bitetime/backend db:push      # push migrations to a linked REMOTE Supabase project
+
+stripe listen --forward-to http://localhost:8787/api/stripe/webhook   # REQUIRED for any local billing work
 ```
+
+**Anything that involves paying must have `stripe listen` running before the payment.** Stripe cannot reach `localhost`, and every post-payment effect is webhook-driven — `merchant_billing` (subscription id, status), `merchants.plan` reconciliation (#112) and the pending→active flip all happen in `POST /api/stripe/webhook` and nowhere else. Without the forwarder, Checkout completes, Stripe charges the card, and the app changes **nothing**: the merchant stays basic, and the only trace is the `stripe_customer_id` that `/api/checkout` wrote before redirecting. It looks exactly like a broken feature.
+
+The CLI prints its own signing secret on startup; it must equal `STRIPE_WEBHOOK_SECRET` in `apps/backend/.env` or every event is rejected as an invalid signature (a `<-- [400]` in the listener's own output). Started late? `stripe events resend <evt_id>` replays one — the handlers upsert, so a replay is safe. And check the listener is actually still up (`ps -eo command | grep stripe`) before concluding the code is at fault: a dead forwarder and a broken handler look identical from the app.
 
 Migrations live in `apps/backend/supabase/migrations/`. Adding a migration file does **not** apply it — run `db:migrate` (local) so the running app (and PostgREST's schema cache) sees the new columns; otherwise queries fail with `Could not find the 'X' column … in the schema cache`.
 

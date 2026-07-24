@@ -13,9 +13,17 @@ UI is verified by running the app (`CLAUDE.md`). There are no component tests �
 cd apps/backend && supabase start        # skip if `supabase status` already answers
 pnpm --filter @bitetime/frontend dev     # :5173, reads apps/frontend/.env.local
 pnpm --filter @bitetime/backend dev      # :8787 — only if the flow hits /api/* (notify, billing, signup)
+stripe listen --forward-to http://localhost:8787/api/stripe/webhook   # only for billing flows — see below
 ```
 
 `apps/frontend/.env.local` already points at the local stack (`http://127.0.0.1:55321`). Pending migrations must be applied first (`pnpm --filter @bitetime/backend db:migrate`) or PostgREST 404s on new columns.
+
+**Verifying anything that pays? Start `stripe listen` FIRST, and confirm it is still alive when the result looks wrong.** Stripe cannot reach `localhost`, and every post-payment effect is webhook-driven — subscription id and status on `merchant_billing`, the `merchants.plan` reconciliation, the pending→active flip. With no forwarder the payment succeeds at Stripe and the app changes nothing, which is indistinguishable from a broken feature: the merchant stays basic, the locks stay on, and the only trace is the `stripe_customer_id` written before the redirect. Its printed secret must match `STRIPE_WEBHOOK_SECRET` in `apps/backend/.env`, or every event is a `<-- [400]`. Missed events replay with `stripe events resend <evt_id>`.
+
+**Two traps that make correct code look broken**, both of which have cost real debugging time:
+
+- **A long-running `pnpm dev` backend can serve pre-edit code.** `--watch` is not enough — clear the jiti cache (`rm -rf node_modules/.cache/jiti`) and restart. Check its age (`/bin/ps -o lstart= -p <pid>`) before blaming a handler.
+- **Directly-seeded merchants have no billing row**, so anything reading `merchant_billing` (the Subscription tab, the billing portal) behaves as it does for a shop that never paid. That is correct behaviour on wrong fixtures, not a bug.
 
 Direct DB access for assertions:
 `psql "postgresql://postgres:postgres@127.0.0.1:55322/postgres"`
