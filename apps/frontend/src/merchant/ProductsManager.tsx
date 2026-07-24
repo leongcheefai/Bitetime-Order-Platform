@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { MoreHorizontal, Package } from 'lucide-react'
+import { Lock, MoreHorizontal, Package } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { toast } from 'sonner'
 import { fetchProducts, upsertProduct, deleteProduct, deleteProductImages, productImageUrl } from '../store'
@@ -20,6 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '../components/ui/empty'
 import ImagePicker from './ProductImages'
+import { ProBadge, UpgradeButton } from './ProLock'
+import { useProAccess, isRequiresPro } from '../plan'
 
 // Canonical unit options (value stored as-is; label is bilingual).
 const UNITS: { value: string; en: string; zh: string }[] = [
@@ -146,6 +148,9 @@ export default function ProductsManager() {
   const [images, setImages] = useState<string[]>([])
   const currency = merchant?.currency
   const symbol = currencyDef(currency).symbol
+  // Promos are Pro-only (#110); ordinary product editing is not. This flag locks the promo
+  // fields and keeps them out of every write below — see `stripPromo`.
+  const pro = useProAccess()
   // Whether the row being edited has a promo whose end date has already passed. Computed once, in
   // openEdit below, rather than read from `Date.now()` during render (React Compiler forbids calling
   // an impure function while rendering — the result would also go stale without a re-render to
@@ -197,6 +202,24 @@ export default function ProductsManager() {
   }
 
   /**
+   * Drop the promo columns from a write when the shop is not entitled to them (#110).
+   *
+   * Not a normalisation of the merchant's intent — the fields are disabled, so a basic shop
+   * never expresses one. It exists because both writes below spread the WHOLE existing row, and
+   * a row carrying a `promo_price` set while the shop was on Pro would otherwise make an
+   * ordinary name/price edit fail the backend's gate outright.
+   *
+   * OMITTING the columns is not the same as clearing them: the upsert's ON CONFLICT DO UPDATE
+   * only touches columns present in the payload, so whatever promo the row holds survives
+   * untouched — the shop simply cannot change it until it is Pro again.
+   */
+  function stripPromo(row: any) {
+    if (pro) return row
+    const { promo_price: _p, promo_limit: _l, promo_end: _e, ...rest } = row
+    return rest
+  }
+
+  /**
    * Returns a message to show, or null. The DB has the same checks — this is the one with words.
    *
    * The `promo_limit` check runs first and unconditionally (not gated on `promo_price !== ''`): the
@@ -227,14 +250,14 @@ export default function ProductsManager() {
     try {
       if (editingProduct) {
         // Spread the original row first so sort / active / etc. survive the upsert.
-        await upsertProduct({
+        await upsertProduct(stripPromo({
           ...editingProduct, ...form, ...promoFields(form),
           image_urls: images,
           price: Number(form.price) || 0,
           unit_quantity: coerceQuantity(form.unit_quantity),
-        })
+        }))
       } else {
-        await upsertProduct({
+        await upsertProduct(stripPromo({
           ...form,
           ...promoFields(form),
           id: draftId,
@@ -242,7 +265,7 @@ export default function ProductsManager() {
           price: Number(form.price) || 0,
           unit_quantity: coerceQuantity(form.unit_quantity),
           merchant_id: merchant!.id,
-        })
+        }))
       }
       setFormOpen(false); setForm(BLANK); setEditingProduct(null); setImages([]); setDraftId(crypto.randomUUID())
       await load()
@@ -255,7 +278,12 @@ export default function ProductsManager() {
       // admin tool, a direct SQL edit), and `products_promo_below_price` is what stops one of those
       // leaving a promo priced above the item. Postgres's raw constraint string is not something to
       // show a merchant if that ever collides with a live promo here.
-      if (typeof err?.message === 'string' && err.message.includes('products_promo_below_price')) {
+      // The promo fields are locked for a basic shop, so this is the fallback for a `plan` that
+      // moved under a long-open tab — an upgrade prompt, not the bare error code (#110).
+      if (isRequiresPro(err)) {
+        setMsg(t('Putting an item on sale is a Pro feature. Upgrade to Pro to set a promo price.',
+          '限时优惠是 Pro 功能。升级到 Pro 即可设置优惠价。'))
+      } else if (typeof err?.message === 'string' && err.message.includes('products_promo_below_price')) {
         setMsg(t('The promo price is no longer below the normal price. Lower or clear the promo price first.',
           '优惠价已不低于原价。请先降低或清除优惠价。'))
       } else {
@@ -265,7 +293,7 @@ export default function ProductsManager() {
   }
 
   async function setProductImages(p: any, image_urls: string[]) {
-    await upsertProduct({ ...p, image_urls }); await load()
+    await upsertProduct(stripPromo({ ...p, image_urls })); await load()
   }
   async function remove(p: any) {
     await deleteProduct(p.id, merchant!.id)
@@ -416,47 +444,66 @@ export default function ProductsManager() {
                   </Select>
                 </div>
               </div>
-              <div className="flex flex-col gap-[6px]">
-                <Label htmlFor="pm-promo-price">{t('Promo price', '优惠价')}</Label>
-                <Input
-                  id="pm-promo-price"
-                  variant="compact"
-                  type="number"
-                  step="0.01"
-                  value={form.promo_price}
-                  onChange={e => setForm({ ...form, promo_price: e.target.value })}
-                  placeholder="0.00"
-                />
-                <span className="text-[12px] text-text-tertiary">{t('Leave empty for no promo.', '留空表示无优惠。')}</span>
-              </div>
-              <div className="flex flex-col gap-[6px]">
-                <Label htmlFor="pm-promo-limit">{t('Promo limit', '优惠数量上限')}</Label>
-                <Input
-                  id="pm-promo-limit"
-                  variant="compact"
-                  type="number"
-                  step="1"
-                  min="1"
-                  value={form.promo_limit}
-                  onChange={e => setForm({ ...form, promo_limit: e.target.value })}
-                  placeholder={t('No limit', '不限')}
-                />
-                <span className="text-[12px] text-text-tertiary">
-                  {t('How many units sell at this price. Leave empty for no limit.', '以此价格出售的数量。留空表示不限。')}
-                </span>
-              </div>
-              <div className="flex flex-col gap-[6px]">
-                <Label htmlFor="pm-promo-end">{t('Promo ends', '优惠结束日期')}</Label>
-                <Input
-                  id="pm-promo-end"
-                  variant="compact"
-                  type="date"
-                  value={form.promo_end}
-                  onChange={e => setForm({ ...form, promo_end: e.target.value })}
-                />
-                <span className="text-[12px] text-text-tertiary">
-                  {t('The promo runs to the end of this day. Leave empty for no end date.', '优惠持续到当天结束。留空表示无结束日期。')}
-                </span>
+              {/* Promo pricing is Pro-only (#110). The fields stay on screen for a basic shop —
+                  visibly disabled behind a Pro marker — because the rest of this form is the
+                  ordinary product editing every shop keeps. `display: contents` leaves a Pro
+                  shop's layout exactly as it was; only the locked state adds a wrapper. */}
+              <div className={pro ? 'contents' : 'flex flex-col gap-2 rounded-xl border-[1.5px] border-dashed border-clay-border p-3'}>
+                {!pro && (
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="flex items-center gap-2 text-[13px] font-medium text-oxblood">
+                      <Lock size={14} strokeWidth={1.75} aria-hidden />
+                      {t('Put this item on sale', '为此商品设置优惠')}
+                      <ProBadge />
+                    </span>
+                    <UpgradeButton className="px-3 py-[6px] text-[12px]" />
+                  </div>
+                )}
+                <div className="flex flex-col gap-[6px]">
+                  <Label htmlFor="pm-promo-price">{t('Promo price', '优惠价')}</Label>
+                  <Input
+                    id="pm-promo-price"
+                    variant="compact"
+                    type="number"
+                    step="0.01"
+                    disabled={!pro}
+                    value={form.promo_price}
+                    onChange={e => setForm({ ...form, promo_price: e.target.value })}
+                    placeholder="0.00"
+                  />
+                  <span className="text-[12px] text-text-tertiary">{t('Leave empty for no promo.', '留空表示无优惠。')}</span>
+                </div>
+                <div className="flex flex-col gap-[6px]">
+                  <Label htmlFor="pm-promo-limit">{t('Promo limit', '优惠数量上限')}</Label>
+                  <Input
+                    id="pm-promo-limit"
+                    variant="compact"
+                    type="number"
+                    step="1"
+                    min="1"
+                    disabled={!pro}
+                    value={form.promo_limit}
+                    onChange={e => setForm({ ...form, promo_limit: e.target.value })}
+                    placeholder={t('No limit', '不限')}
+                  />
+                  <span className="text-[12px] text-text-tertiary">
+                    {t('How many units sell at this price. Leave empty for no limit.', '以此价格出售的数量。留空表示不限。')}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-[6px]">
+                  <Label htmlFor="pm-promo-end">{t('Promo ends', '优惠结束日期')}</Label>
+                  <Input
+                    id="pm-promo-end"
+                    variant="compact"
+                    type="date"
+                    disabled={!pro}
+                    value={form.promo_end}
+                    onChange={e => setForm({ ...form, promo_end: e.target.value })}
+                  />
+                  <span className="text-[12px] text-text-tertiary">
+                    {t('The promo runs to the end of this day. Leave empty for no end date.', '优惠持续到当天结束。留空表示无结束日期。')}
+                  </span>
+                </div>
               </div>
               {editingProduct && editingProduct.promo_price !== null && editingProduct.promo_price !== undefined && (() => {
                 // M-1: `promo_sold` can outlive a LOWERED `promo_limit` — sell 8 against a cap of

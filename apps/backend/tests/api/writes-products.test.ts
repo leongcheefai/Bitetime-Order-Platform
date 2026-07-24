@@ -108,6 +108,104 @@ describe('PUT /api/merchants/:id/products/:productId', () => {
     await serviceClient().from('merchants').delete().eq('id', id)
   })
 
+  // Product promos are Pro-only, but the endpoint they ride is NOT (#110). Basic shops
+  // legitimately upsert products all day, so the gate lives inside the handler and keys off the
+  // incoming row: a non-null `promo_price` from a non-Pro shop is REFUSED, never silently
+  // stripped (the codebase's refuse-don't-normalise rule). The three tests below pin both
+  // halves of that — the refusal, and the ordinary edit that must keep working.
+  it('403 requires_pro when a basic shop sends a promo_price, and writes nothing', async () => {
+    await resetMerchant('prod-basic-promo-shop')
+    const owner = await makeUser('prod-basic-promo@example.com', 'password123')
+    const { token, userId } = await tokenOf(owner)
+    const id = await seedMerchant({ slug: 'prod-basic-promo-shop', owner_id: userId, plan: 'basic' })
+    const productId = crypto.randomUUID()
+
+    const res = await put(`/api/merchants/${id}/products/${productId}`, {
+      name: 'Discounted Cookie', price: 12, promo_price: 8, promo_limit: 10,
+    }, token)
+
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'requires_pro' })
+
+    const { data } = await serviceClient().from('products').select('id').eq('id', productId).maybeSingle()
+    expect(data).toBeNull()
+
+    await serviceClient().from('merchants').delete().eq('id', id)
+  })
+
+  // The gate reads all three promo columns, not just the price. A shop that dropped to basic
+  // keeps its old promo row, and a body carrying only the cap or the end date would otherwise
+  // let it extend a live sale for free — the Pro feature, used without Pro.
+  it('403 requires_pro when a basic shop sends only promo_limit or promo_end', async () => {
+    await resetMerchant('prod-basic-limit-shop')
+    const owner = await makeUser('prod-basic-limit@example.com', 'password123')
+    const { token, userId } = await tokenOf(owner)
+    const id = await seedMerchant({ slug: 'prod-basic-limit-shop', owner_id: userId, plan: 'basic' })
+    const productId = await seedProduct({ merchant_id: id, name: 'Legacy Promo Cookie', price: 12 })
+
+    const limitOnly = await put(`/api/merchants/${id}/products/${productId}`, {
+      name: 'Legacy Promo Cookie', price: 12, promo_limit: 99,
+    }, token)
+    expect(limitOnly.status).toBe(403)
+    expect(await limitOnly.json()).toEqual({ error: 'requires_pro' })
+
+    const endOnly = await put(`/api/merchants/${id}/products/${productId}`, {
+      name: 'Legacy Promo Cookie', price: 12, promo_end: '2030-01-01T00:00:00.000Z',
+    }, token)
+    expect(endOnly.status).toBe(403)
+
+    await serviceClient().from('products').delete().eq('id', productId)
+    await serviceClient().from('merchants').delete().eq('id', id)
+  })
+
+  // The other half: over-blocking the shared endpoint would break ordinary product management
+  // for every basic shop, which is user story 4. An edit that touches no promo field succeeds.
+  it('lets a basic shop edit non-promo fields', async () => {
+    await resetMerchant('prod-basic-plain-shop')
+    const owner = await makeUser('prod-basic-plain@example.com', 'password123')
+    const { token, userId } = await tokenOf(owner)
+    const id = await seedMerchant({ slug: 'prod-basic-plain-shop', owner_id: userId, plan: 'basic' })
+    const productId = crypto.randomUUID()
+
+    const res = await put(`/api/merchants/${id}/products/${productId}`, {
+      name: 'Plain Cookie', price: 9, unit: 'pcs', active: true,
+    }, token)
+
+    expect(res.status).toBe(200)
+    const row = (await res.json()) as ProductRow
+    expect(row.name).toBe('Plain Cookie')
+
+    // An explicit promo_price: null is "no promo" — the shape the frontend sends when a Pro
+    // shop clears a sale — and must not be mistaken for an attempt to set one.
+    const clearing = await put(`/api/merchants/${id}/products/${productId}`, {
+      name: 'Plain Cookie', price: 9, promo_price: null,
+    }, token)
+    expect(clearing.status).toBe(200)
+
+    await serviceClient().from('products').delete().eq('id', productId)
+    await serviceClient().from('merchants').delete().eq('id', id)
+  })
+
+  it('lets a pro shop set a promo', async () => {
+    await resetMerchant('prod-pro-promo-shop')
+    const owner = await makeUser('prod-pro-promo@example.com', 'password123')
+    const { token, userId } = await tokenOf(owner)
+    const id = await seedMerchant({ slug: 'prod-pro-promo-shop', owner_id: userId, plan: 'pro' })
+    const productId = crypto.randomUUID()
+
+    const res = await put(`/api/merchants/${id}/products/${productId}`, {
+      name: 'Discounted Cookie', price: 12, promo_price: 8, promo_limit: 10,
+    }, token)
+
+    expect(res.status).toBe(200)
+    const { data } = await serviceClient()
+      .from('products').select('promo_price').eq('id', productId).single()
+    expect(Number(data!.promo_price)).toBe(8)
+
+    await serviceClient().from('products').delete().eq('id', productId)
+    await serviceClient().from('merchants').delete().eq('id', id)
+  })
+
   // Load-bearing: .upsert() conflict-resolves on the primary key (id), so without a tenancy
   // check an owner of shop A could nest shop B's productId under :id = A and have it UPDATEd
   // in place — including merchant_id reassigned to A, a cross-tenant takeover. Product ids are

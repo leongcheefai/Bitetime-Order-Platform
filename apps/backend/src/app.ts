@@ -14,7 +14,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { env } from './env.js'
 import { admin, getUserFromToken } from './supabase.js'
-import { requireUser, requireSuperadmin, requireMerchantOwns, type AppEnv } from './mw.js'
+import { requireUser, requireSuperadmin, requireMerchantOwns, requirePro, hasProAccess, REQUIRES_PRO, type AppEnv } from './mw.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
 import { upsertBilling, setMerchantStatus, billingFromSubscription } from './billing.js'
 import { canStartTrial, buildTrialReminderEmail } from './billingLifecycle.js'
@@ -234,7 +234,10 @@ app.get('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
 // see 20260627120150_secure_merchant_secrets.sql), so the product-PUT hijack class (Global
 // Constraint 2) does not apply here: there is no client-supplied child id to nest a foreign
 // row under. No separate tenancy check is needed.
-app.put('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
+// Telegram alerts are a Pro feature, so `requirePro` chains after the ownership check (#110).
+// Only the WRITE is gated: the send path (`notify`) carries no plan check, because a shop that
+// already has a token configured must keep receiving its orders. See CONTEXT.md → Plan entitlement.
+app.put('/api/merchants/:id/secret', requireMerchantOwns, requirePro, async (c) => {
   const id = c.req.param('id')
   const b = await c.req.json().catch(() => ({}) as any)
   const row: Record<string, unknown> = { merchant_id: id }
@@ -331,12 +334,27 @@ app.get('/api/merchants/:id/products', async (c) => {
 // in place (including merchant_id reassigned to A) instead of a new row being inserted. Loading
 // the product and checking merchant_id === :id before upserting is what closes that hole
 // (Global Constraint 2), mirroring the DELETE handler below.
+// Product promos are Pro-only, but this endpoint is NOT — basic shops legitimately edit their
+// menu through it, so it cannot carry `requirePro` as a whole (#110). The gate is inside, and
+// keys off the body: a non-null promo column from a non-Pro shop is REFUSED, never silently
+// stripped — a saved product whose sale price vanished without a word is exactly the "success
+// toast, wrong data" failure pickMerchantConfig refuses elsewhere. An explicit null is "no
+// promo" (what the frontend sends to clear one) and passes.
+// ALL THREE promo columns are checked, not just `promo_price`: a shop that dropped to basic
+// still has its old promo row, and a body carrying only `promo_limit`/`promo_end` would
+// otherwise let it raise the cap or push back the end date on a live sale for free.
 app.put('/api/merchants/:id/products/:productId', requireMerchantOwns, async (c) => {
   const id = c.req.param('id')
   const productId = c.req.param('productId')
   const { data: existing } = await admin.from('products').select('merchant_id').eq('id', productId).maybeSingle()
   if (existing && existing.merchant_id !== id) return c.json({ error: 'Not found' }, 404)
-  const row = { ...pickProductFields(await c.req.json().catch(() => ({}))), id: productId, merchant_id: id }
+  const fields = pickProductFields(await c.req.json().catch(() => ({})))
+  const asksForPromo = (['promo_price', 'promo_limit', 'promo_end'] as const)
+    .some(k => fields[k] != null)
+  if (asksForPromo && !(await hasProAccess(c))) {
+    return c.json({ error: REQUIRES_PRO }, 403)
+  }
+  const row = { ...fields, id: productId, merchant_id: id }
   const { data, error } = await admin.from('products').upsert(row).select().single()
   if (error) return c.json({ error: 'Upsert failed' }, 500)
   return c.json(data)
@@ -372,7 +390,10 @@ app.get('/api/merchants/:id/vouchers/:code', async (c) => {
 // class (conflict-resolving onto a stranger's row) does not apply here — there is no
 // client-supplied id to collide on. `code` is uppercased/trimmed server-side, matching the
 // old client-side `input.code.trim().toUpperCase()`.
-app.post('/api/merchants/:id/vouchers', requireMerchantOwns, async (c) => {
+// Vouchers are a Pro feature (#110). Only the merchant's MUTATIONS are gated — the customer's
+// code lookup above stays public and redemption inside the order transaction stays plan-blind,
+// so the gate can never break the ordering hot path.
+app.post('/api/merchants/:id/vouchers', requireMerchantOwns, requirePro, async (c) => {
   const id = c.req.param('id')
   const b = await c.req.json().catch(() => ({} as any))
   const code = String(b?.code ?? '').trim().toUpperCase()
@@ -392,7 +413,7 @@ app.post('/api/merchants/:id/vouchers', requireMerchantOwns, async (c) => {
 // about voucherId, so an owner of shop A could otherwise delete shop B's voucher by nesting
 // it under :id = A. Loading the voucher and checking merchant_id === :id before deleting is
 // what closes that hole (Global Constraint 2), mirroring the product DELETE handler above.
-app.delete('/api/merchants/:id/vouchers/:voucherId', requireMerchantOwns, async (c) => {
+app.delete('/api/merchants/:id/vouchers/:voucherId', requireMerchantOwns, requirePro, async (c) => {
   const id = c.req.param('id')
   const voucherId = c.req.param('voucherId')
   const { data: existing } = await admin.from('vouchers').select('merchant_id').eq('id', voucherId).maybeSingle()

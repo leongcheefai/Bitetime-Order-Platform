@@ -75,6 +75,12 @@ export async function seedMerchant(fields: {
   name?: string
   order_prefix?: string
   status?: MerchantStatus
+  /**
+   * Subscription tier (#110). Omitted leaves the column NULL, which reads as basic —
+   * the Pro gate is `plan === 'pro'` and nothing else. Pass 'pro' to seed an entitled
+   * shop; the gated endpoints (secret, vouchers, product promos) refuse anything else.
+   */
+  plan?: 'basic' | 'pro'
   /** Defaults to the column defaults (off / 0) when omitted — see 20260720140000_merchant_tax.sql. */
   tax_enabled?: boolean
   tax_rate?: number
@@ -96,6 +102,7 @@ export async function seedMerchant(fields: {
       name: fields.name ?? fields.slug,
       order_prefix: fields.order_prefix ?? 'XX',
       status: fields.status ?? 'active',
+      ...(fields.plan !== undefined ? { plan: fields.plan } : {}),
       ...(fields.tax_enabled !== undefined ? { tax_enabled: fields.tax_enabled } : {}),
       ...(fields.tax_rate !== undefined ? { tax_rate: fields.tax_rate } : {}),
       ...(fields.pickup_enabled !== undefined ? { pickup_enabled: fields.pickup_enabled } : {}),

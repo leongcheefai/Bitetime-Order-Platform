@@ -10,10 +10,13 @@ import { Label } from '../components/ui/label'
 import { Textarea } from '../components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../components/ui/select'
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs'
+import { Badge } from '../components/ui/badge'
 import { useNavGuard } from './NavGuard'
 import { isDirty, type SettingsFields } from './settingsDirty'
 import ReferralTab from './ReferralTab'
 import FulfilmentTab from './FulfilmentTab'
+import { ProLock } from './ProLock'
+import { useProAccess, isRequiresPro } from '../plan'
 import AddressAutocomplete from '../store/AddressAutocomplete'
 
 type TabKey = 'shipping' | 'fulfilment' | 'payment' | 'notifications' | 'referral'
@@ -24,6 +27,7 @@ type TabKey = 'shipping' | 'fulfilment' | 'payment' | 'notifications' | 'referra
 // container tracks a single `dirty` flag and registers it with the NavGuard.
 export default function ShopSettings() {
   const { t } = useSession()
+  const pro = useProAccess()
   const { guard, registerBlocker } = useNavGuard()
   const [tab, setTab] = useState<TabKey>('shipping')
   const [dirty, setDirty] = useState(false)
@@ -49,11 +53,13 @@ export default function ShopSettings() {
     guard(() => { setDirty(false); setTab(next) })
   }
 
-  const TABS: { key: TabKey; label: string }[] = [
+  const TABS: { key: TabKey; label: string; tag?: string }[] = [
     { key: 'shipping', label: t('Shipping', '运费') },
     { key: 'fulfilment', label: t('Fulfilment', '取货') },
     { key: 'payment', label: t('Payment', '付款') },
-    { key: 'notifications', label: t('Notifications', '通知') },
+    // Marked from the tab bar, not only once opened — a basic shop should see that alerts are
+    // a paid feature before it goes looking for the form (#110).
+    { key: 'notifications', label: t('Notifications', '通知'), tag: pro ? undefined : 'Pro' },
     { key: 'referral', label: t('Referral', '推荐') },
   ]
 
@@ -63,8 +69,11 @@ export default function ShopSettings() {
         {/* Mobile: 4 nowrap tabs exceed the narrow column, so scroll horizontally
             with natural widths instead of clipping the last tab off-screen. */}
         <TabsList className="max-sm:justify-start max-sm:overflow-x-auto max-sm:[scrollbar-width:none] max-sm:[&::-webkit-scrollbar]:hidden">
-          {TABS.map(({ key, label }) => (
-            <TabsTrigger key={key} value={key} className="max-sm:flex-none">{label}</TabsTrigger>
+          {TABS.map(({ key, label, tag }) => (
+            <TabsTrigger key={key} value={key} className="max-sm:flex-none">
+              {label}
+              {tag && <Badge variant="outline" className="ml-2 uppercase tracking-[0.08em]">{tag}</Badge>}
+            </TabsTrigger>
           ))}
         </TabsList>
       </Tabs>
@@ -72,7 +81,16 @@ export default function ShopSettings() {
       {tab === 'shipping' && <ShippingTab onDirtyChange={setDirty} />}
       {tab === 'fulfilment' && <FulfilmentTab onDirtyChange={setDirty} />}
       {tab === 'payment' && <PaymentTab onDirtyChange={setDirty} />}
-      {tab === 'notifications' && <NotificationsTab onDirtyChange={setDirty} />}
+      {/* Telegram alerts are Pro-only (#110). The tab stays — the feature must be visible to
+          be sold — but a basic shop gets the upgrade prompt in place of the form. The refusal
+          that actually matters is the backend's `403 requires_pro` on PUT …/secret. */}
+      {tab === 'notifications' && (pro
+        ? <NotificationsTab onDirtyChange={setDirty} />
+        : <ProLock
+            what={t('Order notifications', '订单通知')}
+            why={t('Get a Telegram message the moment an order comes in, so you never have to watch the dashboard. Available on the Pro plan.',
+              '订单一进来就收到 Telegram 消息，无需盯着后台。Pro 方案专享。')}
+          />)}
       {tab === 'referral' && <ReferralTab />}
     </div>
   )
@@ -531,6 +549,8 @@ function PaymentTab({ onDirtyChange }: TabProps) {
   )
 }
 
+// Only ever rendered for a Pro shop — the gate is in ShopSettings above, alongside every other
+// tab's mount, rather than hidden in a wrapper here.
 function NotificationsTab({ onDirtyChange }: TabProps) {
   const { t, merchant } = useSession()
   const [saved, setSaved] = useState<SettingsFields>({ tgToken: '', tgChat: '' })
@@ -555,7 +575,14 @@ function NotificationsTab({ onDirtyChange }: TabProps) {
       await upsertMerchantSecret(merchant!.id, { tg_token: fields.tgToken, tg_chat_id: fields.tgChat })
       setSaved(fields)
       toast.success(t('Notifications saved', '通知已保存'))
-    } catch (err: any) { toast.error(err.message || t('Save failed', '保存失败')) }
+    } catch (err: any) {
+      // The form only renders for a Pro shop, so this is the fallback for a `plan` that moved
+      // under a long-open tab — an upgrade prompt, not the raw `requires_pro` code (#110).
+      toast.error(isRequiresPro(err)
+        ? t('Order notifications are a Pro feature. Upgrade to Pro to turn them on.',
+            '订单通知是 Pro 功能。升级到 Pro 即可开启。')
+        : err.message || t('Save failed', '保存失败'))
+    }
     finally { setBusy(false) }
   }
 

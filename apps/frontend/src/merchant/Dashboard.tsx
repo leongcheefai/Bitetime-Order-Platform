@@ -15,6 +15,8 @@ import CustomersView from './CustomersView'
 import FeedbackFab from './FeedbackFab'
 import { NavGuardProvider, useNavGuard } from './NavGuard'
 import { useDashboardSection } from '../useDashboardSection'
+import { useProAccess } from '../plan'
+import { ProLock } from './ProLock'
 
 const ICON = { size: 18, strokeWidth: 1.75 }
 const SECTIONS = [
@@ -37,6 +39,7 @@ export default function Dashboard() {
 function DashboardInner() {
   const { t, merchant, role } = useSession()
   const { guard } = useNavGuard()
+  const pro = useProAccess()
   const [section, setSection] = useDashboardSection(SECTIONS.map(s => s.key), 'overview')
   const enter = useEnterTransition()
 
@@ -57,6 +60,8 @@ function DashboardInner() {
     label: t(s.en, s.zh),
     icon: s.icon,
     badge: s.key === 'orders' ? newOrders : undefined,
+    // The lock must be legible from the sidebar, not only after clicking (#110).
+    tag: s.key === 'vouchers' && !pro ? 'Pro' : undefined,
   }))
 
   // Route sidebar section switches through the unsaved-changes guard so a dirty
@@ -78,7 +83,16 @@ function DashboardInner() {
         {section === 'overview'  && <Overview />}
         {section === 'orders'    && <OrdersView onOrdersChanged={refreshNewOrders} />}
         {section === 'products'  && <ProductsManager />}
-        {section === 'vouchers'  && <VouchersManager />}
+        {/* Vouchers are Pro-only (#110). The nav entry stays — a basic shop must see the
+            feature it is not paying for, not wonder where it went — but the section itself
+            is the upgrade prompt. The backend refuses the writes either way. */}
+        {section === 'vouchers'  && (pro
+          ? <VouchersManager />
+          : <ProLock
+              what={t('Vouchers', '优惠券')}
+              why={t('Run promotions with discount codes your customers enter at checkout. Available on the Pro plan.',
+                '使用折扣码开展促销，顾客可在结账时输入。Pro 方案专享。')}
+            />)}
         {section === 'customers' && <CustomersView />}
         {section === 'settings'  && <ShopSettings />}
       </div>
