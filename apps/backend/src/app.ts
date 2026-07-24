@@ -507,7 +507,10 @@ app.post('/api/checkout', async (c) => {
     // No trial here: trials are granted only by superadmin approval (cardless).
     // Checkout is the paid path — pro signup and suspended-shop reactivation.
     subscription_data: { metadata },
-    success_url: `${env.frontendUrl}/merchant?checkout=success`,
+    // `checkout=success` (query) drives MerchantHome's poll-until-active; the hash lands the new
+    // subscriber on the Subscription tab once it clears. Query before hash — MerchantHome reads
+    // the query, the hash survives the param clear and deep-links the tab.
+    success_url: `${env.frontendUrl}/merchant?checkout=success#settings/subscription`,
     cancel_url: `${env.frontendUrl}/merchant/signup?plan=${plan}&billing=${billing}&canceled=1`,
   })
 
@@ -706,7 +709,10 @@ app.post('/api/billing/portal', async (c) => {
   if (!billing?.stripe_customer_id) return c.json({ error: 'No billing account yet' }, 404)
   const session = await stripe.billingPortal.sessions.create({
     customer: billing.stripe_customer_id,
-    return_url: `${env.frontendUrl}/merchant`,
+    // Back to the Subscription tab the merchant left from, not the dashboard root — the portal is
+    // only ever opened from there, so Overview is a lost-your-place jump. The hash deep-links via
+    // useDashboardSection/Subsection (`#settings/subscription`).
+    return_url: `${env.frontendUrl}/merchant#settings/subscription`,
   })
   return c.json({ url: session.url })
 })
