@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
-import { fetchMyBilling, openBillingPortal } from '../store'
+import { fetchMyBilling, openBillingPortal, startCheckout } from '../store'
 import { usePlatformPricing } from '../usePlatformPricing'
 import { formatMoney } from '../currency'
 import { fmtDate } from '../merchantDate'
@@ -56,6 +56,32 @@ function PortalButton({ label }: { label: string }) {
   // would stretch this across the card.
   return (
     <Button type="button" size="sm" onClick={toPortal} disabled={busy}>
+      {busy ? t('Opening…', '打开中…') : label}
+    </Button>
+  )
+}
+
+/**
+ * Buying a subscription outright, for an active shop that has none — the complement of
+ * PortalButton, never shown beside it.
+ *
+ * `POST /api/checkout` refuses a shop whose subscription is trialing/active/past_due, which is
+ * exactly when `canManage` is true, so the two buttons cannot both appear and this cannot create
+ * a second subscription. It grants no trial either: trials come only from superadmin approval.
+ */
+function CheckoutButton({ plan, cycle, label }: { plan: string; cycle: string; label: string }) {
+  const { t } = useSession()
+  const [busy, setBusy] = useState(false)
+  async function go() {
+    setBusy(true)
+    try { window.location.assign(await startCheckout({ plan, billing: cycle })) }
+    catch (err: any) {
+      toast.error(err?.message || t('Could not start checkout', '无法开始结账'))
+      setBusy(false)
+    }
+  }
+  return (
+    <Button type="button" size="sm" onClick={go} disabled={busy}>
       {busy ? t('Opening…', '打开中…') : label}
     </Button>
   )
@@ -118,8 +144,8 @@ export default function SubscriptionTab() {
                 ? (state.renewsAt
                     ? t(`Renews on ${fmtDate(state.renewsAt)}.`, `将于 ${fmtDate(state.renewsAt)} 续订。`)
                     : t('Active.', '有效。'))
-                : t('No subscription on file for this shop. Contact us if that looks wrong.',
-                    '此店铺没有订阅记录。如有疑问请联系我们。')}
+                : t('No subscription on file for this shop yet.',
+                    '此店铺尚无订阅记录。')}
         </p>
 
         {/* Gated on canManage, NOT on canUpgrade: a Pro shop cannot upgrade but must still be
@@ -163,6 +189,10 @@ export default function SubscriptionTab() {
           </ul>
           {/* The portal does the swap; the price change and any proration are Stripe's to
               explain, on a screen built for it. */}
+          {/* Two routes to the same tier, decided by whether there is a subscription to change.
+              With one: the portal swaps the price on it. Without one (an active shop approved
+              without a trial, or one whose subscription lapsed): Checkout sells a new one, which
+              the `checkout.session.completed` reconciliation then turns into real Pro access. */}
           {state.canManage ? (
             <>
               <PortalButton label={t('Upgrade to Pro', '升级到 Pro')} />
@@ -172,10 +202,13 @@ export default function SubscriptionTab() {
               </p>
             </>
           ) : (
-            <p className="text-[12px] text-text-tertiary">
-              {t('This shop has no subscription to change yet — contact us to move it to Pro.',
-                '此店铺尚无可更改的订阅——请联系我们升级到 Pro。')}
-            </p>
+            <>
+              <CheckoutButton plan="pro" cycle={cycle} label={t('Upgrade to Pro', '升级到 Pro')} />
+              <p className="text-[12px] text-text-tertiary mt-3">
+                {t('This shop has no subscription yet, so this starts a new one at the Pro price.',
+                  '此店铺尚无订阅，将以 Pro 价格开始新的订阅。')}
+              </p>
+            </>
           )}
         </div>
       )}

@@ -32,6 +32,28 @@ describe('subscriptionTabState', () => {
       .toMatchObject({ kind: 'none', canManage: false })
   })
 
+  // An active shop with no live subscription CAN buy one outright — /api/checkout refuses only
+  // trialing/active/past_due, the exact set `canManage` covers. Reachable in production:
+  // approve-merchant activates a shop without a subscription when it has had one before.
+  it('offers checkout, not the portal, when there is no live subscription', () => {
+    expect(subscriptionTabState(null, 'basic', NOW))
+      .toMatchObject({ canSubscribe: true, canManage: false })
+    expect(subscriptionTabState({ status: 'canceled', stripe_customer_id: 'cus_1' }, 'basic', NOW))
+      .toMatchObject({ canSubscribe: true, canManage: false })
+  })
+
+  // The two are exact complements — offering both would mean a second subscription on a shop
+  // that already pays.
+  it('never offers checkout and the portal at the same time', () => {
+    for (const status of ['trialing', 'active', 'past_due']) {
+      const state = subscriptionTabState(
+        { status, stripe_customer_id: 'cus_1', trial_ends_at: '2026-08-11T00:00:00Z' }, 'basic', NOW,
+      )
+      expect(state.canSubscribe).toBe(false)
+      expect(state.canManage).toBe(true)
+    }
+  })
+
   // The pitch does NOT depend on having a subscription: a Pro lock's CTA promises the price and
   // the feature list, so a comped or pre-checkout basic shop must still get them — only the
   // button needs a Stripe customer to point at.

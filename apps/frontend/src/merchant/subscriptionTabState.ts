@@ -25,12 +25,18 @@ export interface SubscriptionSnapshot extends BillingSnapshot {
  * `canUpgrade` — is this shop not Pro? It gates the PITCH (price + feature list), which a shop
  * deserves to see even with no subscription behind it: a Pro lock's CTA promised exactly that,
  * and a comped shop landing on a blank tab is the CTA lying.
+ *
+ * `canSubscribe` — is there NO live subscription, so buying one outright is the way in? It is the
+ * exact complement of `canManage`, and deliberately so: `POST /api/checkout` refuses precisely
+ * the statuses `LIVE` lists, so the two buttons can never both apply and can never double-bill.
+ * Reachable in production, not just in fixtures: `approve-merchant` activates a shop WITHOUT a
+ * subscription when it has had one before (`canStartTrial` false).
  */
 export type SubscriptionState =
-  | { kind: 'none'; plan: string; canUpgrade: boolean; canManage: false }
-  | { kind: 'trial'; plan: string; daysLeft: number; trialEndsAt: string; canUpgrade: boolean; canManage: true }
-  | { kind: 'live'; plan: string; renewsAt: string | null; canUpgrade: boolean; canManage: true }
-  | { kind: 'past-due'; plan: string; canUpgrade: false; canManage: true }
+  | { kind: 'none'; plan: string; canUpgrade: boolean; canManage: false; canSubscribe: true }
+  | { kind: 'trial'; plan: string; daysLeft: number; trialEndsAt: string; canUpgrade: boolean; canManage: true; canSubscribe: false }
+  | { kind: 'live'; plan: string; renewsAt: string | null; canUpgrade: boolean; canManage: true; canSubscribe: false }
+  | { kind: 'past-due'; plan: string; canUpgrade: false; canManage: true; canSubscribe: false }
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -54,14 +60,14 @@ export function subscriptionTabState(
   const canUpgrade = tier !== 'pro'
 
   if (!customer || !status || !LIVE.includes(status)) {
-    return { kind: 'none', plan: tier, canUpgrade, canManage: false }
+    return { kind: 'none', plan: tier, canUpgrade, canManage: false, canSubscribe: true }
   }
 
   // Past due: the card is the problem, not the tier. The pitch stays hidden — answering a
   // question the merchant did not ask while their shop is days from suspension — but the portal
   // button is exactly what they need.
   if (status === 'past_due') {
-    return { kind: 'past-due', plan: tier, canUpgrade: false, canManage: true }
+    return { kind: 'past-due', plan: tier, canUpgrade: false, canManage: true, canSubscribe: false }
   }
 
   if (status === 'trialing' && billing?.trial_ends_at) {
@@ -73,6 +79,7 @@ export function subscriptionTabState(
       trialEndsAt: billing.trial_ends_at,
       canUpgrade,
       canManage: true,
+      canSubscribe: false,
     }
   }
 
@@ -82,5 +89,6 @@ export function subscriptionTabState(
     renewsAt: billing?.current_period_end ?? null,
     canUpgrade,
     canManage: true,
+    canSubscribe: false,
   }
 }

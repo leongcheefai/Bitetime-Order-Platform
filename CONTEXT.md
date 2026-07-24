@@ -211,15 +211,19 @@ features that do **not** yet exist — email order alerts, multiple shops,
 custom-link edit UI, priority support — are gated when they are built, not
 before; a lock on an unreachable feature is dead code.
 
-**Upgrading is Stripe's job; we only listen.** `POST /api/checkout` refuses a shop
-that already has a live subscription — and an approved basic shop always has one
-(its cardless trial) — so checkout is not the upgrade path and never was. The
-**Customer Portal** swaps the price, configured in the Stripe dashboard rather
-than in this repo; a fresh Stripe environment without plan-switching configured
-makes upgrade silently do nothing. **Settings → Subscription** is the shop-side
-screen: it shows the plan, price and renewal date, and every Pro lock's CTA
-routes there rather than firing the portal blind, because the portal 404s for a
-shop with no Stripe customer. **A downgrade takes effect at the end of the paid
+**Upgrading is Stripe's job; we only listen — by one of two routes, decided by
+whether there is a subscription to change.** With one (the usual case: an approved
+shop on its cardless trial) the **Customer Portal** swaps the price; that is
+configured in the Stripe dashboard rather than in this repo, so a fresh Stripe
+environment without plan-switching configured makes upgrade silently do nothing.
+Without one — an active shop `approve-merchant` activated but did not re-trial
+(`canStartTrial` false), or one whose subscription lapsed — **Checkout** sells a
+new subscription outright. The two can never both apply: `POST /api/checkout`
+refuses exactly `trialing`/`active`/`past_due`, the complement of the portal's
+population, so neither path can create a second subscription. **Settings → Subscription** is the shop-side
+screen: it shows the plan, price and renewal date, offers whichever of the two
+routes applies, and every Pro lock's CTA routes there rather than firing the
+portal blind, because the portal 404s for a shop with no Stripe customer. **A downgrade takes effect at the end of the paid
 period** — nothing here implements that: the schedule lives in Stripe, and
 because the reconciliation reads the price *currently* on the subscription, a
 pending change simply does not register until it applies.
