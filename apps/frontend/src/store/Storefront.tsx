@@ -4,6 +4,7 @@ import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { useEnterTransition } from '../motion'
 import { toast } from 'sonner'
+import { Images, Expand } from 'lucide-react'
 import { fetchProducts, lookupProducts, placeOrder, fetchMerchantVoucher, lookupMerchantVoucher, voucherFullyUsed, notifyOrderPlacedRemote, productImageUrl, saveCustomerDetails, quoteDelivery, DeliveryQuoteError } from '../store'
 import { priceOrder, voucherError, shopRates, shopTax, shopDistance, shopMethods, firstOfferedMethod, FULFILMENT_METHODS, productFromRow, promoState, MAX_CART_QTY, MAX_CART_LINES, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
 import type { FulfilmentMethod } from '@bitetime/shared'
@@ -1113,14 +1114,24 @@ export default function Storefront() {
                         type="button"
                         onClick={() => setGallery(p)}
                         aria-label={t('View photos', '查看图片')}
-                        className="size-14 shrink-0 rounded-lg overflow-hidden border-[1.5px] border-clay-border cursor-pointer relative"
+                        className="group size-14 shrink-0 rounded-lg overflow-hidden border-[1.5px] border-clay-border cursor-pointer relative transition-transform active:scale-[0.97]"
                       >
-                        <img src={productImageUrl(p.image_urls[0])} alt="" className="size-full object-cover" />
-                        {p.image_urls.length > 1 && (
-                          <span className="absolute bottom-0.5 right-0.5 px-1 rounded-full bg-oxblood/85 text-white text-[10px] leading-[14px]">
-                            {p.image_urls.length}
-                          </span>
-                        )}
+                        <img
+                          src={productImageUrl(p.image_urls[0])}
+                          alt=""
+                          className="size-full object-cover transition-transform duration-200 group-hover:scale-110"
+                        />
+                        {/* Desktop cue: a veil + expand glyph on hover says "this opens". */}
+                        <span className="absolute inset-0 flex items-center justify-center bg-oxblood/0 transition-colors group-hover:bg-oxblood/30">
+                          <Expand className="size-4 text-white opacity-0 transition-opacity group-hover:opacity-100" strokeWidth={2} />
+                        </span>
+                        {/* Touch cue (no hover on a phone): a persistent photo pill, with a count
+                            when there's more than one. The bare number badge read as decoration —
+                            nothing said "tap me". */}
+                        <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-full bg-oxblood/90 px-1.5 py-[3px] text-white text-[10px] font-medium leading-none">
+                          <Images className="size-[11px]" strokeWidth={2} />
+                          {p.image_urls.length > 1 && p.image_urls.length}
+                        </span>
                       </button>
                     ) : null}
                     <div className="flex-1 min-w-0">
