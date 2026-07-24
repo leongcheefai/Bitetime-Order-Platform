@@ -113,6 +113,17 @@ describe('subscriptionTabState', () => {
     expect(state.kind === 'trial' && state.progress).toBe(0)
   })
 
+  // The natural full bar: a fresh 7-day trial fills it exactly, without leaning on the clamp.
+  it('fills the trial bar for a fresh 7-day trial', () => {
+    const state = subscriptionTabState(
+      { status: 'trialing', stripe_customer_id: 'cus_1', trial_ends_at: '2026-08-08T00:00:00Z' },
+      'basic',
+      NOW, // 2026-08-01 → exactly 7 days left
+    )
+    expect(state).toMatchObject({ kind: 'trial', daysLeft: 7 })
+    expect(state.kind === 'trial' && state.progress).toBe(1)
+  })
+
   // A trial longer than 7 days (Stripe could be told otherwise) must not overflow the bar.
   it('clamps trial progress to a full bar when more than 7 days remain', () => {
     const state = subscriptionTabState(

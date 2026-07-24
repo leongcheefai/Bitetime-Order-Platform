@@ -40,6 +40,27 @@ const PRO_FEATURES: [string, string][] = [
 ]
 
 /**
+ * The Stripe portal hand-off, shared by every control that opens it — the `PortalButton` and the
+ * Summary's two portal links. One `busy` flag and one bilingual failure toast, so the two call
+ * sites cannot drift apart. `toPortal` redirects on success; on failure it clears `busy` and says
+ * so, because the `canManage` gate can go stale under a long-open tab and a silently-inert button
+ * is the dead end this tab exists to remove.
+ */
+function useBillingPortal() {
+  const { t } = useSession()
+  const [busy, setBusy] = useState(false)
+  async function toPortal() {
+    setBusy(true)
+    try { window.location.assign(await openBillingPortal()) }
+    catch (err: any) {
+      toast.error(err?.message || t('Could not open the billing portal', '无法打开账单门户'))
+      setBusy(false)
+    }
+  }
+  return { busy, toPortal }
+}
+
+/**
  * The hand-off to Stripe. Lives here rather than beside the Pro locks because it is the terminal
  * action — everything else in the dashboard routes to this tab first, so the merchant sees the
  * price before a payment screen. Only rendered when the shop HAS a Stripe customer: the endpoint
@@ -47,17 +68,7 @@ const PRO_FEATURES: [string, string][] = [
  */
 function PortalButton({ label }: { label: string }) {
   const { t } = useSession()
-  const [busy, setBusy] = useState(false)
-  async function toPortal() {
-    setBusy(true)
-    try { window.location.assign(await openBillingPortal()) }
-    catch (err: any) {
-      // Reachable despite the `canManage` gate: the billing row can change under a long-open
-      // tab. Say so rather than leaving the button silently inert.
-      toast.error(err?.message || t('Could not open the billing portal', '无法打开账单门户'))
-      setBusy(false)
-    }
-  }
+  const { busy, toPortal } = useBillingPortal()
   // size="sm" deliberately: the default size is `w-full` (the auth/save button geometry), which
   // would stretch this across the card.
   return (
@@ -275,7 +286,9 @@ function TrialBanner({ daysLeft, trialEndsAt, progress }: {
         `试用还剩 ${daysLeft} 天`)
     : t('Your trial ends today', '试用今天结束')
   return (
-    <div className="bg-cream border-[1.5px] border-rose-border rounded-2xl p-5 mb-6 w-full box-border max-sm:p-4">
+    // CARD geometry, warm cream wash instead of the raised surface — an info tint, not the rose
+    // of the trouble states. Later class wins in Tailwind, so bg-cream overrides CARD's background.
+    <div className={`${CARD} bg-cream`}>
       <div className="flex items-start gap-3">
         <Timer size={20} strokeWidth={2} className="text-oxblood shrink-0 mt-[2px]" aria-hidden />
         <div className="min-w-0 flex-1">
@@ -308,15 +321,7 @@ function SummaryGrid({ nextPayment, renewalLabel, renewalValue }: {
   renewalValue: string
 }) {
   const { t } = useSession()
-  const [busy, setBusy] = useState(false)
-  async function toPortal() {
-    setBusy(true)
-    try { window.location.assign(await openBillingPortal()) }
-    catch (err: any) {
-      toast.error(err?.message || t('Could not open the billing portal', '无法打开账单门户'))
-      setBusy(false)
-    }
-  }
+  const { busy, toPortal } = useBillingPortal()
   const label = 'text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary'
   const value = 'text-[14px] text-oxblood mt-1'
   const portalLink = 'text-[14px] text-oxblood underline underline-offset-2 mt-1 text-left disabled:opacity-60'
@@ -514,7 +519,10 @@ export default function SubscriptionTab() {
         )}
       </div>
 
-      {state.canManage && (
+      {/* Not for past-due: that shop has no renewal date (the card is failing), and a Summary
+          that answered "Renewal: Active" would flatly contradict the payment-failed line above.
+          The plan card's Manage button already routes it to the portal to fix the card. */}
+      {state.canManage && state.kind !== 'past-due' && (
         <SummaryGrid
           nextPayment={
             state.kind === 'ending' || !renewsAt
