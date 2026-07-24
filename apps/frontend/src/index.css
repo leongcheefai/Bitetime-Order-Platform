@@ -202,9 +202,16 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
    both are referenced by Tailwind arbitrary animate-[…] utilities in Loaders.tsx. */
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Accordion open/close — height animated from/to the Base UI panel's measured height var.
+   Referenced by the animate-accordion-down/up utilities in ui/accordion.tsx. */
+@keyframes accordion-down { from { height: 0 } to { height: var(--accordion-panel-height) } }
+@keyframes accordion-up { from { height: var(--accordion-panel-height) } to { height: 0 } }
+
 /* shadcn semantic color bridges → Tailwind utilities (e.g. bg-primary, text-muted-foreground).
    Radius entries sm–2xl removed here — brand @theme inline (top of file) owns those. */
 @theme inline {
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
   --font-heading: 'Lora', 'Noto Serif SC', serif;
   --font-sans: 'DM Sans', 'Noto Sans SC', sans-serif;
   /* Body floor: text-sm is the app's de-facto body utility (buttons, inputs,

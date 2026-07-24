@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { Truck, ExternalLink } from 'lucide-react'
+import { Truck, ExternalLink, ChevronDown } from 'lucide-react'
 import { useMerchant } from '../MerchantContext'
 import { useSession } from '../SessionContext'
 import { fetchMyOrdersAtShop, fetchProducts, signOut, ORDER_HISTORY_LIMIT } from '../store'
@@ -11,6 +11,7 @@ import { formatOrderDate, formatCalendarDate } from '../orderDate'
 import { formatTaxRate } from '../receipt'
 import { fulfilmentLabel, feeLineLabel } from '../fulfilmentLabel'
 import { cn } from '@/lib/utils'
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 import AuthPanel from './AuthPanel'
 import MoneyLine from './MoneyLine'
 import OrderTimeline from './OrderTimeline'
@@ -41,7 +42,6 @@ export default function OrderHistory() {
   // the one thing this screen must never show.
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [products, setProducts] = useState<Product[]>([])
-  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const merchantId = merchant?.id
   const userId = account?.id
@@ -140,10 +140,11 @@ export default function OrderHistory() {
 
       {orders && orders.length > 0 && (
         <>
-          <div className="border border-clay-border rounded-xl overflow-hidden bg-surface-raised">
+          {/* One-open-at-a-time accordion. The chevron is the point: the old plain rows gave a
+              customer no sign they could be opened, so the receipt detail sat unfound. */}
+          <Accordion multiple={false} className="border border-clay-border rounded-xl overflow-hidden bg-surface-raised">
             {orders.map((o, i) => {
               const id = o.order_number ?? o.id ?? String(i)
-              const expanded = expandedId === id
               // The currency the order was PAID in, not the shop's current one. They are the same
               // today (the selector locks after a shop's first order), but a receipt re-denominated
               // by a later settings change would be a forgery.
@@ -153,37 +154,35 @@ export default function OrderHistory() {
               const tax = o.tax ?? 0
               const taxRate = o.tax_rate ?? 0
               return (
-                <div key={id} className={cn(i > 0 && 'border-t border-clay-border')}>
+                <AccordionItem key={id} value={id} className={cn('border-clay-border', i > 0 && 'border-t')}>
                   {/* Status and total sit on the row, unexpanded. "Where's my order?" is the single
-                      most common reason this screen is opened — it must not cost a tap. */}
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId(expanded ? null : id)}
-                    aria-expanded={expanded}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-oxblood-tint/40 transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-mono text-[13px] text-ink truncate">{o.order_number}</div>
-                      <div className="text-[12px] text-rose-muted mt-0.5">{formatOrderDate(o.created_at, lang)}</div>
-                      {/* When placed vs. when the customer wants it — a legacy order (placed
-                          before #91) shows `—` rather than nothing, so it reads as "no date was
-                          ever collected" and not as data this row lost. */}
-                      <div className="text-[12px] text-rose-muted mt-0.5">
-                        {o.fulfil_date
-                          ? `${t('For', '取货日期')} ${formatCalendarDate(o.fulfil_date, lang)}`
-                          : '—'}
+                      most common reason this screen is opened — it must not cost a tap. The two
+                      default up/down glyphs are hidden in favour of one chevron that rotates. */}
+                  <AccordionTrigger className="items-center gap-3 px-4 py-3 rounded-none border-0 font-normal cursor-pointer hover:no-underline hover:bg-oxblood-tint/40 transition-colors [&_[data-slot=accordion-trigger-icon]]:hidden">
+                    <div className="flex flex-1 min-w-0 items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="font-mono text-[13px] text-ink truncate">{o.order_number}</div>
+                        <div className="text-[12px] text-rose-muted mt-0.5">{formatOrderDate(o.created_at, lang)}</div>
+                        {/* When placed vs. when the customer wants it — a legacy order (placed
+                            before #91) shows `—` rather than nothing, so it reads as "no date was
+                            ever collected" and not as data this row lost. */}
+                        <div className="text-[12px] text-rose-muted mt-0.5">
+                          {o.fulfil_date
+                            ? `${t('For', '取货日期')} ${formatCalendarDate(o.fulfil_date, lang)}`
+                            : '—'}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <StatusBadge status={o.status ?? 'new'} t={t} />
+                        <span className="text-[14px] font-medium text-ink tabular-nums">
+                          {formatMoney(o.total, currency)}
+                        </span>
+                        <ChevronDown className="size-4 text-rose-muted transition-transform duration-200 group-aria-expanded/accordion-trigger:rotate-180" strokeWidth={2} />
                       </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                      <StatusBadge status={o.status ?? 'new'} t={t} />
-                      <span className="text-[14px] font-medium text-ink tabular-nums">
-                        {formatMoney(o.total, currency)}
-                      </span>
-                    </div>
-                  </button>
+                  </AccordionTrigger>
 
-                  {expanded && (
-                    <div className="px-4 pb-4 pt-1 border-t border-clay-border/60 bg-oxblood-tint/30">
+                  <AccordionContent className="px-4 pb-4 pt-3 border-t border-clay-border/60 bg-oxblood-tint/30">
                       {(o.items ?? []).map((item, n) => (
                         // Index (`n`) in the key, not just id: a split promo writes two lines
                         // sharing the same product id (base half + promo half), and an id-only
@@ -241,13 +240,11 @@ export default function OrderHistory() {
                       </div>
                       <OrderTimeline status={o.status ?? 'new'} mode={o.mode} t={t} />
                       <Tracking order={o} t={t} />
-                    </div>
-                  )}
-
-                </div>
+                  </AccordionContent>
+                </AccordionItem>
               )
             })}
-          </div>
+          </Accordion>
 
           {/* The cap is stated, not silently applied: a truncated list with nothing said reads as
               "these are all my orders" when it isn't. */}
