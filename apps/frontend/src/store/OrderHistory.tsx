@@ -12,6 +12,7 @@ import { fulfilmentLabel, feeLineLabel } from '../fulfilmentLabel'
 import { cn } from '@/lib/utils'
 import AuthPanel from './AuthPanel'
 import MoneyLine from './MoneyLine'
+import OrderTimeline from './OrderTimeline'
 import LanguageSelect from '../components/LanguageSelect'
 import type { Order, OrderItem, Product, Translate } from '../types'
 
@@ -237,6 +238,7 @@ export default function OrderHistory() {
                         </span>
                         <span className="text-right">{formatMoney(o.total, currency)}</span>
                       </div>
+                      <OrderTimeline status={o.status ?? 'new'} mode={o.mode} t={t} />
                       <Tracking order={o} t={t} />
                     </div>
                   )}
