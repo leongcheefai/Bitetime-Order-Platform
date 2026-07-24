@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useState, type ReactNode } from 'react'
-import { AlertTriangle, Check } from 'lucide-react'
+import { AlertTriangle, Check, ExternalLink, Timer } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
 import {
@@ -260,6 +260,97 @@ function CancelBody({ renewsAt }: { renewsAt: string | null }) {
   )
 }
 
+/**
+ * The trial callout — the one place a merchant sees "you are on a clock" without having to read
+ * the plan sentence. A tinted card, not a rose one, so it reads as information rather than the
+ * warning states the BillingBanner owns. The bar drains: `progress` is the fraction of the trial
+ * still left, so a fuller bar means more runway.
+ */
+function TrialBanner({ daysLeft, trialEndsAt, progress }: {
+  daysLeft: number; trialEndsAt: string; progress: number
+}) {
+  const { t } = useSession()
+  const heading = daysLeft > 0
+    ? t(`Your trial ends in ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}`,
+        `试用还剩 ${daysLeft} 天`)
+    : t('Your trial ends today', '试用今天结束')
+  return (
+    <div className="bg-cream border-[1.5px] border-rose-border rounded-2xl p-5 mb-6 w-full box-border max-sm:p-4">
+      <div className="flex items-start gap-3">
+        <Timer size={20} strokeWidth={2} className="text-oxblood shrink-0 mt-[2px]" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <p className="font-heading text-[15px] font-medium text-oxblood">{heading}</p>
+          <p className="text-[13px] text-text-secondary mt-0.5">
+            {t(`Ending ${fmtDate(trialEndsAt)}.`, `${fmtDate(trialEndsAt)} 结束。`)}
+          </p>
+          {/* Draining bar: width tracks the fraction remaining. */}
+          <div className="mt-3 h-1.5 w-full rounded-full bg-rose-border/40 overflow-hidden">
+            <div
+              className="h-full rounded-full bg-oxblood transition-[width] duration-300"
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The billing facts, laid out as labelled cells — the Glide "Summary" block, minus the cells we
+ * do not hold (card last4, account credit). Payment method and history both route to the Stripe
+ * portal: the last4 and the invoices live there, and duplicating them here would mean a second
+ * source to keep honest. Only rendered for a shop with a live subscription (`canManage`).
+ */
+function SummaryGrid({ nextPayment, renewalLabel, renewalValue }: {
+  nextPayment: string | null
+  renewalLabel: string
+  renewalValue: string
+}) {
+  const { t } = useSession()
+  const [busy, setBusy] = useState(false)
+  async function toPortal() {
+    setBusy(true)
+    try { window.location.assign(await openBillingPortal()) }
+    catch (err: any) {
+      toast.error(err?.message || t('Could not open the billing portal', '无法打开账单门户'))
+      setBusy(false)
+    }
+  }
+  const label = 'text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary'
+  const value = 'text-[14px] text-oxblood mt-1'
+  const portalLink = 'text-[14px] text-oxblood underline underline-offset-2 mt-1 text-left disabled:opacity-60'
+  return (
+    <div className={CARD}>
+      <h3 className={HEADING}>{t('Summary', '摘要')}</h3>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5 max-sm:grid-cols-1">
+        {nextPayment && (
+          <div>
+            <p className={label}>{t('Next payment', '下次付款')}</p>
+            <p className={value}>{nextPayment}</p>
+          </div>
+        )}
+        <div>
+          <p className={label}>{renewalLabel}</p>
+          <p className={value}>{renewalValue}</p>
+        </div>
+        <div>
+          <p className={label}>{t('Payment method', '付款方式')}</p>
+          <button type="button" className={portalLink} onClick={toPortal} disabled={busy}>
+            {t('Manage in portal', '在门户中管理')}
+          </button>
+        </div>
+        <div>
+          <p className={label}>{t('Payment history', '付款记录')}</p>
+          <button type="button" className={portalLink} onClick={toPortal} disabled={busy}>
+            {t('Billing portal', '账单门户')}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SubscriptionTab() {
   const { t, merchant } = useSession()
   const { pricing } = usePlatformPricing()
@@ -299,17 +390,31 @@ export default function SubscriptionTab() {
 
   return (
     <div className="w-full">
+      {state.kind === 'trial' && (
+        <TrialBanner daysLeft={state.daysLeft} trialEndsAt={state.trialEndsAt} progress={state.progress} />
+      )}
       <div className={CARD}>
-        <h3 className={HEADING}>{t('Your plan', '您的方案')}</h3>
-        <div className="flex items-center gap-3 flex-wrap mb-3">
-          <span className="font-heading text-[22px] text-oxblood">
-            {state.plan === 'pro' ? 'Pro' : t('Basic', '基础版')}
-          </span>
-          <Badge variant={state.plan === 'pro' ? 'default' : 'outline'} className="uppercase tracking-[0.08em]">
-            {state.plan === 'pro' ? 'Pro' : t('Basic', '基础版')}
-          </Badge>
-          <span className="text-[13px] text-text-secondary">
-            {formatMoney(planPrice, pricing.currency)}{per}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <h3 className={HEADING}>{t('Your plan', '您的方案')}</h3>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="font-heading text-[22px] text-oxblood">
+                {state.plan === 'pro' ? 'Pro' : t('Basic', '基础版')}
+              </span>
+              <Badge variant={state.plan === 'pro' ? 'default' : 'outline'} className="uppercase tracking-[0.08em]">
+                {state.plan === 'pro' ? 'Pro' : t('Basic', '基础版')}
+              </Badge>
+            </div>
+            <a
+              href="/#pricing" target="_blank" rel="noopener"
+              className="inline-flex items-center gap-1 text-[13px] text-oxblood underline underline-offset-2 mt-2"
+            >
+              {t('Plan details', '方案详情')}
+              <ExternalLink size={13} strokeWidth={2} aria-hidden />
+            </a>
+          </div>
+          <span className="font-heading text-[18px] text-oxblood whitespace-nowrap shrink-0">
+            {formatMoney(planPrice, pricing.currency)}<span className="text-[13px] text-text-secondary">{per}</span>
           </span>
         </div>
 
@@ -408,6 +513,23 @@ export default function SubscriptionTab() {
           </>
         )}
       </div>
+
+      {state.canManage && (
+        <SummaryGrid
+          nextPayment={
+            state.kind === 'ending' || !renewsAt
+              ? null
+              : t(`${formatMoney(planPrice, pricing.currency)} on ${fmtDate(renewsAt)}`,
+                  `${formatMoney(planPrice, pricing.currency)}，${fmtDate(renewsAt)}`)
+          }
+          renewalLabel={state.kind === 'ending' ? t('Ends', '结束') : t('Renewal', '续订')}
+          renewalValue={
+            state.kind === 'ending'
+              ? (endsAt ? fmtDate(endsAt) : t('End of current period', '本周期结束时'))
+              : (renewsAt ? fmtDate(renewsAt) : t('Active', '有效'))
+          }
+        />
+      )}
 
       {/* The pitch is shown to any shop that is not already Pro, INCLUDING one with no
           subscription behind it: a Pro lock's CTA promises "see the price and what Pro adds",
