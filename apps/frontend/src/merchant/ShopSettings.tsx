@@ -16,10 +16,12 @@ import { isDirty, type SettingsFields } from './settingsDirty'
 import ReferralTab from './ReferralTab'
 import FulfilmentTab from './FulfilmentTab'
 import { ProLock } from './ProLock'
+import SubscriptionTab from './SubscriptionTab'
+import { useDashboardSubsection } from '../useDashboardSection'
 import { useProAccess, isRequiresPro } from '../plan'
 import AddressAutocomplete from '../store/AddressAutocomplete'
 
-type TabKey = 'shipping' | 'fulfilment' | 'payment' | 'notifications' | 'referral'
+type TabKey = 'shipping' | 'fulfilment' | 'payment' | 'notifications' | 'subscription' | 'referral'
 
 // Tabbed Shop Settings (issue #19). A container renders a horizontal tab bar and
 // the active tab's form; each tab is its own form with its own Save. Only the
@@ -29,8 +31,23 @@ export default function ShopSettings() {
   const { t } = useSession()
   const pro = useProAccess()
   const { guard, registerBlocker } = useNavGuard()
-  const [tab, setTab] = useState<TabKey>('shipping')
   const [dirty, setDirty] = useState(false)
+
+  const TABS: { key: TabKey; label: string; tag?: string }[] = [
+    { key: 'shipping', label: t('Shipping', '运费') },
+    { key: 'fulfilment', label: t('Fulfilment', '取货') },
+    { key: 'payment', label: t('Payment', '付款') },
+    // Marked from the tab bar, not only once opened — a basic shop should see that alerts are
+    // a paid feature before it goes looking for the form (#110).
+    { key: 'notifications', label: t('Notifications', '通知'), tag: pro ? undefined : 'Pro' },
+    { key: 'subscription', label: t('Subscription', '订阅') },
+    { key: 'referral', label: t('Referral', '推荐') },
+  ]
+
+  // The sub-tab lives in the URL hash (`#settings/payment`), so it survives a refresh and a Pro
+  // CTA can link straight at Subscription (#112). Keys come from TABS so a new tab is declared
+  // once, not in a parallel list that can drift.
+  const [tab, setTab] = useDashboardSubsection('settings', TABS.map(x => x.key), 'shipping')
 
   // Register this section's dirty state so the Dashboard sidebar can guard against it.
   useEffect(() => {
@@ -53,15 +70,6 @@ export default function ShopSettings() {
     guard(() => { setDirty(false); setTab(next) })
   }
 
-  const TABS: { key: TabKey; label: string; tag?: string }[] = [
-    { key: 'shipping', label: t('Shipping', '运费') },
-    { key: 'fulfilment', label: t('Fulfilment', '取货') },
-    { key: 'payment', label: t('Payment', '付款') },
-    // Marked from the tab bar, not only once opened — a basic shop should see that alerts are
-    // a paid feature before it goes looking for the form (#110).
-    { key: 'notifications', label: t('Notifications', '通知'), tag: pro ? undefined : 'Pro' },
-    { key: 'referral', label: t('Referral', '推荐') },
-  ]
 
   return (
     <div className="w-full">
@@ -91,6 +99,7 @@ export default function ShopSettings() {
             why={t('Get a Telegram message the moment an order comes in, so you never have to watch the dashboard. Available on the Pro plan.',
               '订单一进来就收到 Telegram 消息，无需盯着后台。Pro 方案专享。')}
           />)}
+      {tab === 'subscription' && <SubscriptionTab />}
       {tab === 'referral' && <ReferralTab />}
     </div>
   )

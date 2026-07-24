@@ -28,13 +28,16 @@ const FROM_CLI: Record<string, string> = {
 // Stripe key. These suites never reach Stripe — nothing they touch calls it, and a real key
 // in a test process is a liability rather than an asset. Stub the keys so importing the app
 // is possible; anything that genuinely exercises Stripe belongs in a suite that says so.
+// The four price ids must be DISTINCT: the webhook reconciles a shop's tier by looking a
+// subscription's price id back up in this map (#112), so four identical stubs would resolve
+// every price to basic/monthly and the plan-reconciliation suite would assert nothing.
 const STRIPE_STUBS: Record<string, string> = {
   STRIPE_SECRET_KEY: 'sk_test_stub',
   STRIPE_WEBHOOK_SECRET: 'whsec_stub',
-  STRIPE_PRICE_BASIC_MONTHLY: 'price_stub',
-  STRIPE_PRICE_BASIC_YEARLY: 'price_stub',
-  STRIPE_PRICE_PRO_MONTHLY: 'price_stub',
-  STRIPE_PRICE_PRO_YEARLY: 'price_stub',
+  STRIPE_PRICE_BASIC_MONTHLY: 'price_stub_basic_monthly',
+  STRIPE_PRICE_BASIC_YEARLY: 'price_stub_basic_yearly',
+  STRIPE_PRICE_PRO_MONTHLY: 'price_stub_pro_monthly',
+  STRIPE_PRICE_PRO_YEARLY: 'price_stub_pro_yearly',
 }
 
 function supabaseStatusEnv(): Map<string, string> {

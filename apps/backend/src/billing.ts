@@ -1,5 +1,7 @@
 import type Stripe from 'stripe'
 import { admin } from './supabase.js'
+import { env } from './env.js'
+import { planFromPriceId } from './pricing.js'
 
 const toIso = (unix: number | null | undefined) =>
   unix ? new Date(unix * 1000).toISOString() : null
@@ -12,6 +14,40 @@ export async function upsertBilling(merchantId: string, fields: Record<string, u
       { merchant_id: merchantId, updated_at: new Date().toISOString(), ...fields },
       { onConflict: 'merchant_id' }
     )
+  if (error) throw error
+}
+
+/**
+ * Bring `merchants.plan` / `billing_cycle` into line with the price the shop is ACTUALLY paying
+ * for (#112). Called from the two money-moving webhook events — the Customer Portal's plan swap
+ * (`customer.subscription.updated`) and the paid signup (`checkout.session.completed`).
+ *
+ * This is the reconciliation CONTEXT.md's entitlement invariant always named as future work, and
+ * it reverses where the tier comes from: signup writes a PROVISIONAL value from the owner's
+ * chosen tier, and the first webhook after money moves confirms or corrects it. A shop can no
+ * longer end up entitled to a tier it never bought by declaring one at signup.
+ *
+ * Reads the price CURRENTLY on the subscription, which is what makes period-end downgrades free:
+ * a downgrade scheduled in the portal has not touched the item yet, so this keeps returning Pro
+ * until the schedule executes — no "is a change pending?" branch anywhere.
+ *
+ * An unrecognised price is a NO-OP, never a downgrade: see planFromPriceId. The shop keeps the
+ * tier it had and the mismatch is logged for a human.
+ */
+export async function reconcileMerchantPlan(merchantId: string, sub: Stripe.Subscription) {
+  const priceId = sub.items?.data?.[0]?.price?.id
+  const tier = planFromPriceId(env.prices, priceId ?? '')
+  if (!tier) {
+    console.warn(
+      `Subscription ${sub.id} carries price ${priceId ?? '(none)'}, which is not a configured ` +
+        `plan price — leaving merchant ${merchantId} on its existing plan.`,
+    )
+    return
+  }
+  const { error } = await admin
+    .from('merchants')
+    .update({ plan: tier.plan, billing_cycle: tier.cycle })
+    .eq('id', merchantId)
   if (error) throw error
 }
 

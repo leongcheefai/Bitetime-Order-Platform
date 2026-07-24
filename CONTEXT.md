@@ -172,11 +172,24 @@ Which **features** a shop may use, as opposed to whether its subscription is
 the entitlement signal is a single field, **`merchants.plan === 'pro'`**. It is
 trustworthy because it is the field, not a request: the browser holds no grant
 on `merchants`, and `plan` is written in exactly three places — signup (the
-owner's chosen tier, `POST /api/merchants`), superadmin `comp-merchant`, and a
-future checkout/webhook reconciliation. **An owner request never writes it** —
-the same rule that governs `orders.user_id` and `promo_sold`. A shop cannot
-self-upgrade to Pro; a paid Pro checkout or a comp is the only way the field
-becomes `'pro'` on a live shop.
+owner's chosen tier, `POST /api/merchants`), superadmin `comp-merchant`, and the
+webhook reconciliation below. **An owner request never writes it** — the same
+rule that governs `orders.user_id` and `promo_sold`. A shop cannot self-upgrade
+to Pro; a paid Pro checkout or a comp is the only way the field becomes `'pro'`
+on a live shop.
+
+**The tier is derived from the money, not from the signup body.** Signup writes a
+**provisional** plan — the tier the owner picked — and the first webhook after
+money moves confirms or corrects it: `reconcileMerchantPlan` (`billing.ts`) reads
+the price currently on the Stripe subscription, maps it back through
+`planFromPriceId` (`pricing.ts`, the inverse of `priceId`) and writes both `plan`
+and `billing_cycle`. It runs on `customer.subscription.updated` (the Customer
+Portal's plan swap) and `checkout.session.completed` (paid signup), so a body
+claiming `plan: 'pro'` that checked out at the basic price lands on basic. An
+**unrecognised price is a no-op**, never a downgrade: guessing there would
+silently strip a paying Pro shop of everything it pays for, and a stale column is
+the cheaper failure (the same fail-closed instinct as `hasProAccess`). See
+[ADR 0004](docs/adr/0004-plan-entitlement-follows-the-stripe-price.md).
 
 **The gate is the backend, not the UI.** `requirePro` chains after
 `requireMerchantOwns` (reusing the merchant it already loaded, superadmin
@@ -198,9 +211,24 @@ features that do **not** yet exist — email order alerts, multiple shops,
 custom-link edit UI, priority support — are gated when they are built, not
 before; a lock on an unreachable feature is dead code.
 
-**In-place basic→pro upgrade is deferred.** `POST /api/checkout` refuses a shop
-that already has a live subscription, so an existing basic shop cannot reach Pro
-through it; the real path is a Stripe subscription price-swap plus a webhook that
-reconciles `merchants.plan` from the new price (the "future reconciliation" the
-invariant names). Until that lands, the upgrade CTA opens the billing portal and
-the only route from basic to Pro is a superadmin comp.
+**Upgrading is Stripe's job; we only listen.** `POST /api/checkout` refuses a shop
+that already has a live subscription — and an approved basic shop always has one
+(its cardless trial) — so checkout is not the upgrade path and never was. The
+**Customer Portal** swaps the price, configured in the Stripe dashboard rather
+than in this repo; a fresh Stripe environment without plan-switching configured
+makes upgrade silently do nothing. **Settings → Subscription** is the shop-side
+screen: it shows the plan, price and renewal date, and every Pro lock's CTA
+routes there rather than firing the portal blind, because the portal 404s for a
+shop with no Stripe customer. **A downgrade takes effect at the end of the paid
+period** — nothing here implements that: the schedule lives in Stripe, and
+because the reconciliation reads the price *currently* on the subscription, a
+pending change simply does not register until it applies.
+
+**A shop that drops to basic keeps its Pro artifacts running.** Vouchers stay
+redeemable, the Telegram token keeps sending, promos keep discounting — the hot
+paths are plan-blind by the design above, and nothing revokes the data. This is a
+**known leak, accepted knowingly**: pre-launch the exploitable population is zero,
+and the honest fix (deactivating vouchers, clearing the secret, dropping promo
+prices at the transition) needs a `vouchers.active` column the table does not
+have. It is its own issue. The one thing that must **not** happen is a plan check
+inside the priced order transaction.

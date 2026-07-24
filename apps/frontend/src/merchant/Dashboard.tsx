@@ -14,6 +14,7 @@ import OrdersView from './OrdersView'
 import CustomersView from './CustomersView'
 import FeedbackFab from './FeedbackFab'
 import { NavGuardProvider, useNavGuard } from './NavGuard'
+import { UpgradeNavProvider } from './UpgradeNav'
 import { useDashboardSection } from '../useDashboardSection'
 import { useProAccess } from '../plan'
 import { ProLock } from './ProLock'
@@ -66,9 +67,29 @@ function DashboardInner() {
 
   // Route sidebar section switches through the unsaved-changes guard so a dirty
   // Settings tab cannot be silently discarded by navigating away.
-  const selectSection = (key: string) => guard(() => setSection(key))
+  const selectSection = useCallback((key: string) => guard(() => setSection(key)), [guard, setSection])
+
+  // Same guard, but aimed at a sub-tab and reporting back once the merchant has actually let
+  // the navigation happen (#112).
+  // Bumping this remounts the Settings subtree, which is the ONLY way a sub-tab request lands:
+  // ShopSettings reads its tab from the hash in a `useState` initialiser, so it must be
+  // re-mounted to see a new one. A three-file contract (here, useDashboardSubsection,
+  // ShopSettings) — change one and check the others.
+  //
+  // Inside `guard`, so a cancelled confirm neither navigates nor discards the merchant's edits.
+  const [settingsRemounts, setSettingsRemounts] = useState(0)
+  const goToSettingsTab = useCallback(
+    (sub: string) => guard(() => {
+      setSection('settings', sub)
+      setSettingsRemounts(n => n + 1)
+    }),
+    [guard, setSection],
+  )
 
   return (
+    // Pro locks anywhere below can ask for Settings → Subscription (#112); handing them the
+    // GUARDED switch is what stops an upgrade CTA discarding a half-typed Shipping form.
+    <UpgradeNavProvider navigate={goToSettingsTab}>
     <DashboardShell
       title={merchant!.name}
       role={role === 'superadmin' ? t('Viewing as shop', '以店铺身份查看') : t('Merchant', '商家')}
@@ -79,7 +100,7 @@ function DashboardInner() {
     >
       <BillingBanner />
       <OnboardingChecklist section={section} onNavigate={selectSection} />
-      <div key={section} {...enter}>
+      <div key={section === 'settings' ? `settings:${settingsRemounts}` : section} {...enter}>
         {section === 'overview'  && <Overview />}
         {section === 'orders'    && <OrdersView onOrdersChanged={refreshNewOrders} />}
         {section === 'products'  && <ProductsManager />}
@@ -98,5 +119,6 @@ function DashboardInner() {
       </div>
       <FeedbackFab />
     </DashboardShell>
+    </UpgradeNavProvider>
   )
 }

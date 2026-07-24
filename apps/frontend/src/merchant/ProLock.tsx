@@ -3,6 +3,7 @@ import { Lock } from 'lucide-react'
 import { toast } from 'sonner'
 import { useSession } from '../SessionContext'
 import { openBillingPortal } from '../store'
+import { useUpgradeNav } from './UpgradeNav'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 
@@ -24,12 +25,30 @@ export function ProBadge() {
 }
 
 /**
- * Sends the merchant to the Stripe billing portal.
+ * The CTA on a lock: takes the merchant to Settings → Subscription, NOT to Stripe (#112).
  *
- * NOT an in-place upgrade — `POST /api/checkout` refuses a shop that already has a live
- * subscription, so basic→pro cannot be automated yet (a subscription price-swap plus a webhook
- * that reconciles `merchants.plan` is the tracked follow-up). The portal is the honest
- * destination in the meantime: it is where the shop's subscription actually lives.
+ * Locks appear in three places and none of them is a good place to make a payment decision —
+ * the merchant has not yet been told what Pro costs. The tab shows the price, the feature list
+ * and the shop's actual subscription state, and only then offers the portal. It also cannot
+ * dead-end: a shop with no Stripe customer gets a sentence there instead of a 404 from a button
+ * that looked like it would work.
+ */
+export function UpgradeLink({ className }: { className?: string }) {
+  const { t } = useSession()
+  const { goToSubscription } = useUpgradeNav()
+  return (
+    <Button type="button" size="sm" onClick={goToSubscription} className={className}>
+      {t('Upgrade to Pro', '升级到 Pro')}
+    </Button>
+  )
+}
+
+/**
+ * Sends the merchant to the Stripe billing portal, where the plan switch actually happens.
+ *
+ * Used only from the Subscription tab — the portal is a terminal action, taken once the merchant
+ * has seen the price. Stripe owns the swap (and its proration and scheduling); the
+ * `customer.subscription.updated` webhook brings the new tier back into `merchants.plan`.
  */
 export function UpgradeButton({ className }: { className?: string }) {
   const { t } = useSession()
@@ -73,9 +92,9 @@ export function ProLock({ what, why }: { what: string; why: string }) {
         <ProBadge />
       </div>
       <p className="text-[13px] text-text-secondary max-w-[380px] mx-auto mb-5 leading-[1.6]">{why}</p>
-      <UpgradeButton />
+      <UpgradeLink />
       <p className="text-[12px] text-text-tertiary mt-3">
-        {t('Manage your subscription in the billing portal.', '在账单门户中管理您的订阅。')}
+        {t('See the price and what Pro adds in Settings → Subscription.', '在设置 → 订阅中查看价格和 Pro 功能。')}
       </p>
     </div>
   )

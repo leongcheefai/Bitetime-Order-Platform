@@ -16,7 +16,7 @@ import { env } from './env.js'
 import { admin, getUserFromToken } from './supabase.js'
 import { requireUser, requireSuperadmin, requireMerchantOwns, requirePro, hasProAccess, REQUIRES_PRO, type AppEnv } from './mw.js'
 import { stripe, priceFor, isValidPlan, isValidCycle } from './stripe.js'
-import { upsertBilling, setMerchantStatus, billingFromSubscription } from './billing.js'
+import { upsertBilling, setMerchantStatus, billingFromSubscription, reconcileMerchantPlan } from './billing.js'
 import { canStartTrial, buildTrialReminderEmail } from './billingLifecycle.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
@@ -1162,6 +1162,9 @@ app.post('/api/stripe/webhook', async (c) => {
             typeof session.subscription === 'string' ? session.subscription : session.subscription.id
           const sub = await stripe.subscriptions.retrieve(subscriptionId)
           await upsertBilling(merchantId, billingFromSubscription(sub))
+          // The tier comes from the price they just paid, not from what signup wrote (#112).
+          // A body claiming `plan: 'pro'` that checked out at the basic price lands on basic.
+          await reconcileMerchantPlan(merchantId, sub)
           await setMerchantStatus(merchantId, 'active')
         }
         break
@@ -1182,6 +1185,10 @@ app.post('/api/stripe/webhook', async (c) => {
             }
           }
           await upsertBilling(merchantId, fields)
+          // This is the plan-switch path: the Customer Portal swaps the price and Stripe fires
+          // this event, so the tier follows the money (#112). Also repairs `billing_cycle`,
+          // which a monthly↔yearly switch in the portal used to leave stale.
+          await reconcileMerchantPlan(merchantId, sub)
         }
         break
       }

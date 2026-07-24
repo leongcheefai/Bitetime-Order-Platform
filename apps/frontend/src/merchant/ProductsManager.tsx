@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DataTable, SortableHeader } from '../components/ui/data-table'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '../components/ui/empty'
 import ImagePicker from './ProductImages'
-import { ProBadge, UpgradeButton } from './ProLock'
+import { ProBadge, UpgradeLink } from './ProLock'
 import { useProAccess, isRequiresPro } from '../plan'
 
 // Canonical unit options (value stored as-is; label is bilingual).
@@ -456,7 +456,7 @@ export default function ProductsManager() {
                       {t('Put this item on sale', '为此商品设置优惠')}
                       <ProBadge />
                     </span>
-                    <UpgradeButton className="px-3 py-[6px] text-[12px]" />
+                    <UpgradeLink className="px-3 py-[6px] text-[12px]" />
                   </div>
                 )}
                 <div className="flex flex-col gap-[6px]">
