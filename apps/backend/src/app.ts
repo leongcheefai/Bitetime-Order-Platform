@@ -20,7 +20,7 @@ import { upsertBilling, setMerchantStatus, billingFromSubscription, reconcileMer
 import { downgradePhases, ScheduleError, type LivePhase } from './subscriptionSchedule.js'
 import { canStartTrial, buildTrialReminderEmail } from './billingLifecycle.js'
 import { resendSend } from './email.js'
-import { notifyOrderPlaced, telegramSend } from './notify.js'
+import { notifyOrderPlaced, emailOrderConfirmation, telegramSend } from './notify.js'
 import { signUpCustomer, isDuplicateEmailError } from './customerSignup.js'
 import { createSlidingWindow } from './rateLimit.js'
 import { clientIp } from './clientIp.js'
@@ -1134,14 +1134,43 @@ app.post('/api/orders', async (c) => {
   }
 })
 
-// ── Order notification — sends Telegram server-side ────────────────────────────
-// The customer is anonymous; abuse is bounded by requiring a real order. The
-// token is read from merchant_secrets (service role) and never reaches the client.
+// The two outbound adapters, held in a mutable object so tests can capture what
+// would be sent without a live network. Production uses the real fetch adapters.
+export const notifyDeps: { telegram: typeof telegramSend; email: typeof resendSend } = {
+  telegram: telegramSend,
+  email: resendSend,
+}
+
+// ── Order notification — fans out to two recipients ────────────────────────────
+// The customer is anonymous; abuse is bounded by requiring a real order (and, for
+// the email, by the one-shot confirmation_emailed_at guard). One post-commit event
+// produces two independent, best-effort notices: the merchant's Telegram and the
+// signed-in customer's confirmation email. Neither blocks or suppresses the other,
+// and neither touches the already-committed order.
+//
+// `lang` selects the email's presentation only (never identity or money), so a
+// body-supplied value is acceptable; absent/invalid ⇒ English in the builder. The
+// recipient is NEVER taken from the body — it is read from the order's account.
 app.post('/api/notify/order', async (c) => {
-  const { merchantId, orderNumber } = await c.req.json().catch(() => ({}))
-  const result = await notifyOrderPlaced(admin, telegramSend, { merchantId, orderNumber })
-  if (!result.ok) return c.json(result, result.error === 'order not found' ? 404 : 400)
-  return c.json(result)
+  const { merchantId, orderNumber, lang } = await c.req.json().catch(() => ({}))
+  // Concurrent, not sequential: the two are independent best-effort sends and a slow Telegram
+  // call must not delay the customer's email. Each returns its own result and never throws, so
+  // Promise.all cannot reject — neither channel blocks or suppresses the other.
+  const [telegram, email] = await Promise.all([
+    notifyOrderPlaced(admin, notifyDeps.telegram, { merchantId, orderNumber }),
+    emailOrderConfirmation(
+      admin, admin, notifyDeps.email,
+      { merchantId, orderNumber, lang },
+      { frontendUrl: env.frontendUrl, emailFrom: env.emailFrom },
+    ),
+  ])
+  // 404 only when the order genuinely does not exist (both agree). Otherwise 200
+  // with the combined result — either channel skipping or erroring is normal and
+  // the fire-and-forget caller ignores the body.
+  if (telegram.error === 'order not found' && email.error === 'order not found') {
+    return c.json({ telegram, email }, 404)
+  }
+  return c.json({ telegram, email })
 })
 
 // ── Guest order tracking ──────────────────────────────────────────────────────
@@ -1422,7 +1451,7 @@ app.post('/api/stripe/webhook', async (c) => {
               trialEndsAt: new Date(sub.trial_end * 1000).toISOString(),
               dashboardUrl: `${env.frontendUrl}/merchant`,
             })
-            await resendSend(ownerEmail, subject, text)
+            await resendSend(ownerEmail, subject, { text })
           }
         }
         break

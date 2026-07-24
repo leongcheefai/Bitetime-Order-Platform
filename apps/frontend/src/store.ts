@@ -708,14 +708,15 @@ export async function quoteDelivery(merchantId: string, placeId: string): Promis
   return (await res.json()) as { km: number; fee: number }
 }
 
-// Trigger the server-side order notification (Telegram). The bot token stays on
-// the backend, which reads it from merchant_secrets — only the order reference
-// is sent from the browser.
-export async function notifyOrderPlacedRemote(merchantId: string, orderNumber: string) {
+// Trigger the server-side order notification fan-out: the merchant's Telegram and
+// the signed-in customer's confirmation email. The bot token and the recipient
+// address both stay on the backend — the browser sends only the order reference
+// and `lang`, which selects the email's language (never who receives it).
+export async function notifyOrderPlacedRemote(merchantId: string, orderNumber: string, lang: 'en' | 'zh') {
   const res = await fetch(`${API_URL}/api/notify/order`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ merchantId, orderNumber }),
+    body: JSON.stringify({ merchantId, orderNumber, lang }),
   })
   if (!res.ok) throw new Error('Order notification failed')
 }

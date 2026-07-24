@@ -762,7 +762,7 @@ export default function Storefront() {
           .catch(() => {})
       }
       // Best-effort server-side Telegram notify; never blocks a placed order.
-      await notifyOrderPlacedRemote(merchant.id, result.orderNumber).catch(() => {})
+      await notifyOrderPlacedRemote(merchant.id, result.orderNumber, lang).catch(() => {})
       setSuccess({
         orderNumber: result.orderNumber, items: cartItems, subtotal, fee, discount, taxAmount, taxRate, total,
         // The SAME value the summary just labelled the fee with — `quotedForThisAddress` is what
