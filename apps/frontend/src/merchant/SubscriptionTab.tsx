@@ -324,7 +324,7 @@ function SummaryGrid({ nextPayment, renewalLabel, renewalValue }: {
   const { busy, toPortal } = useBillingPortal()
   const label = 'text-[11px] font-medium uppercase tracking-[0.08em] text-text-tertiary'
   const value = 'text-[14px] text-oxblood mt-1'
-  const portalLink = 'text-[14px] text-oxblood underline underline-offset-2 mt-1 text-left disabled:opacity-60'
+  const portalLink = 'text-[14px] text-oxblood underline underline-offset-2 mt-1 text-left cursor-pointer disabled:opacity-60 disabled:cursor-default'
   return (
     <div className={CARD}>
       <h3 className={HEADING}>{t('Summary', '摘要')}</h3>
