@@ -1038,12 +1038,12 @@ export default function Storefront() {
             )}
 
             <div className="flex flex-col items-center gap-2 mt-5">
-              <Link to={`/s/${merchant.slug}/track`} className="text-[13px] text-oxblood font-medium underline">
+              <button type="button" className="text-[13px] text-oxblood font-medium cursor-pointer underline inline-block" onClick={handleReset}>
+                {t('Back to shop', '返回商店')}
+              </button>
+              <Link to={`/s/${merchant.slug}/track`} className="text-[13px] text-rose-muted underline">
                 {t('Track your order', '追踪订单')}
               </Link>
-              <button type="button" className="text-[13px] text-rose-muted cursor-pointer underline inline-block" onClick={handleReset}>
-                {t('Place another order', '再下一单')}
-              </button>
             </div>
           </div>
         </div>
