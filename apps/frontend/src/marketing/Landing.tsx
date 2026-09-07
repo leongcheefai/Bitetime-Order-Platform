@@ -37,9 +37,10 @@ export default function Landing() {
 
   return (
     // Keep mm-land class — body:has(.mm-land) in index.css resets body padding/alignment
-    <div className="mm-land relative isolate flex flex-col items-stretch min-h-screen font-sans text-foreground bg-background">
+    <div className="mm-land relative isolate flex flex-col items-stretch min-h-dvh font-sans text-foreground bg-background">
 
       <MarketingNav />
+      <main className="flex-1 flex flex-col items-stretch">
 
       {/* ── Hero ── */}
       <section className="max-w-[700px] mx-auto px-8 pt-20 pb-16 text-center max-[600px]:px-5 max-[600px]:pt-12 max-[600px]:pb-10">
@@ -83,7 +84,7 @@ export default function Landing() {
             </h1>
           </HeroItem>
           <HeroItem>
-            <p className="text-base leading-[1.7] text-ink-700 max-w-[560px] mx-auto mb-9">
+            <p className="text-base leading-[1.7] text-foreground-secondary max-w-[560px] mx-auto mb-9">
               {t(
                 'Orders get lost across chats and screenshots. TinyOrder gives you one branded storefront link — so every order lands in one place and you look the part.',
                 '订单散落在各种聊天和截图里。TinyOrder 给你一个专属店面链接——所有订单集中一处，让你更专业。'
@@ -148,7 +149,7 @@ export default function Landing() {
                 <h3 className="font-heading text-[19px] font-semibold text-primary leading-[1.3] m-0 mb-2">
                   {t(step.title.en, step.title.zh)}
                 </h3>
-                <p className="text-[15px] leading-[1.6] text-ink-700 m-0">
+                <p className="text-[15px] leading-[1.6] text-foreground-secondary m-0">
                   {t(step.body.en, step.body.zh)}
                 </p>
               </div>
@@ -170,7 +171,7 @@ export default function Landing() {
         <h2 className={sectionTitle}>
           {t('Built for small businesses that sell direct', '专为直接面向顾客的小生意打造')}
         </h2>
-        <p className="-mt-6 mb-10 text-[15px] leading-[1.75] text-ink-700 text-center max-w-[560px] mx-auto">
+        <p className="-mt-6 mb-10 text-[15px] leading-[1.75] text-foreground-secondary text-center max-w-[560px] mx-auto">
           {t(
             'TinyOrder is for people who make and sell their own things — no website, designer or developer needed. If you can share a link, you can take orders online.',
             'TinyOrder 是为自己做、自己卖的人打造的——不需要网站、设计师或工程师，只要会分享链接，就能在线接单。',
@@ -182,17 +183,17 @@ export default function Landing() {
           <div>
             <HandCoins size={22} strokeWidth={1.5} className="text-primary mb-3" aria-hidden />
             <dt className="font-heading text-[19px] font-semibold text-primary leading-[1.3] mb-2.5">{t('Keep what you earn', '赚的钱，都是你的')}</dt>
-            <dd className="text-sm leading-[1.65] text-ink-700 m-0">{t('Your own link, your own customers — no marketplace cut, no competitor beside your listing.', '专属链接，专属顾客——没有平台抽成，也没有人在你旁边抢单。')}</dd>
+            <dd className="text-sm leading-[1.65] text-foreground-secondary m-0">{t('Your own link, your own customers — no marketplace cut, no competitor beside your listing.', '专属链接，专属顾客——没有平台抽成，也没有人在你旁边抢单。')}</dd>
           </div>
           <div>
             <ListChecks size={22} strokeWidth={1.5} className="text-primary mb-3" aria-hidden />
             <dt className="font-heading text-[19px] font-semibold text-primary leading-[1.3] mb-2.5">{t('Nothing slips through', '一单都不会漏')}</dt>
-            <dd className="text-sm leading-[1.65] text-ink-700 m-0">{t('Every order in one list. Mark it done in one tap — no scrolling through chats.', '所有订单集中一处。一键标记完成，不必再翻聊天记录。')}</dd>
+            <dd className="text-sm leading-[1.65] text-foreground-secondary m-0">{t('Every order in one list. Mark it done in one tap — no scrolling through chats.', '所有订单集中一处。一键标记完成，不必再翻聊天记录。')}</dd>
           </div>
           <div>
             <Languages size={22} strokeWidth={1.5} className="text-primary mb-3" aria-hidden />
             <dt className="font-heading text-[19px] font-semibold text-primary leading-[1.3] mb-2.5">{t('Your customers read it in their own language', '顾客用自己的语言下单')}</dt>
-            <dd className="text-sm leading-[1.65] text-ink-700 m-0">{t('Your shop shows in English or Chinese, whichever your customer prefers — write it once.', '店铺自动以中文或英文呈现，你只需写一次。')}</dd>
+            <dd className="text-sm leading-[1.65] text-foreground-secondary m-0">{t('Your shop shows in English or Chinese, whichever your customer prefers — write it once.', '店铺自动以中文或英文呈现，你只需写一次。')}</dd>
           </div>
         </dl>
         {/* The link out to /features, which used to close a separate "What you get" section below
@@ -233,7 +234,7 @@ export default function Landing() {
           until now the only thing to click was a link to a different page. */}
       {/* bg-card, the same band as "How it works" — the page ran three plain sections deep here
           ("What you get", pricing, FAQ) and the conversion section was the one carrying the least
-          weight of the three. Not bg-brand-100: that tint belongs to the footer CTA, and a second
+          weight of the three. Not bg-brand-wash: that tint belongs to the footer CTA, and a second
           one this close stops the closing CTA reading as the end. No bottom border either — the
           FAQ's own border-t closes the band, and two adjacent hairlines render as a 2px line.
 
@@ -247,7 +248,7 @@ export default function Landing() {
         </h2>
         {/* The trial is NOT repeated here — it sits at the click, under the button, where it is
             risk reversal instead of a claim. This line carries the other objection instead. */}
-        <p className="-mt-7 mb-9 text-[15px] leading-[1.6] text-ink-700">
+        <p className="-mt-7 mb-9 text-[15px] leading-[1.6] text-foreground-secondary">
           {t('One plan, everything included — and no commission on your orders.', '一个方案，功能全包含——而且不抽订单佣金。')}
         </p>
 
@@ -344,7 +345,7 @@ export default function Landing() {
       </section>
 
       {/* ── Footer CTA ── */}
-      <section className="border-t border-border px-8 py-16 text-center bg-brand-100 max-[600px]:px-5 max-[600px]:py-10">
+      <section className="border-t border-border px-8 py-16 text-center bg-brand-wash max-[600px]:px-5 max-[600px]:py-10">
         <Reveal>
         {/* The section's thesis line, so it is the section's heading — a closing CTA with no
             heading is a hole in the outline, not a style choice. Styling is unchanged. */}
@@ -360,6 +361,7 @@ export default function Landing() {
         </Reveal>
       </section>
 
+      </main>
       <MarketingFooter />
     </div>
   )

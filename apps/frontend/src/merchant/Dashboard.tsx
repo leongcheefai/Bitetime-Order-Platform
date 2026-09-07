@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { fetchOrderCount } from '../store'
 import { useEnterTransition } from '../motion'
+import { useDynamicDocumentTitle } from '../documentMeta'
 import { LayoutDashboard, ReceiptText, Cake, LayoutList, Ticket, Users, Settings } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import BrandTheme from '../components/BrandTheme'
@@ -9,14 +10,8 @@ import BillingBanner from './BillingBanner'
 import VerifyEmailBanner from './VerifyEmailBanner'
 import FulfilmentDatesBanner from './FulfilmentDatesBanner'
 import TrialFeedbackPrompt from './TrialFeedbackPrompt'
-import Overview from './Overview'
 import OnboardingChecklist from './OnboardingChecklist'
-import ProductsManager from './ProductsManager'
-import StorefrontArranger from './StorefrontArranger'
-import VouchersManager from './VouchersManager'
-import ShopSettings from './ShopSettings'
-import OrdersView from './OrdersView'
-import CustomersView from './CustomersView'
+import { SkeletonText } from '../components/Loaders'
 import FeedbackFab from './FeedbackFab'
 import SupportLinks from './SupportLinks'
 import { NavGuardProvider, useNavGuard } from './NavGuard'
@@ -24,6 +19,19 @@ import { UpgradeNavProvider } from './UpgradeNav'
 import { useDashboardSection, useDashboardSubsection } from '../useDashboardSection'
 import type { ShopCustomerSegment } from '../types'
 import { usePoll } from '../usePoll'
+
+// Each section is its own chunk. Statically imported, the seven of them shipped as ONE
+// 418KB file plus a 464KB table chunk — so a merchant opening Overview downloaded the
+// drag-and-drop arranger, the day-picker and the full table stack before a single number
+// painted. Recharts, the table stack and dnd-kit are named vendor chunks in vite.config.ts,
+// so the sections that share one still download it once.
+const Overview = lazy(() => import('./Overview'))
+const OrdersView = lazy(() => import('./OrdersView'))
+const ProductsManager = lazy(() => import('./ProductsManager'))
+const StorefrontArranger = lazy(() => import('./StorefrontArranger'))
+const VouchersManager = lazy(() => import('./VouchersManager'))
+const CustomersView = lazy(() => import('./CustomersView'))
+const ShopSettings = lazy(() => import('./ShopSettings'))
 
 const ICON = { size: 18, strokeWidth: 1.75 }
 const CUSTOMER_SEGMENTS: { key: ShopCustomerSegment; en: string; zh: string }[] = [
@@ -61,6 +69,12 @@ function DashboardInner() {
   // the group existed — lands on the full list rather than nowhere.
   const [segment] = useDashboardSubsection('customers', CUSTOMER_SEGMENTS.map(s => s.key), 'all')
   const enter = useEnterTransition()
+  // "Orders — Sunny Bakes | TinyOrder": section first, because it is what changes between a
+  // merchant's tabs, then the shop, because a superadmin viewing as a shop has several open.
+  const sectionLabel = SECTIONS.find(s => s.key === section)
+  useDynamicDocumentTitle(
+    `${sectionLabel ? t(sectionLabel.en, sectionLabel.zh) : section} — ${merchant!.name} | TinyOrder`,
+  )
 
   // Count of pending "new" orders — surfaced as a badge on the Orders nav item.
   // Refetched whenever an order's status changes so the badge stays live.
@@ -132,6 +146,9 @@ function DashboardInner() {
       <TrialFeedbackPrompt />
       <OnboardingChecklist section={section} onNavigate={selectSection} />
       <div key={section} {...enter}>
+        {/* The fallback is the same skeleton every section shows while its own data loads, so
+            a chunk arriving a beat late reads as the section loading, not as a blank. */}
+        <Suspense fallback={<SkeletonText lines={4} />}>
         {section === 'overview'  && <Overview />}
         {section === 'orders'    && <OrdersView onOrdersChanged={refreshNewOrders} />}
         {section === 'products'  && <ProductsManager />}
@@ -139,6 +156,7 @@ function DashboardInner() {
         {section === 'vouchers'  && <VouchersManager />}
         {section === 'customers' && <CustomersView segment={segment} />}
         {section === 'settings'  && <ShopSettings />}
+        </Suspense>
       </div>
       <FeedbackFab />
     </DashboardShell>

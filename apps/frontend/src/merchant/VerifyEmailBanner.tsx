@@ -83,7 +83,7 @@ export default function VerifyEmailBanner() {
         <Button
           size="none"
           variant="outline"
-          className="py-[5px] px-3 rounded-pill text-[12px] whitespace-nowrap bg-card hover:bg-brand-100 hover:text-primary hover:border-primary"
+          className="py-[5px] px-3 rounded-pill text-[12px] whitespace-nowrap bg-card hover:bg-brand-wash hover:text-primary hover:border-primary"
           disabled={sent === 'busy'}
           onClick={resend}
         >
@@ -93,7 +93,7 @@ export default function VerifyEmailBanner() {
       <button
         type="button"
         onClick={hide}
-        className="text-[12px] underline underline-offset-2 opacity-80 hover:opacity-100"
+        className="text-[12px] underline underline-offset-2 decoration-current/50 hover:decoration-current"
       >
         {t('Not now', '暂不')}
       </button>

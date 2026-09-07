@@ -85,7 +85,8 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2", className)}
+      // Right padding clears the close button (`right-2` + 36px fine / 44px coarse).
+      className={cn("flex flex-col gap-2 pr-11 pointer-coarse:pr-13", className)}
       {...props}
     />
   )

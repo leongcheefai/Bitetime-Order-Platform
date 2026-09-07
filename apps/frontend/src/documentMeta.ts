@@ -18,6 +18,25 @@ import { ROUTE_META, type RouteMeta } from './routeMeta'
 /** The tags as the served document had them, captured before this hook first overwrites them. */
 let shellMeta: RouteMeta | null = null
 
+/**
+ * A title a SCREEN set at runtime — a shop's storefront, the dashboard — for a route ROUTE_META
+ * cannot know at build time. Module state rather than context because the two hooks below sit
+ * at different depths of the tree and run in child-then-parent order: the screen's effect writes
+ * this, then the router's effect (which fires after it on the same commit) reads it. Cleared by
+ * the screen's own cleanup, which runs before the next route's effects.
+ */
+let dynamicMeta: RouteMeta | null = null
+
+function captureShellMeta(): RouteMeta {
+  shellMeta ??= { title: document.title, description: descriptionTag().content }
+  return shellMeta
+}
+
+function apply(meta: RouteMeta): void {
+  document.title = meta.title
+  descriptionTag().content = meta.description
+}
+
 function descriptionTag(): HTMLMetaElement {
   let tag = document.head.querySelector<HTMLMetaElement>('meta[name="description"]')
   if (!tag) {
@@ -37,9 +56,25 @@ function descriptionTag(): HTMLMetaElement {
  */
 export function useDocumentMeta(pathname: string): void {
   useEffect(() => {
-    shellMeta ??= { title: document.title, description: descriptionTag().content }
-    const meta = ROUTE_META[pathname] ?? shellMeta
-    document.title = meta.title
-    descriptionTag().content = meta.description
+    const shell = captureShellMeta()
+    apply(ROUTE_META[pathname] ?? dynamicMeta ?? shell)
   }, [pathname])
+}
+
+/**
+ * Titles the tab after something only the running screen knows — the shop's name on its
+ * storefront, the shop and section on its dashboard. WCAG 2.4.2: every storefront and the whole
+ * dashboard used to carry the marketing homepage's title, so a customer with three shops open
+ * had three identical tabs, and a screen reader announced "Start Your Own Food Shop" on a page
+ * for ordering a cake. `null` while the screen has nothing to say (the shop row still loading)
+ * leaves whatever title is showing alone. The description stays the served document's: there is
+ * no per-shop description to bake, and a wrong one is worse than a generic one.
+ */
+export function useDynamicDocumentTitle(title: string | null): void {
+  useEffect(() => {
+    if (!title) return
+    dynamicMeta = { title, description: captureShellMeta().description }
+    apply(dynamicMeta)
+    return () => { dynamicMeta = null }
+  }, [title])
 }

@@ -67,7 +67,7 @@ export default function DateField({ value, onChange, tz, isDisabled, t, lang, pl
             id={id}
             type="button"
             className={cn(
-              'w-full rounded-sm border-[0.5px] border-border bg-background px-3 py-2 text-left text-[13px] transition-colors hover:border-primary',
+              'w-full rounded-md border-[0.5px] border-border bg-background px-3 py-2 text-left text-[13px] transition-colors hover:border-primary',
               !value && 'text-muted-foreground',
             )}
           />
@@ -97,7 +97,7 @@ export default function DateField({ value, onChange, tz, isDisabled, t, lang, pl
         {clearable && value && (
           <button
             type="button"
-            className="mt-1 w-full rounded-sm px-2 py-1.5 text-[12px] text-muted-foreground transition-colors hover:text-primary"
+            className="mt-1 w-full rounded-lg px-2 py-1.5 text-[12px] text-muted-foreground transition-colors hover:text-primary"
             onClick={() => { onChange(''); setOpen(false) }}
           >
             {t('Clear date', '清除日期')}

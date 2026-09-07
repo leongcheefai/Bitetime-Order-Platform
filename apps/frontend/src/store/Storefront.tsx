@@ -237,12 +237,18 @@ export default function Storefront() {
     }
   }
 
-  const activeProducts = products.filter(p => p.active)
+  // Memoised, all of it: this component holds the checkout form's every keystroke in state,
+  // and unmemoised these four passes over the whole menu re-ran per character typed.
+  const activeProducts = useMemo(() => products.filter(p => p.active), [products])
   // The shop's menu sections (ADR 0013), already on the merchant row `MerchantProvider` loaded —
   // no second request. `menuSections` decides everything about how they render, including the
   // three ways a product ends up in the trailing un-headed block; a shop with none gets one
   // section holding its whole menu, which is the storefront that existed before this feature.
-  const sections = menuSections(activeProducts, menuCategoriesFromRow(merchant?.product_categories))
+  const productCategories = merchant?.product_categories
+  const sections = useMemo(
+    () => menuSections(activeProducts, menuCategoriesFromRow(productCategories)),
+    [activeProducts, productCategories],
+  )
   // The rates come from the SAME function the backend prices with: it commits at its own
   // total and refuses a quote that disagrees (`price_changed`), so a fallback that differed
   // by a ringgit would not be a display bug — it would refuse the checkout.
@@ -428,8 +434,24 @@ export default function Storefront() {
   // The menu, mapped once for the pricing rule: the rows arrive snake_cased from PostgREST and
   // `priceOrder` reads `promoPrice`. Unmapped, every promo silently prices at the base price here
   // and at the promo price on the backend — which is a refused checkout for every promo order.
-  const pricedProducts = activeProducts.map(productFromRow)
-  const promoById = new Map(pricedProducts.map(p => [p.id, promoState(p, now)]))
+  const pricedProducts = useMemo(() => activeProducts.map(productFromRow), [activeProducts])
+  // Memoised on the MINUTE, not on `now`: the clock is a fresh Date every render, so keyed on it
+  // this map would rebuild per keystroke as before. Promo windows are set to the day, so a
+  // minute-old answer is the same answer.
+  const nowMinute = Math.floor(now.getTime() / 60000)
+  const promoById = useMemo(
+    () => new Map(pricedProducts.map(p => [p.id, promoState(p, new Date(nowMinute * 60000))])),
+    [pricedProducts, nowMinute],
+  )
+  // Which products ask a question before they go in the cart — computed once per menu rather
+  // than by mapping every product's option groups on every render.
+  const hasActiveOptions = useMemo(
+    () => new Set(activeProducts.filter(p => optionGroupsFromRow(p.option_groups).some(g => g.active)).map(p => p.id)),
+    [activeProducts],
+  )
+  // Which products have a line in the cart, as a set: the menu used to ask `cart.some(...)`
+  // once per product, products × cart lines on every render.
+  const inCart = useMemo(() => new Set(cart.map(l => l.productId)), [cart])
 
   // One pricing breakdown drives the summary, the order, and the success view.
   const bd = priceOrder({
@@ -900,7 +922,7 @@ export default function Storefront() {
     <>
       {success ? (
         // ── Success view ──────────────────────────────────────────────────────
-        <div key="success" {...enterView} className={cn('form-wrap', enterView.className)}>
+        <div key="success" role="main" {...enterView} className={cn('form-wrap', enterView.className)}>
           {/* Header */}
           <div className="flex items-start justify-between gap-4 mb-8 max-[480px]:flex-col max-[480px]:gap-2">
             <div>
@@ -945,7 +967,7 @@ export default function Storefront() {
                     <span className="flex items-center gap-1.5 flex-wrap">
                       {item.name} × {item.qty}
                       {item.promo && (
-                        <span className="px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium">
+                        <span className="px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium">
                           {t('Promo', '优惠')}
                         </span>
                       )}
@@ -1050,6 +1072,7 @@ export default function Storefront() {
         // ── Order form ──────────────────────────────────────────────────────
         <div
           key="form"
+          role="main"
           {...enterView}
           className={cn('form-wrap', enterView.className)}
           data-preview={preview ? '1' : undefined}
@@ -1173,7 +1196,7 @@ export default function Storefront() {
                     imagePaths={p.image_urls ?? []}
                     onImageClick={() => setGallery(p)}
                     imageLabel={t('View photos', '查看图片')}
-                    className={cn(cart.some(l => l.productId === p.id) && "border-primary bg-brand-100")}
+                    className={cn(inCart.has(p.id) && "border-primary bg-brand-wash")}
                     title={productName(p)}
                     subtitle={productDescr(p) || undefined}
                     meta={(() => {
@@ -1218,7 +1241,7 @@ export default function Storefront() {
                             <span className="text-[12px] text-muted-foreground line-through">
                               {formatMoney(p.price, currency)}
                             </span>
-                            <span className="px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium">
+                            <span className="px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium">
                               {t('Promo', '优惠')}
                             </span>
                             {Number.isFinite(remainingForNextUnit) && (
@@ -1229,7 +1252,7 @@ export default function Storefront() {
                           </div>
                         )
                       })()}
-                    trailing={optionGroupsFromRow(p.option_groups).some(g => g.active) ? (
+                    trailing={hasActiveOptions.has(p.id) ? (
                       /* A product that asks questions has no plain line to step: there is no
                          answer to which selection a bare + would raise. It gets Add, and the
                          quantity is adjusted in the cart or by adding again. */
@@ -1247,11 +1270,13 @@ export default function Storefront() {
                         onClick={() => updateQty({ productId: p.id, selections: [] }, -1)}
                         aria-label={t('Decrease quantity', '减少数量')}
                       >−</Button>
+                      {/* The label is real text, hidden visually: `aria-label` is prohibited on a
+                          plain span (no role), so assistive tech ignored it and read a bare
+                          number. `sr-only` text reads "Quantity 2" and passes axe. */}
                       <span
                         className="text-[14px] font-medium min-w-[20px] pointer-coarse:min-w-[28px] text-center text-foreground"
                         aria-live="polite"
-                        aria-label={t('Quantity', '数量')}
-                      >{plainQty(cart, p.id)}</span>
+                      ><span className="sr-only">{t('Quantity', '数量')} </span>{plainQty(cart, p.id)}</span>
                       <Button
                         variant="soft"
                         size="iconRound"
@@ -1291,7 +1316,7 @@ export default function Storefront() {
                   className={cn(
                     "flex-1 border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-center transition-all hover:border-primary focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2",
                     mode === m
-                      ? "border-[0.5px] border-primary bg-brand-100 text-primary font-medium"
+                      ? "border-[0.5px] border-primary bg-brand-wash text-primary font-medium"
                       : "border-border bg-card text-foreground"
                   )}
                   aria-pressed={mode === m}
@@ -1553,6 +1578,7 @@ export default function Storefront() {
                   type="text"
                   value={voucherInput}
                   onChange={e => setVoucherInput(e.target.value)}
+                  aria-label={t('Voucher code', '优惠码')}
                   placeholder={t('Enter voucher code', '输入优惠码')}
                   className="flex-1 min-w-0"
                 />
@@ -1586,7 +1612,7 @@ export default function Storefront() {
           <hr className="border-0 border-t border-border my-6" />
 
           {/* Live order summary */}
-          <div className="bg-brand-100 border border-border rounded-xl py-4 px-5 mb-6">
+          <div className="bg-brand-wash border border-border rounded-xl py-4 px-5 mb-6">
             <div className="font-heading text-[14px] font-medium text-primary mb-[10px]">
               {t('Order Summary', '订单摘要')}
             </div>
@@ -1610,7 +1636,7 @@ export default function Storefront() {
                           <ItemSelections item={item} />
                         </span>
                         {item.promo && (
-                          <span className="px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium">
+                          <span className="px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium">
                             {t('Promo', '优惠')}
                           </span>
                         )}
@@ -1634,7 +1660,7 @@ export default function Storefront() {
                                does not dominate a summary row; the `after` overlay is what makes
                                the touch target 44px, so a coarse pointer gets the size without
                                the visual weight. */
-                            className="relative grid place-items-center shrink-0 size-7 -my-1 rounded-pill border border-border bg-white/60 text-muted-foreground cursor-pointer transition-colors hover:bg-danger hover:border-danger hover:text-white active:bg-danger active:border-danger active:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary after:absolute after:content-[''] after:-inset-2"
+                            className="relative grid place-items-center shrink-0 size-7 -my-1 rounded-pill border border-border bg-white/60 text-muted-foreground cursor-pointer transition-colors hover:bg-danger-fg hover:border-danger-fg hover:text-white active:bg-danger-fg active:border-danger-fg active:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary after:absolute after:content-[''] after:-inset-2"
                           >
                             <X className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
                           </button>
@@ -1689,7 +1715,7 @@ export default function Storefront() {
           </div>
 
           {error && (
-            <div className="text-[13px] text-danger bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+            <div role="alert" className="text-[13px] text-danger-fg bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
               {noticeText(error, noticeCtx)}
             </div>
           )}

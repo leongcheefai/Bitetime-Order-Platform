@@ -8,6 +8,7 @@ import { SignupError, signupErrorCode } from './signupError'
 import type { AddressParts, AdminRelease, EarnedReward, FeedbackItem, Order, PublicRelease, ReferredShop, ReleaseDetail, ShopCustomer, ShopCustomerPage, ShopCustomerSegment, ShopCustomerSort, TrialFeedbackAdminItem, TrialFeedbackOwn, Voucher, VoucherRedemption } from './types';
 import type { SavedDetails } from './savedDetails';
 import { resetRedirectUrl } from './resetPassword';
+import { downscaleImage } from './imageResize';
 import { API_URL, apiGet, apiGetFile, apiSend, apiSendFile, apiSendForFile, apiSendForm, mapOk, toVoid } from './api'
 import type { Result } from './api'
 import type { CartLine } from '@bitetime/shared'
@@ -1209,13 +1210,18 @@ export async function uploadProductImages(
   files: File[],
 ): Promise<string[]> {
   const paths: string[] = []
-  for (const file of files) {
-    if (!PRODUCT_IMAGE_TYPES.includes(file.type)) {
-      throw new Error(`Unsupported image type: ${file.name}`)
+  for (const original of files) {
+    if (!PRODUCT_IMAGE_TYPES.includes(original.type)) {
+      throw new Error(`Unsupported image type: ${original.name}`)
     }
-    if (file.size > MAX_PRODUCT_IMAGE_BYTES) {
-      throw new Error(`Image too large (max 5MB): ${file.name}`)
+    if (original.size > MAX_PRODUCT_IMAGE_BYTES) {
+      throw new Error(`Image too large (max 5MB): ${original.name}`)
     }
+    // Bounded to 1600px on the long edge BEFORE it is stored (imageResize.ts): the bucket serves
+    // originals, and a 4MB phone photo behind a 56px thumbnail was the storefront's largest
+    // download. Validated on the original, uploaded as the smaller file; on any failure the
+    // original goes up as before.
+    const file = await downscaleImage(original)
     const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const path = `${merchantId}/${productId}/${crypto.randomUUID()}-${safe}`
     const { error } = await storage

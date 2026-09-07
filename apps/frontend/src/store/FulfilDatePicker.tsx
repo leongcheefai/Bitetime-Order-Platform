@@ -84,7 +84,11 @@ export default function FulfilDatePicker({ available, value, onChange, t, lang }
         >›</Button>
       </div>
 
-      <div className="grid grid-cols-7 gap-1" role="grid" aria-label={t('Choose a date', '选择日期')}>
+      {/* A GROUP of toggle buttons, not an ARIA grid: `role="grid"` owes a row/gridcell tree
+          and arrow-key navigation, and a flat run of `aria-pressed` buttons inside it is what
+          axe reports as a critical "required children" failure. The day buttons are already
+          complete controls on their own; the group only gives the set a name. */}
+      <div className="grid grid-cols-7 gap-1" role="group" aria-label={t('Choose a date', '选择日期')}>
         {weekdayLabels.map((w, i) => (
           <div key={i} className="text-[11px] text-muted-foreground text-center py-1" aria-hidden="true">{w}</div>
         ))}
@@ -105,7 +109,7 @@ export default function FulfilDatePicker({ available, value, onChange, t, lang }
                 'h-10 pointer-coarse:min-h-11 rounded-md text-[14px] font-sans transition-all border',
                 'focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2',
                 selected
-                  ? 'border-[0.5px] border-primary bg-brand-100 text-primary font-medium'
+                  ? 'border-[0.5px] border-primary bg-brand-wash text-primary font-medium'
                   : selectable
                     ? 'border-border bg-card text-foreground hover:border-primary cursor-pointer'
                     // Greyed, not gone: the customer must be able to SEE that the shop is shut

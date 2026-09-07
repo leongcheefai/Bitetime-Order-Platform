@@ -23,7 +23,7 @@ export default function OrderHeader({ order }: { order: any }) {
   const { t, lang } = useSession()
 
   return (
-    <SheetHeader className="shrink-0 border-b border-border pr-9">
+    <SheetHeader className="shrink-0 border-b border-border">
       <div className="flex items-center gap-2">
         <SheetTitle className="text-[17px] sm:text-[19px]">{order.order_number || '—'}</SheetTitle>
         {/* The number is what a merchant reads back to a customer on the phone or pastes into

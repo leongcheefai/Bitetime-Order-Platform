@@ -102,7 +102,7 @@ export default function BillingBanner() {
         <Button
           size="none"
           variant="outline"
-          className="py-[5px] px-3 rounded-pill text-[12px] whitespace-nowrap bg-card hover:bg-brand-100 hover:text-primary hover:border-primary"
+          className="py-[5px] px-3 rounded-pill text-[12px] whitespace-nowrap bg-card hover:bg-brand-wash hover:text-primary hover:border-primary"
           disabled={busy}
           // An ending subscription is the one state Stripe's portal cannot resolve: the way back
           // is undoing the cancellation, and that button lives on the Subscription tab.

@@ -27,8 +27,8 @@ const CATEGORY_LABELS: Record<FeedbackCategory, { en: string; zh: string }> = {
  * Floating feedback button for the merchant dashboard (#89).
  *
  * Rendered by Dashboard.tsx rather than DashboardShell: the shell is shared with /admin,
- * and a superadmin does not need to send themselves feedback. z-30 keeps it under the
- * shell's mobile drawer backdrop (z-40) and the drawer itself (z-50), so it does not
+ * and a superadmin does not need to send themselves feedback. z-notif-panel (50) keeps it under
+ * the shell's mobile top bar (z-sticky, 90) and under the drawer's overlay, so it does not
  * bleed through an open menu; the dialog it opens portals above everything.
  */
 export default function FeedbackFab() {
@@ -210,8 +210,8 @@ export default function FeedbackFab() {
         aria-label={title}
         title={title}
         className={cn(
-          'fixed z-30 bottom-6 right-6 max-sm:bottom-5 max-sm:right-5',
-          'gap-2 rounded-pill px-4 py-3 shadow-lg',
+          'fixed z-notif-panel bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-6 max-sm:bottom-[calc(1.25rem+env(safe-area-inset-bottom))] max-sm:right-5',
+          'gap-2 rounded-pill px-4 py-3 shadow-elev-2',
           '[@media(pointer:coarse)]:min-h-[48px]',
         )}
       >
@@ -309,7 +309,7 @@ export default function FeedbackFab() {
                         <img
                           src={p.url}
                           alt={p.file.name}
-                          className="h-16 w-16 rounded object-cover border border-border"
+                          className="h-16 w-16 rounded-md object-cover border border-border"
                         />
                         <button
                           type="button"
@@ -317,7 +317,7 @@ export default function FeedbackFab() {
                           aria-label={t(`Remove ${p.file.name}`, `移除 ${p.file.name}`)}
                           className={cn(
                             'absolute -top-1.5 -right-1.5 rounded-pill bg-foreground text-background',
-                            'flex items-center justify-center h-5 w-5 cursor-pointer',
+                            'flex items-center justify-center h-6 w-6 pointer-coarse:h-8 pointer-coarse:w-8 cursor-pointer',
                           )}
                         >
                           <X size={12} strokeWidth={2} />
@@ -327,10 +327,10 @@ export default function FeedbackFab() {
                   </ul>
                 )}
 
-                {imageError && <p className="text-[12px] text-danger-fg">{imageError}</p>}
+                {imageError && <p role="alert" className="text-[12px] text-danger-fg">{imageError}</p>}
               </div>
 
-              {error && <p className="text-[13px] text-danger-fg">{error}</p>}
+              {error && <p role="alert" className="text-[13px] text-danger-fg">{error}</p>}
 
               <Button onClick={send} disabled={!canSubmit}>
                 {busy ? t('Sending…', '发送中…') : t('Send', '发送')}

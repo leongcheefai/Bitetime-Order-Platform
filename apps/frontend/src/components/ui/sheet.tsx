@@ -88,7 +88,9 @@ function SheetHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-header"
-      className={cn("flex flex-col gap-0.5 p-4", className)}
+      // Right padding clears the close button: `right-3` + 36px on a fine pointer, + 44px on a coarse
+      // one. Callers must not override it smaller — a long title otherwise runs under the X.
+      className={cn("flex flex-col gap-0.5 p-4 pr-12 pointer-coarse:pr-14", className)}
       {...props}
     />
   )
@@ -98,7 +100,7 @@ function SheetFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="sheet-footer"
-      className={cn("mt-auto flex flex-col gap-2 p-4", className)}
+      className={cn("mt-auto flex flex-col gap-2 p-4 pb-[max(1rem,env(safe-area-inset-bottom))]", className)}
       {...props}
     />
   )

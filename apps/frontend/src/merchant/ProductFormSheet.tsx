@@ -14,6 +14,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '../components/ui/textarea'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
@@ -387,7 +388,7 @@ export default function ProductFormSheet({
           <form onSubmit={save} className="flex-1 min-h-0 flex flex-col">
             <div className="flex-1 min-h-0 overflow-y-auto bg-background flex flex-col gap-3 p-3 sm:p-4">
               {msg && (
-                <div className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-lg px-[13px] py-[10px] leading-[1.5]">
+                <div role="status" className="text-[13px] text-foreground-secondary bg-brand-wash border border-border rounded-lg px-[13px] py-[10px] leading-[1.5]">
                   {msg}
                 </div>
               )}
@@ -674,16 +675,11 @@ export default function ProductFormSheet({
 
             <div className="shrink-0 flex items-center justify-between gap-3 border-t border-border bg-card px-4 py-3">
               <div className="flex items-center gap-3 min-w-0">
-                <button
+                <Switch
                   id="pm-active"
-                  type="button"
-                  role="switch"
-                  aria-checked={form.active}
-                  onClick={() => setForm({ ...form, active: !form.active })}
-                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-pill transition-colors cursor-pointer ${form.active ? 'bg-primary' : 'bg-border'}`}
-                >
-                  <span className={`inline-block size-5 rounded-pill bg-white shadow-sm transition-transform ${form.active ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
-                </button>
+                  checked={form.active}
+                  onCheckedChange={v => setForm({ ...form, active: v })}
+                />
                 <Label htmlFor="pm-active" className="min-w-0 truncate text-[13px]">
                   {form.active ? t('Visible in storefront', '在店面显示') : t('Hidden from customers', '对顾客隐藏')}
                 </Label>

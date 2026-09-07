@@ -80,7 +80,7 @@ export default function ShopAssistant() {
           onChange={e => setQuestion(e.target.value)}
           maxLength={MAX_QUESTION}
           placeholder={t('e.g. Which product sold best last month?', '例如：上个月哪个产品卖得最好？')}
-          className="flex-1 min-w-[220px] h-9 text-[13px]"
+          className="flex-1 min-w-[220px] h-9 pointer-coarse:h-11 text-[13px]"
           aria-label={t('Your question', '您的问题')}
         />
         <Button
@@ -102,7 +102,7 @@ export default function ShopAssistant() {
               key={ex}
               type="button"
               onClick={() => { setQuestion(ex); ask(ex) }}
-              className="rounded-full border-[0.5px] border-border bg-background/60 px-3 py-1 text-[12px] text-muted-foreground hover:text-foreground"
+              className="rounded-pill border-[0.5px] border-border bg-background/60 px-3 py-1 pointer-coarse:min-h-9 text-[12px] text-muted-foreground hover:text-foreground"
             >
               {ex}
             </button>
@@ -110,7 +110,7 @@ export default function ShopAssistant() {
         </div>
       )}
 
-      {error && <p className="text-[13px] text-destructive mt-3">{error}</p>}
+      {error && <p role="alert" className="text-[13px] text-danger-fg mt-3">{error}</p>}
 
       {answer && (
         <div className="mt-3 rounded-lg border-[0.5px] border-border bg-background/50 px-4 py-3">

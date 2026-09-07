@@ -40,7 +40,7 @@ export default function StatusFooter({
   }))
 
   return (
-    <div className="shrink-0 border-t border-border bg-card px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+    <div className="shrink-0 border-t border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
       <Select
         value={status}
         // `if (v)` rather than `??` — this handler writes to the database, so a null must be
@@ -55,7 +55,7 @@ export default function StatusFooter({
             // With an advance button present, the phone shows the list as a quiet text
             // button under it — the primary move gets the thumb-sized target. On a desktop,
             // and whenever there is no advance button, it is an ordinary select box.
-            next && 'order-2 justify-center border-0 shadow-none text-muted-foreground underline underline-offset-2 [&_svg]:hidden sm:order-1 sm:justify-between sm:border sm:border-input sm:shadow-xs sm:no-underline sm:text-foreground sm:[&_svg]:block',
+            next && 'order-2 justify-center border-0 shadow-none text-muted-foreground underline underline-offset-2 [&_svg]:hidden sm:order-1 sm:justify-between sm:border sm:border-input sm:no-underline sm:text-foreground sm:[&_svg]:block',
           )}
         >
           {next ? (

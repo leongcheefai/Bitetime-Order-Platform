@@ -114,7 +114,7 @@ export default function BrandColourCard({ onDirtyChange }: {
             aria-pressed={pending === s.hex}
             title={t(s.name[0], s.name[1])}
             className={cn(
-              'size-8 rounded-full border transition-shadow',
+              'size-8 rounded-round border transition-shadow',
               pending === s.hex ? 'border-foreground shadow-elev-1' : 'border-border',
             )}
             style={{ backgroundColor: s.hex }}
@@ -135,13 +135,14 @@ export default function BrandColourCard({ onDirtyChange }: {
           // disagreeing with the swatch it just matched. Invalid text is left exactly as typed.
           onBlur={() => { if (parsed.ok && parsed.value) setText(parsed.value) }}
           aria-invalid={invalid}
+          aria-describedby="brand-colour-hex-hint"
         />
         {invalid ? (
-          <p className="text-[11px] text-danger-fg leading-[1.5]">
+          <p id="brand-colour-hex-hint" role="alert" className="text-[11px] text-danger-fg leading-[1.5]">
             {t('Use a colour code like #7A1028.', '请输入类似 #7A1028 的颜色代码。')}
           </p>
         ) : (
-          <p className="text-[11px] text-muted-foreground leading-[1.5]">
+          <p id="brand-colour-hex-hint" className="text-[11px] text-muted-foreground leading-[1.5]">
             {pending
               ? t('Reset to go back to the default colour.', '重置可恢复默认颜色。')
               : t('Your shop uses the default colour.', '您的店铺使用默认颜色。')}
@@ -167,7 +168,7 @@ export default function BrandColourCard({ onDirtyChange }: {
       {/* The preview renders inside the SAME component the storefront mounts, fed the pending
           value — so what the merchant sees here cannot drift from what the customer gets. */}
       <BrandTheme color={pending}>
-        <div className="rounded-xl border border-border bg-brand-100 p-4 flex flex-wrap items-center gap-3">
+        <div className="rounded-xl border border-border bg-brand-wash p-4 flex flex-wrap items-center gap-3">
           <Button type="button" size="none" className="rounded-lg py-[6px] px-[14px] text-[13px]">
             {t('Add to cart', '加入购物车')}
           </Button>

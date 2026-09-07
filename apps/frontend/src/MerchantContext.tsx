@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { lookupMerchantBySlug } from './store'
@@ -61,8 +61,13 @@ export function MerchantProvider({ children }: { children: ReactNode }) {
 
   // Show loading until the fetch for the *current* slug resolves (avoids a
   // synchronous setState reset in the effect body).
-  const current = state.slug === slug ? state : { merchant: null, loading: true, notFound: false }
-  return <MerchantContext.Provider value={{ ...current, refresh }}>{children}</MerchantContext.Provider>
+  // Memoised: a spread literal per render is a new object per render, which re-rendered every
+  // `useMerchant()` consumer on the storefront each time this provider did.
+  const value = useMemo<MerchantState>(() => {
+    const current = state.slug === slug ? state : { merchant: null, loading: true, notFound: false }
+    return { ...current, refresh }
+  }, [state, slug, refresh])
+  return <MerchantContext.Provider value={value}>{children}</MerchantContext.Provider>
 }
 
 // Hook colocated with its provider by design; fast-refresh limitation only affects

@@ -106,10 +106,10 @@ export default function TrialFeedbackPrompt() {
              `留言不能超过 ${TRIAL_FEEDBACK_COMMENT_MAX_LENGTH} 个字`)}
         </p>
       )}
-      {error && <p className="text-[13px] text-danger-fg">{error}</p>}
+      {error && <p role="alert" className="text-[13px] text-danger-fg">{error}</p>}
 
       <Button onClick={() => void submit()} disabled={rating < 1 || tooLong || busy} className="self-start">
-        {busy ? t('Sending…', '发送中…') : t('Submit', '提交')}
+        {busy ? t('Sending…', '发送中…') : t('Send feedback', '发送反馈')}
       </Button>
     </div>
   )

@@ -118,7 +118,7 @@ const columns: ColumnDef<AdminRelease>[] = [
                 <Button
                   variant="ghost"
                   size="none"
-                  className="size-9 p-0 rounded-pill cursor-pointer pointer-coarse:size-11 hover:bg-brand-100 hover:text-primary"
+                  className="size-9 p-0 rounded-pill cursor-pointer pointer-coarse:size-11 hover:bg-brand-wash hover:text-primary"
                   disabled={busy === r.id}
                   aria-label={t('Actions', '操作')}
                 />

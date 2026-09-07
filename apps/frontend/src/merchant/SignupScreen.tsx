@@ -245,7 +245,7 @@ export default function SignupScreen() {
   }
 
   return (
-    <div className="w-[420px] max-w-full pt-6">
+    <div role="main" className="w-[420px] max-w-full pt-6">
       <div className="text-center mb-6">
         <h1><Wordmark className="h-8 mx-auto" /></h1>
         <p className="font-heading text-[13px] italic text-muted-foreground mt-[5px]">{t('Merchant Portal', '商家入口')}</p>
@@ -255,7 +255,7 @@ export default function SignupScreen() {
         <p className="text-[13px] text-muted-foreground mb-5">{t('Create your merchant account to get started.', '创建商家账号以开始使用。')}</p>
 
         {/* Plan banner: oxblood-tint bg, rose-border, md radius */}
-        <div className="flex items-baseline flex-wrap gap-2 px-[13px] py-[10px] mb-[14px] bg-brand-100 border border-border rounded-md">
+        <div className="flex items-baseline flex-wrap gap-2 px-[13px] py-[10px] mb-[14px] bg-brand-wash border border-border rounded-md">
           <span className="font-semibold text-primary text-[14px]">{cycleName}</span>
           <span className="font-heading text-foreground text-[15px]">{formatMoney(perMoAmount, pricing.currency)}{t('/mo', '/月')}</span>
           {pricing.estimate && perMoAmount > 0 && (
@@ -269,13 +269,13 @@ export default function SignupScreen() {
         </div>
 
         {canceled && (
-          <div className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div className="text-[13px] text-foreground-secondary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {t('Checkout was canceled. Complete your details to try again.',
                '结账已取消。完善信息后可再次尝试。')}
           </div>
         )}
         {msg && (
-          <div className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div className="text-[13px] text-foreground-secondary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {msg}
           </div>
         )}

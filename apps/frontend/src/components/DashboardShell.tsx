@@ -82,7 +82,6 @@ export default function DashboardShell(props: DashboardShellProps) {
       open
       onOpenChange={() => {}}
       data-layout-flush=""
-      className="min-h-screen"
       style={{ '--sidebar-width': SIDEBAR_WIDTH } as CSSProperties}
     >
       <Shell {...props} />
@@ -103,7 +102,7 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
     <>
       {/* Mobile top bar — hamburger + brand. Hidden on desktop. */}
       <header className={cn(
-        'hidden max-md:flex fixed top-0 inset-x-0 z-30 h-14 items-center gap-3 px-4',
+        'hidden max-md:flex fixed top-0 inset-x-0 z-sticky h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] items-center gap-3 px-4',
         'bg-muted border-b border-border',
       )}>
         <Button
@@ -121,8 +120,14 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
 
       <Sidebar
         collapsible="offcanvas"
-        // Right-only hairline (flush layout — no radius) and the rail's shadow, as before.
-        className="border-0 [border-right:0.5px_solid_var(--color-border)] shadow-[2px_0_12px_rgba(122,16,40,0.06)]"
+        // The rail is the page's navigation landmark. Stock shadcn renders it as a bare div, so
+        // the brand block, the rows and the footer sat outside every landmark on the page — axe's
+        // "region" finding on every dashboard load. On mobile the same props reach the Sheet,
+        // which is already a dialog; the role is harmless there.
+        role="navigation"
+        aria-label={t('Dashboard sections', '仪表板栏目')}
+        // Right-only hairline (flush layout — no radius) and the rail's own elevation token.
+        className="border-0 [border-right:0.5px_solid_var(--color-border)] shadow-elev-rail"
       >
         {/* Brand block */}
         <SidebarHeader className="px-5 pt-7 pb-5 border-b border-border gap-0">
@@ -196,13 +201,25 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
 
       {/* Main content — capped + centered so it doesn't stretch empty on wide screens.
           On mobile the top bar is fixed, so pad the content down to clear it. */}
-      <SidebarInset className="min-w-0 pt-7 px-8 pb-16 max-md:px-4 max-md:pt-[72px] max-md:pb-12">
+      <SidebarInset className="min-w-0 pt-7 px-8 pb-16 max-md:px-4 max-md:pt-[calc(72px+env(safe-area-inset-top))] max-md:pb-12">
         <div className="w-full max-w-5xl">
+          {/* The page's one h1, for the outline and nothing else: the sections open with their
+              own visible h3s, and a sighted merchant already reads the active row in the rail.
+              Without this the first heading a screen reader met was an h3 — no h1, no h2. */}
+          <h1 className="sr-only">{activeLabel(nav, active, activeSub)}</h1>
           {children}
         </div>
       </SidebarInset>
     </>
   )
+}
+
+/** "Customers" or "Customers — Members": the active section, and its active child if the section is a group. */
+function activeLabel(nav: NavItem[], active: string, activeSub: string | undefined): string {
+  const item = nav.find(n => n.key === active)
+  if (!item) return active
+  const sub = activeSub ? item.children?.find(c => c.key === activeSub) : undefined
+  return sub ? `${item.label} — ${sub.label}` : item.label
 }
 
 /**
@@ -213,8 +230,8 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
  * dashboard tint them (BrandTheme).
  */
 const ROW_TEXT = cn(
-  'text-[13px] font-sans font-medium tracking-[0.01em] text-ink-700',
-  'hover:text-primary data-active:bg-brand-100 data-active:text-primary data-active:font-semibold',
+  'text-[13px] font-sans font-medium tracking-[0.01em] text-foreground-secondary',
+  'hover:text-primary data-active:bg-brand-wash data-active:text-primary data-active:font-semibold',
 )
 const ROW = cn(
   ROW_TEXT,

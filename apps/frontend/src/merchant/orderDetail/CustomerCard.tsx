@@ -114,7 +114,7 @@ export default function CustomerCard({
                 <Button
                   variant="ghost"
                   size="iconRound"
-                  className="size-5"
+                  className="size-6"
                   aria-label={t('Copy address', '复制地址')}
                   onClick={() => copyText(address, { en: 'Address copied', zh: '地址已复制' }, t)}
                 >

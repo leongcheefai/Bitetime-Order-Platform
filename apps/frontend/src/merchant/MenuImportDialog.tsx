@@ -301,7 +301,7 @@ export default function MenuImportDialog({
           )}
         </div>
 
-        {msg && <p className="text-[13px] text-destructive mb-3">{msg}</p>}
+        {msg && <p role="alert" className="text-[13px] text-danger-fg mb-3">{msg}</p>}
 
         {preview && (
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
@@ -322,7 +322,7 @@ export default function MenuImportDialog({
                   alt={t('The menu photo you chose', '您选择的菜单照片')}
                   className="w-full rounded-xl border-[0.5px] border-border object-contain max-h-[60vh]"
                 />
-                <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-card/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm group-hover:text-foreground">
+                <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-card/90 px-2 py-1 text-[11px] text-muted-foreground shadow-elev-1 group-hover:text-foreground">
                   <ZoomIn className="size-3.5" />
                   {t('Enlarge', '放大')}
                 </span>
@@ -433,13 +433,13 @@ export default function MenuImportDialog({
                             />
                           </div>
                           <div>
-                            <Label className="text-[11px] text-muted-foreground">{t('Unit', '单位')}</Label>
+                            <Label htmlFor={`menu-import-${row.key}-unit`} className="text-[11px] text-muted-foreground">{t('Unit', '单位')}</Label>
                             <Select
                               value={row.unit ?? 'pcs'}
                               onValueChange={v => edit(row.key, { unit: v ?? 'pcs' })}
                               items={unitItems}
                             >
-                              <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                              <SelectTrigger id={`menu-import-${row.key}-unit`} className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {unitItems.map(u => (
                                   <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>
@@ -448,7 +448,7 @@ export default function MenuImportDialog({
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-[11px] text-muted-foreground">{t('Category', '分类')}</Label>
+                            <Label htmlFor={`menu-import-${row.key}-category`} className="text-[11px] text-muted-foreground">{t('Category', '分类')}</Label>
                             {/* The sections the panel above will create are ordinary choices here,
                                 marked "new". A row filed under one has to SAY so: a dropdown
                                 reading "No category" beside a panel that creates the section is
@@ -458,7 +458,7 @@ export default function MenuImportDialog({
                               onValueChange={v => edit(row.key, categoryPatch(v))}
                               items={categoryItems}
                             >
-                              <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                              <SelectTrigger id={`menu-import-${row.key}-category`} className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="">{t('No category', '不分类')}</SelectItem>
                                 {categories.map(c => (
@@ -479,9 +479,9 @@ export default function MenuImportDialog({
                             menu untouched. */}
                         {row.price_text && (
                           <p className="text-[11px] text-muted-foreground mt-1 pl-6">
-                            {t('Printed on the menu:', '菜单上印的：')} <span className="font-mono">{row.price_text}</span>
+                            {t('Printed on the menu:', '菜单上印的：')} <span>{row.price_text}</span>
                             {priceMissing && (
-                              <span className="text-destructive">
+                              <span className="text-danger-fg">
                                 {' · '}{t('Type the price yourself.', '请自行输入价格。')}
                               </span>
                             )}
@@ -500,7 +500,7 @@ export default function MenuImportDialog({
         {rows && rows.length > 0 && (
           <div className="flex flex-wrap items-center justify-end gap-3 mt-4 pt-3 border-t-[0.5px] border-border">
             {unpriced.length > 0 && (
-              <p className="text-[12px] text-destructive mr-auto">
+              <p className="text-[12px] text-danger-fg mr-auto">
                 {t(
                   `${unpriced.length} of the selected products still need a price.`,
                   `已选产品中有 ${unpriced.length} 个还没有价格。`,
@@ -508,7 +508,7 @@ export default function MenuImportDialog({
               </p>
             )}
             {overCategoryCap && (
-              <p className="text-[12px] text-destructive mr-auto">
+              <p className="text-[12px] text-danger-fg mr-auto">
                 {t(
                   `That is more than ${MAX_MENU_CATEGORIES} categories. Untick some.`,
                   `分类数超过 ${MAX_MENU_CATEGORIES} 个。请取消部分勾选。`,

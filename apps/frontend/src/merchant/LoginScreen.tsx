@@ -113,7 +113,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <div className="w-[420px] max-w-full pt-8">
+    <div role="main" className="w-[420px] max-w-full pt-8">
       <div className="text-center mb-10">
         <h1><Wordmark className="h-8 mx-auto" /></h1>
         <p className="font-heading text-[13px] italic text-muted-foreground mt-[5px]">{t('Merchant Portal', '商家入口')}</p>
@@ -131,22 +131,22 @@ export default function LoginScreen() {
             `||` meant a merchant who asked for a reset link stopped being told why they were
             signed out. This one explains the arrival, so it sits first. */}
         {verifyNotice && (
-          <div role="status" className="text-[13px] text-primary bg-brand-100 border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div role="status" className="text-[13px] text-primary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {verifyNotice}
           </div>
         )}
         {deviceNotice && (
-          <div role="status" className="text-[13px] text-primary bg-danger-100 border border-danger-100 rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div role="status" className="text-[13px] text-primary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {deviceNotice}
           </div>
         )}
         {notice && (
-          <div role="status" className="text-[13px] text-primary bg-danger-100 border border-danger-100 rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div role="status" className="text-[13px] text-primary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {notice}
           </div>
         )}
         {msg && (
-          <div className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div className="text-[13px] text-foreground-secondary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {msg}
           </div>
         )}

@@ -31,13 +31,13 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.hasError) return this.props.children
     return (
-      <div className="min-h-screen w-full flex items-center justify-center p-6">
+      <div className="min-h-dvh w-full flex items-center justify-center p-6">
         <div className="bg-card border-[0.5px] border-border rounded-2xl p-6 max-w-[420px] w-full box-border text-center">
           <h1><Wordmark className="h-7 mx-auto" /></h1>
           <p className="text-muted-foreground text-[14px] leading-[1.6] mt-3">
             Something went wrong loading the page.
             <br />
-            <span className="text-muted-foreground/80">页面加载出错了。</span>
+            <span className="text-muted-foreground">页面加载出错了。</span>
           </p>
           <Button
             type="button"

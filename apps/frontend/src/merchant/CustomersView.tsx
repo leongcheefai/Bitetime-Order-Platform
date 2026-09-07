@@ -5,7 +5,7 @@ import type { Order, ShopCustomer, ShopCustomerSegment, ShopCustomerSort, ShopCu
 import { useSession } from '../SessionContext'
 import { fetchShopCustomers, fetchShopCustomerOrders, saveShopCustomer } from '../store'
 import { SkeletonText } from '../components/Loaders'
-import { StatCard } from '../components/charts/DashCharts'
+import { StatCard } from '../components/charts/StatCard'
 import { formatMoney } from '../currency'
 import { fmtDate } from '../merchantDate'
 import { StatusBadge } from '../orderStatus'
@@ -27,10 +27,10 @@ const PANEL = 'bg-card border-[0.5px] border-border rounded-2xl p-5 mb-8 w-full 
 const TH = 'text-[10px] font-semibold uppercase tracking-[0.08em] text-primary px-[14px] py-[10px] border-b-[0.5px] border-border text-left whitespace-nowrap'
 
 // Table data cell (base) — pixel-match of .mm-customers-table td + hover
-const TD = 'px-[14px] py-[12px] border-b border-muted text-foreground align-middle group-hover:bg-brand-100'
+const TD = 'px-[14px] py-[12px] border-b border-muted text-foreground align-middle group-hover:bg-brand-wash'
 
 // Count cell — pixel-match of .mm-customers-count overrides
-const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-semibold text-center align-middle group-hover:bg-brand-100'
+const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-semibold text-center align-middle group-hover:bg-brand-wash'
 
 /**
  * One tag chip, on `Badge` rather than hand-rolled — the filter row's, the table row's and the
@@ -45,7 +45,7 @@ const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-se
  * Hand-rolled, these were 12px regular with a resting border, which is a fourth chip style on a
  * screen that already had three.
  */
-const TAG_CHIP = 'px-[10px] border-transparent bg-brand-100 text-brand-700'
+const TAG_CHIP = 'px-[10px] border-transparent bg-brand-wash text-brand-700'
 
 // `button.tsx`'s focus treatment, borrowed for the raw buttons `Badge` cannot cover — the two
 // nested inside the drawer's chip. A control a keyboard reaches needs this app's ring, not the
@@ -161,6 +161,7 @@ export default function CustomersView({ segment }: { segment: ShopCustomerSegmen
         <Input
           value={search}
           onChange={e => narrow(setSearch)(e.target.value)}
+          aria-label={t('Search customers', '搜索顾客')}
           placeholder={t('Search by name or WhatsApp…', '按姓名或 WhatsApp 搜索…')}
           className="max-w-sm bg-background border-border text-[13px]"
         />
@@ -209,7 +210,15 @@ export default function CustomersView({ segment }: { segment: ShopCustomerSegmen
                   <tr
                     key={c.phoneKey}
                     onClick={() => setSelected(c)}
-                    className="group cursor-pointer [&:last-child>td]:border-b-0"
+                    // The row is the only way to open a customer, so it is reachable and
+                    // operable from the keyboard — the same shape ui/data-table.tsx gives its
+                    // clickable rows. Space is claimed too, or it scrolls the page instead.
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(c) }
+                    }}
+                    className="group cursor-pointer [&:last-child>td]:border-b-0 focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
                   >
                     <td className={TD}>
                       <span className="inline-flex items-center gap-1.5">
@@ -500,7 +509,7 @@ function CustomerDrawer({
 }) {
   return (
     <Sheet open={customer !== null} onOpenChange={open => { if (!open) onClose() }}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="data-[side=right]:w-full data-[side=right]:sm:max-w-md overflow-y-auto">
         {/* Keyed, so switching customers REMOUNTS this: the order list and the note draft
             reset because they are born fresh, not because an effect remembered to clear them. */}
         {customer && (
@@ -595,7 +604,7 @@ function DrawerContents({
                       key={o.id}
                       type="button"
                       onClick={() => setSelectedOrder(o)}
-                      className="flex flex-col gap-1 w-full text-left rounded-lg border border-border bg-background px-3 py-2.5 hover:bg-brand-100 transition-colors"
+                      className="flex flex-col gap-1 w-full text-left rounded-lg border border-border bg-background px-3 py-2.5 hover:bg-brand-wash transition-colors"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-heading text-[14px] font-medium text-primary">{o.order_number || '—'}</span>
@@ -677,7 +686,7 @@ function NotesPanel({
                 type="button"
                 aria-label={t(`Remove tag ${tag}`, `移除标签 ${tag}`)}
                 onClick={() => save({ note: customer.note, tags: customer.tags.filter(x => x !== tag) })}
-                className={`cursor-pointer rounded-pill opacity-60 hover:opacity-100 ${FOCUS_RING}`}
+                className={`cursor-pointer rounded-pill p-0.5 -m-0.5 pointer-coarse:p-2 pointer-coarse:-m-1.5 opacity-60 hover:opacity-100 ${FOCUS_RING}`}
               >
                 <X size={11} />
               </button>
@@ -692,6 +701,7 @@ function NotesPanel({
             e.preventDefault()
             addTag(tagDraft.trim())
           }}
+          aria-label={t('Add a tag', '添加标签')}
           placeholder={t('Add a tag, press Enter…', '添加标签，按回车…')}
           className="bg-background border-border text-[13px]"
         />
@@ -722,6 +732,7 @@ function NotesPanel({
           value={note}
           onChange={e => setNote(e.target.value)}
           rows={3}
+          aria-label={t('Private note', '私密备注')}
           placeholder={t('Private note — only your shop sees this…', '私密备注，仅本店可见…')}
           className="bg-background border-border text-[13px]"
         />

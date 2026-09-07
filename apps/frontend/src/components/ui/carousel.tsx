@@ -188,7 +188,9 @@ function CarouselPrevious({
       className={cn(
         "absolute touch-manipulation rounded-pill",
         orientation === "horizontal"
-          ? "inset-y-0 -left-12 my-auto"
+          // Inside the box below md: at -12 the arrow sits 48px past the edge, and with 20px
+          // of page padding on a phone that is off-screen behind the body's overflow clip.
+          ? "inset-y-0 left-2 md:-left-12 my-auto"
           : "-top-12 left-1/2 -translate-x-1/2 rotate-90",
         className
       )}
@@ -218,7 +220,7 @@ function CarouselNext({
       className={cn(
         "absolute touch-manipulation rounded-pill",
         orientation === "horizontal"
-          ? "inset-y-0 -right-12 my-auto"
+          ? "inset-y-0 right-2 md:-right-12 my-auto"
           : "-bottom-12 left-1/2 -translate-x-1/2 rotate-90",
         className
       )}

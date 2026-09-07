@@ -55,13 +55,13 @@ export default function ImageLightbox({
                   type="button"
                   onClick={prev}
                   aria-label={t('Previous', '上一张')}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 size-9 rounded-pill bg-card/90 text-primary text-[18px] flex items-center justify-center shadow-sm hover:bg-card cursor-pointer"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 size-9 pointer-coarse:size-11 rounded-pill bg-card/90 text-primary text-[18px] flex items-center justify-center shadow-elev-1 hover:bg-card cursor-pointer"
                 >‹</button>
                 <button
                   type="button"
                   onClick={next}
                   aria-label={t('Next', '下一张')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 size-9 rounded-pill bg-card/90 text-primary text-[18px] flex items-center justify-center shadow-sm hover:bg-card cursor-pointer"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 size-9 pointer-coarse:size-11 rounded-pill bg-card/90 text-primary text-[18px] flex items-center justify-center shadow-elev-1 hover:bg-card cursor-pointer"
                 >›</button>
               </>
             )}
@@ -79,7 +79,7 @@ export default function ImageLightbox({
                     n === idx ? 'border-primary' : 'border-border opacity-70 hover:opacity-100',
                   )}
                 >
-                  <img src={productImageUrl(p)} alt="" className="size-full object-cover" />
+                  <img src={productImageUrl(p)} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
                 </button>
               ))}
             </div>

@@ -164,6 +164,7 @@ export default function CopyProductsDialog({
             <Input
               value={query}
               onChange={e => setQuery(e.target.value)}
+              aria-label={t('Search shops', '搜索店铺')}
               placeholder={t('Search shops by name or slug…', '按名称或网址搜索店铺…')}
               className="mb-2"
               autoFocus
@@ -196,7 +197,7 @@ export default function CopyProductsDialog({
           </>
         )}
 
-        {msg && <p className="text-[13px] text-destructive mb-3">{msg}</p>}
+        {msg && <p role="alert" className="text-[13px] text-danger-fg mb-3">{msg}</p>}
         {loading && (
           <p className="text-[13px] text-muted-foreground mb-3 flex items-center gap-2">
             <Loader2 className="size-4 animate-spin" />

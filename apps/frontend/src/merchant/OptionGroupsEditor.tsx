@@ -99,7 +99,7 @@ export default function OptionGroupsEditor({
               render={
                 <Button
                   type="button" variant="outline" size="none"
-                  className="text-[12px] px-2 py-1 rounded"
+                  className="text-[12px] px-2 py-1 rounded-md"
                 />
               }
             >
@@ -159,8 +159,9 @@ export default function OptionGroupsEditor({
           </div>
           <div className="flex items-end gap-2 flex-wrap min-w-0 pr-16">
             <div className="flex-1 basis-[180px] min-w-0">
-              <Label className="text-[12px]">{t('Question', '问题')}</Label>
+              <Label htmlFor={`og-${group.id}-name`} className="text-[12px]">{t('Question', '问题')}</Label>
               <Input
+                id={`og-${group.id}-name`}
                 value={group.name}
                 placeholder={t('e.g. Choose your flavours', '例如：选择口味')}
                 onChange={e => patchGroup(gi, { name: e.target.value })}
@@ -169,8 +170,9 @@ export default function OptionGroupsEditor({
             <div className="flex-1 basis-[150px] min-w-0">
               {/* Optional, like `products.name_zh`. The ORDER snapshots both languages, so what
                   is typed here is what a Chinese-reading customer sees on their receipt. */}
-              <Label className="text-[12px]">{t('Question (中文)', '问题（中文）')}</Label>
+              <Label htmlFor={`og-${group.id}-name-zh`} className="text-[12px]">{t('Question (中文)', '问题（中文）')}</Label>
               <Input
+                id={`og-${group.id}-name-zh`}
                 value={group.name_zh ?? ''}
                 placeholder={t('optional', '选填')}
                 onChange={e => patchGroup(gi, { name_zh: e.target.value || null })}
@@ -180,15 +182,17 @@ export default function OptionGroupsEditor({
                 wrap together instead of one field peeling off onto its own line. */}
             <div className="flex items-end gap-2 basis-full sm:basis-auto min-w-0">
             <div className="flex-1 sm:w-[92px] sm:flex-none">
-              <Label className="text-[12px]">{t('Choose at least', '最少选')}</Label>
+              <Label htmlFor={`og-${group.id}-min`} className="text-[12px]">{t('Choose at least', '最少选')}</Label>
               <Input
+                id={`og-${group.id}-min`}
                 type="number" min={0} value={group.minSelect}
                 onChange={e => patchGroup(gi, { minSelect: Number(e.target.value) || 0 })}
               />
             </div>
             <div className="flex-1 sm:w-[92px] sm:flex-none">
-              <Label className="text-[12px]">{t('At most', '最多选')}</Label>
+              <Label htmlFor={`og-${group.id}-max`} className="text-[12px]">{t('At most', '最多选')}</Label>
               <Input
+                id={`og-${group.id}-max`}
                 type="number" min={1} value={group.maxSelect ?? ''}
                 placeholder={t('any', '不限')}
                 onChange={e => patchGroup(gi, {
@@ -199,8 +203,9 @@ export default function OptionGroupsEditor({
             <div className="flex-1 sm:w-[124px] sm:flex-none">
               {/* Independent of "at most", and it cannot be inferred from it: "up to 3 toppings"
                   with a per-option cap of 1 is three DIFFERENT toppings, not chilli three times. */}
-              <Label className="text-[12px]">{t('Max of one choice', '同一选项上限')}</Label>
+              <Label htmlFor={`og-${group.id}-max-per`} className="text-[12px]">{t('Max of one choice', '同一选项上限')}</Label>
               <Input
+                id={`og-${group.id}-max-per`}
                 type="number" min={1} value={group.maxPerOption ?? ''}
                 placeholder={t('any', '不限')}
                 onChange={e => patchGroup(gi, {
@@ -229,12 +234,14 @@ export default function OptionGroupsEditor({
                 <Input
                   className="flex-1 basis-[130px] min-w-0"
                   value={option.name}
+                  aria-label={t('Choice name', '选项名称')}
                   placeholder={t('Choice name', '选项名称')}
                   onChange={e => patchOption(gi, oi, { name: e.target.value })}
                 />
                 <Input
                   className="flex-1 basis-[110px] min-w-0"
                   value={option.name_zh ?? ''}
+                  aria-label={t('Choice name (中文)', '选项名称（中文）')}
                   placeholder={t('中文（选填）', '中文（选填）')}
                   onChange={e => patchOption(gi, oi, { name_zh: e.target.value || null })}
                 />
@@ -243,6 +250,7 @@ export default function OptionGroupsEditor({
                   <Input
                     className="w-24 [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                     type="number" min={0} step="0.01" value={option.delta === 0 ? '' : option.delta}
+                    aria-label={t('Extra price', '加价')}
                     placeholder="0"
                     onChange={e => patchOption(gi, oi, {
                       delta: e.target.value === '' ? 0 : Number(e.target.value) || 0,
@@ -329,7 +337,7 @@ export default function OptionGroupsEditor({
         ><Plus size={12} />{t('Question', '问题')}</Button>
         {/* The same verdict the write endpoint refuses on, shown while the merchant is still
             here. Without the SQL constraints ADR 0008 gave up, this is where they find out. */}
-        {problem && <span className="text-[12px] text-danger">{configMessage(problem, t)}</span>}
+        {problem && <span role="alert" className="text-[12px] text-danger-fg">{configMessage(problem, t)}</span>}
       </div>
 
       {/* Opened from inside the product form's dialog — z-modal-popover paints it above that

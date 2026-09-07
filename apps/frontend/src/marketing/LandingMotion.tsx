@@ -166,7 +166,9 @@ export const StorefrontPreview = memo(function StorefrontPreview({ t }: { t: TFn
         {ping && (
           <motion.div
             initial={{ opacity: 0, y: -8, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 420, damping: 18 } }}
+            // Ease-out, not a spring: the spring this replaced (stiffness 420, damping 18) overshot and
+            // wobbled, the one bounce in an app whose every other motion is a decelerating curve.
+            animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: EASE } }}
             exit={{ opacity: 0, y: -6, scale: 0.96, transition: { duration: 0.18 } }}
             className="absolute -top-3 -right-2 z-10 flex items-center gap-2 rounded-pill border border-border bg-card py-1.5 px-3 shadow-elev-2"
           >
@@ -180,7 +182,7 @@ export const StorefrontPreview = memo(function StorefrontPreview({ t }: { t: TFn
       <div className="rounded-2xl border-[0.5px] border-border bg-card p-5 text-left shadow-elev-3">
         {/* Shop header */}
         <div className="flex items-center gap-3 pb-4 border-b border-border">
-          <span className="grid h-10 w-10 place-items-center rounded-round bg-brand-100 font-heading text-[15px] font-medium text-primary">
+          <span className="grid h-10 w-10 place-items-center rounded-round bg-brand-wash font-heading text-[15px] font-medium text-primary">
             NK
           </span>
           <div className="min-w-0">

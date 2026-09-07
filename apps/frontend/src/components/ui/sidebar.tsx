@@ -496,6 +496,9 @@ function SidebarMenuButton({
     props: mergeProps<"button">(
       {
         className: cn(sidebarMenuButtonVariants({ variant, size }), className),
+        // The active row is exposed to assistive tech as well as styled: stock shadcn sets
+        // only `data-active`, which is a paint hook and says nothing to a screen reader.
+        "aria-current": isActive ? "page" : undefined,
       },
       props
     ),

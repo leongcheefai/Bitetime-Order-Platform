@@ -42,7 +42,7 @@ export default function LegalPage({ doc }: { doc: LegalDocument }) {
   }, [pathname, hash])
 
   return (
-    <div className="mm-land flex flex-col min-h-screen bg-background text-foreground font-sans">
+    <div className="mm-land flex flex-col min-h-dvh bg-background text-foreground font-sans">
       <nav className="flex items-center justify-between px-8 py-5 border-b border-border max-[600px]:px-5 max-[600px]:py-4">
         <Link to="/" aria-label={t('TinyOrder home', 'TinyOrder 首页')}>
           <Wordmark className="h-7 max-[600px]:h-6" />
@@ -70,7 +70,7 @@ export default function LegalPage({ doc }: { doc: LegalDocument }) {
         {caveats.length > 0 && (
           <div
             role="note"
-            className="mb-10 rounded-xl border-[0.5px] border-dashed border-border bg-brand-100 px-4 py-3 text-sm leading-[1.6] text-muted-foreground"
+            className="mb-10 rounded-xl border-[0.5px] border-dashed border-border bg-brand-wash px-4 py-3 text-sm leading-[1.6] text-muted-foreground"
           >
             <p>
               <strong className="text-primary">{t('Draft.', '草稿。')}</strong>{' '}
