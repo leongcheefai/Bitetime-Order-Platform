@@ -11,7 +11,9 @@ import type { DateRange } from 'react-day-picker'
 import { useSession } from '../SessionContext'
 import { fetchMerchantStats, downloadRevenueReport } from '../store'
 import { SkeletonText } from '../components/Loaders'
-import { StatCard, ChartPanel, RevenueBarChart, DonutCard, BreakdownList } from '../components/charts/DashCharts'
+import { StatCard } from '../components/charts/StatCard'
+import { ChartPanel, BreakdownList } from '../components/charts/Panels'
+import { RevenueBarChart, DonutCard } from '../components/charts/lazy'
 import {
   granularityFor, parseCustomRange, todayInZone, DEFAULT_TIMEZONE, MAX_CUSTOM_SPAN_DAYS, REVENUE_RANGES,
   type CustomRangeError, type Granularity, type MerchantStats, type RevenueRange,

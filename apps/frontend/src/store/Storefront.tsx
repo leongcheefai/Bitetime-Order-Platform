@@ -435,7 +435,20 @@ export default function Storefront() {
   // `priceOrder` reads `promoPrice`. Unmapped, every promo silently prices at the base price here
   // and at the promo price on the backend — which is a refused checkout for every promo order.
   const pricedProducts = useMemo(() => activeProducts.map(productFromRow), [activeProducts])
-  const promoById = new Map(pricedProducts.map(p => [p.id, promoState(p, now)]))
+  // Memoised on the MINUTE, not on `now`: the clock is a fresh Date every render, so keyed on it
+  // this map would rebuild per keystroke as before. Promo windows are set to the day, so a
+  // minute-old answer is the same answer.
+  const nowMinute = Math.floor(now.getTime() / 60000)
+  const promoById = useMemo(
+    () => new Map(pricedProducts.map(p => [p.id, promoState(p, new Date(nowMinute * 60000))])),
+    [pricedProducts, nowMinute],
+  )
+  // Which products ask a question before they go in the cart — computed once per menu rather
+  // than by mapping every product's option groups on every render.
+  const hasActiveOptions = useMemo(
+    () => new Set(activeProducts.filter(p => optionGroupsFromRow(p.option_groups).some(g => g.active)).map(p => p.id)),
+    [activeProducts],
+  )
   // Which products have a line in the cart, as a set: the menu used to ask `cart.some(...)`
   // once per product, products × cart lines on every render.
   const inCart = useMemo(() => new Set(cart.map(l => l.productId)), [cart])
@@ -1239,7 +1252,7 @@ export default function Storefront() {
                           </div>
                         )
                       })()}
-                    trailing={optionGroupsFromRow(p.option_groups).some(g => g.active) ? (
+                    trailing={hasActiveOptions.has(p.id) ? (
                       /* A product that asks questions has no plain line to step: there is no
                          answer to which selection a bare + would raise. It gets Add, and the
                          quantity is adjusted in the cart or by adding again. */

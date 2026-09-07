@@ -9,6 +9,11 @@ import tailwindcss from '@tailwindcss/vite'
  * cache-busted together by any one-line change to the app. Splitting the vendors out means a
  * deploy that touches only app code leaves React, Supabase and Motion in the visitor's cache.
  *
+ * Base UI is deliberately NOT named either: one group for all of @base-ui/react shipped the
+ * dialog, sheet, checkbox and radio machinery — reached only from lazy dashboard and storefront
+ * routes — to every prerendered marketing page, 224KB preloaded for four components. Left to
+ * rolldown, the entry carries only the primitives it renders.
+ *
  * Recharts, the table stack and dnd-kit are deliberately NOT named: each is imported by one or
  * two lazy dashboard sections, and rolldown already emits them as shared lazy chunks. Naming
  * them as groups made rolldown park clsx — which recharts and the app both use — inside the
@@ -22,7 +27,6 @@ function vendorChunk(id: string): string | undefined {
   if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'react'
   if (id.includes('/@supabase/')) return 'supabase'
   if (id.includes('/motion/') || id.includes('/framer-motion/') || id.includes('/motion-dom/') || id.includes('/motion-utils/')) return 'motion'
-  if (id.includes('/@base-ui') || id.includes('/@floating-ui/')) return 'base-ui'
   return undefined
 }
 
