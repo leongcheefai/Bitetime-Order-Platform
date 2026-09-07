@@ -1196,7 +1196,7 @@ export default function Storefront() {
                     imagePaths={p.image_urls ?? []}
                     onImageClick={() => setGallery(p)}
                     imageLabel={t('View photos', '查看图片')}
-                    className={cn(inCart.has(p.id) && "border-primary bg-brand-100")}
+                    className={cn(inCart.has(p.id) && "border-primary bg-brand-wash")}
                     title={productName(p)}
                     subtitle={productDescr(p) || undefined}
                     meta={(() => {
@@ -1316,7 +1316,7 @@ export default function Storefront() {
                   className={cn(
                     "flex-1 border rounded-md py-[10px] px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans text-center transition-all hover:border-primary focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2",
                     mode === m
-                      ? "border-[0.5px] border-primary bg-brand-100 text-primary font-medium"
+                      ? "border-[0.5px] border-primary bg-brand-wash text-primary font-medium"
                       : "border-border bg-card text-foreground"
                   )}
                   aria-pressed={mode === m}
@@ -1612,7 +1612,7 @@ export default function Storefront() {
           <hr className="border-0 border-t border-border my-6" />
 
           {/* Live order summary */}
-          <div className="bg-brand-100 border border-border rounded-xl py-4 px-5 mb-6">
+          <div className="bg-brand-wash border border-border rounded-xl py-4 px-5 mb-6">
             <div className="font-heading text-[14px] font-medium text-primary mb-[10px]">
               {t('Order Summary', '订单摘要')}
             </div>

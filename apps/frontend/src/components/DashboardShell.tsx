@@ -230,8 +230,8 @@ function activeLabel(nav: NavItem[], active: string, activeSub: string | undefin
  * dashboard tint them (BrandTheme).
  */
 const ROW_TEXT = cn(
-  'text-[13px] font-sans font-medium tracking-[0.01em] text-ink-700',
-  'hover:text-primary data-active:bg-brand-100 data-active:text-primary data-active:font-semibold',
+  'text-[13px] font-sans font-medium tracking-[0.01em] text-foreground-secondary',
+  'hover:text-primary data-active:bg-brand-wash data-active:text-primary data-active:font-semibold',
 )
 const ROW = cn(
   ROW_TEXT,

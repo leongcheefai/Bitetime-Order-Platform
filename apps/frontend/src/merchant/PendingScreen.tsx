@@ -50,7 +50,7 @@ export default function PendingScreen() {
           )}
         </p>
         {err && (
-          <div className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div className="text-[13px] text-foreground-secondary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {err}
           </div>
         )}

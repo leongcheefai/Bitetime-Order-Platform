@@ -34,7 +34,7 @@ const navLink =
 
 // Account dropdown menu-item (Link or button)
 const menuItem =
-  'block w-full box-border text-left py-[9px] px-3 border-0 rounded-sm bg-transparent text-muted-foreground text-[13px] font-sans font-medium no-underline cursor-pointer [transition:all_0.15s] hover:bg-brand-100 hover:text-primary'
+  'block w-full box-border text-left py-[9px] px-3 border-0 rounded-sm bg-transparent text-muted-foreground text-[13px] font-sans font-medium no-underline cursor-pointer [transition:all_0.15s] hover:bg-brand-wash hover:text-primary'
 
 const footerLink = 'hover:text-primary underline underline-offset-4'
 
@@ -42,7 +42,7 @@ const footerLink = 'hover:text-primary underline underline-offset-4'
 // number is never shown — the link reads "WhatsApp" and only the href carries it.
 const SUPPORT_WHATSAPP = '6588425267'
 
-const footerColumnHeading = 'text-[11px] font-medium uppercase tracking-[0.09em] text-ink-700 mb-3'
+const footerColumnHeading = 'text-[11px] font-medium uppercase tracking-[0.09em] text-foreground-secondary mb-3'
 const footerColumnLink = 'block py-1 text-muted-foreground no-underline [transition:color_0.15s] hover:text-primary'
 
 function FooterColumn({ heading, children }: { heading: string; children: ReactNode }) {

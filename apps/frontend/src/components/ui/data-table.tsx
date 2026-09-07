@@ -185,7 +185,7 @@ export function DataTable<TData, TValue>({
           <Button
             variant="outline"
             size="none"
-            className="py-[4px] px-3 pointer-coarse:min-h-10 pointer-coarse:px-4 rounded-pill text-[12px] bg-card hover:bg-brand-100 hover:text-primary hover:border-primary"
+            className="py-[4px] px-3 pointer-coarse:min-h-10 pointer-coarse:px-4 rounded-pill text-[12px] bg-card hover:bg-brand-wash hover:text-primary hover:border-primary"
             onClick={() => goToPage(pageIndex - 1)}
             disabled={pageIndex <= 0}
           >{prevLabel}</Button>
@@ -200,7 +200,7 @@ export function DataTable<TData, TValue>({
           <Button
             variant="outline"
             size="none"
-            className="py-[4px] px-3 pointer-coarse:min-h-10 pointer-coarse:px-4 rounded-pill text-[12px] bg-card hover:bg-brand-100 hover:text-primary hover:border-primary"
+            className="py-[4px] px-3 pointer-coarse:min-h-10 pointer-coarse:px-4 rounded-pill text-[12px] bg-card hover:bg-brand-wash hover:text-primary hover:border-primary"
             onClick={() => goToPage(pageIndex + 1)}
             disabled={pageIndex >= pageCount - 1}
           >{nextLabel}</Button>

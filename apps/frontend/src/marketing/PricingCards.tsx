@@ -27,7 +27,7 @@ export default function PricingCards() {
   const toggleButton = (value: 'monthly' | 'yearly') =>
     cn(
       'py-2 px-[18px] rounded-pill text-sm',
-      billing === value ? '' : 'text-ink-700',
+      billing === value ? '' : 'text-foreground-secondary',
     )
 
   return (
@@ -62,7 +62,7 @@ export default function PricingCards() {
               'text-[11px] font-medium py-[2px] px-2 rounded-pill',
               billing === 'yearly'
                 ? 'bg-white/20 text-background'
-                : 'bg-brand-100 text-primary'
+                : 'bg-brand-wash text-primary'
             )}
           >
             {t('Save ~17%', '省约17%')}
@@ -104,7 +104,7 @@ export default function PricingCards() {
                 <p className="min-h-[1.1em] text-xs text-muted-foreground mt-[0.35rem] mb-0">
                   {billing === 'yearly' && amount > 0 ? t('billed yearly', '按年付费') : ' '}
                 </p>
-                <p className="text-sm leading-[1.6] text-ink-700 mt-3 mb-5">
+                <p className="text-sm leading-[1.6] text-foreground-secondary mt-3 mb-5">
                   {t(tier.blurb.en, tier.blurb.zh)}
                 </p>
                 <ul className="list-none m-0 mb-7 p-0 flex flex-col gap-[0.6rem]">

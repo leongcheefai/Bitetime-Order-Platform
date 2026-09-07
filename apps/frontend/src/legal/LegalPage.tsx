@@ -70,7 +70,7 @@ export default function LegalPage({ doc }: { doc: LegalDocument }) {
         {caveats.length > 0 && (
           <div
             role="note"
-            className="mb-10 rounded-xl border-[0.5px] border-dashed border-border bg-brand-100 px-4 py-3 text-sm leading-[1.6] text-muted-foreground"
+            className="mb-10 rounded-xl border-[0.5px] border-dashed border-border bg-brand-wash px-4 py-3 text-sm leading-[1.6] text-muted-foreground"
           >
             <p>
               <strong className="text-primary">{t('Draft.', '草稿。')}</strong>{' '}

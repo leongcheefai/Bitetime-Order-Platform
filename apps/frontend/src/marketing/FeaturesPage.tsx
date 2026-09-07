@@ -30,7 +30,7 @@ export default function FeaturesPage() {
         <h1 className="font-heading text-[clamp(1.9rem,4vw,2.75rem)] font-medium text-foreground leading-[1.2] tracking-[-0.01em] mb-5">
           {t('Everything you need to take orders online', '在线接单所需的一切')}
         </h1>
-        <p className="text-base leading-[1.75] text-ink-700 max-w-[580px] mx-auto mb-4">
+        <p className="text-base leading-[1.75] text-foreground-secondary max-w-[580px] mx-auto mb-4">
           {t(
             'A shop page, delivery fees that match how you deliver, orders that arrive numbered and complete, and a customer list that builds itself. No website, no designer, no developer.',
             '店铺页面、贴合你配送方式的运费、送达时已编号且资料齐全的订单，以及会自动累积的顾客名单。不需要网站、设计师或工程师。',
@@ -47,7 +47,7 @@ export default function FeaturesPage() {
                 <h2 className="font-heading text-[17px] font-semibold text-primary leading-[1.35] mb-2">
                   {t(f.title.en, f.title.zh)}
                 </h2>
-                <p className="text-sm leading-[1.7] text-ink-700 m-0">
+                <p className="text-sm leading-[1.7] text-foreground-secondary m-0">
                   {t(f.body.en, f.body.zh)}
                 </p>
               </div>
@@ -57,7 +57,7 @@ export default function FeaturesPage() {
       </section>
 
       {/* ── Closing CTA ── */}
-      <section className="border-t border-border px-8 py-16 text-center bg-brand-100 max-[600px]:px-5 max-[600px]:py-10">
+      <section className="border-t border-border px-8 py-16 text-center bg-brand-wash max-[600px]:px-5 max-[600px]:py-10">
         <Reveal>
           <h2 className={sectionTitle}>
             {t('Every one of these is included, free for seven days', '以上功能全包含，免费试用七天')}

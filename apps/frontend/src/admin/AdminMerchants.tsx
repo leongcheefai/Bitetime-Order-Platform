@@ -112,7 +112,7 @@ const columns: ColumnDef<MerchantRow>[] = [
       return (
         <Link
           to={`/merchant/${row.original.slug}`}
-          className="py-[4px] px-[10px] border border-border rounded-pill text-muted-foreground text-[11px] font-semibold no-underline whitespace-nowrap transition-all hover:bg-brand-100 hover:text-primary [@media(pointer:coarse)]:min-h-9 [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center"
+          className="py-[4px] px-[10px] border border-border rounded-pill text-muted-foreground text-[11px] font-semibold no-underline whitespace-nowrap transition-all hover:bg-brand-wash hover:text-primary [@media(pointer:coarse)]:min-h-9 [@media(pointer:coarse)]:inline-flex [@media(pointer:coarse)]:items-center"
         >{t('Dashboard', '后台')}</Link>
       )
     },
@@ -134,7 +134,7 @@ const columns: ColumnDef<MerchantRow>[] = [
                 <Button
                   variant="ghost"
                   size="none"
-                  className="size-9 p-0 rounded-pill cursor-pointer pointer-coarse:size-11 hover:bg-brand-100 hover:text-primary"
+                  className="size-9 p-0 rounded-pill cursor-pointer pointer-coarse:size-11 hover:bg-brand-wash hover:text-primary"
                   disabled={busy === m.id}
                   aria-label={t('Actions', '操作')}
                 />
@@ -328,7 +328,7 @@ export default function AdminMerchants() {
           type="button"
           onClick={recapture}
           disabled={recapturing}
-          className="py-[6px] px-[12px] border border-border rounded-pill bg-transparent text-muted-foreground text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-all hover:bg-brand-100 hover:text-primary disabled:opacity-50 disabled:cursor-default"
+          className="py-[6px] px-[12px] border border-border rounded-pill bg-transparent text-muted-foreground text-[11px] font-semibold whitespace-nowrap cursor-pointer transition-all hover:bg-brand-wash hover:text-primary disabled:opacity-50 disabled:cursor-default"
         >
           {recapturing
             ? t('Asking…', '请求中…')

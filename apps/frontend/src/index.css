@@ -138,6 +138,10 @@
   --color-neutral-fg: var(--neutral-fg);
   --color-disabled-bg: var(--color-disabled-bg);
   --color-disabled-fg: var(--color-disabled-fg);
+  /* `text-foreground-secondary` and `bg-brand-wash` — the two semantic roles the audit found
+     spread across ninety primitive call sites. Named after the shadcn vocabulary they sit in. */
+  --color-foreground-secondary: var(--color-text-secondary);
+  --color-brand-wash: var(--color-brand-wash);
 
   /* Radii — brand scale (overrides Tailwind defaults) */
   --radius-xs: var(--radius-xs);

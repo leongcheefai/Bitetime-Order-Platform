@@ -115,7 +115,7 @@ export default function SuspendedScreen() {
         </div>
 
         {err && (
-          <div className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-sm px-[13px] py-[10px] mb-4 leading-[1.5]">
+          <div className="text-[13px] text-foreground-secondary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-4 leading-[1.5]">
             {err}
           </div>
         )}
@@ -178,7 +178,7 @@ export default function SuspendedScreen() {
           const tier = PRICING_TIERS[0]
           const price = pricing.prices.pro[cycle]
           return (
-            <div className="w-full p-4 mb-5 rounded-xl border-[0.5px] border-primary bg-brand-100">
+            <div className="w-full p-4 mb-5 rounded-xl border-[0.5px] border-primary bg-brand-wash">
               <div className="flex items-baseline justify-between gap-3 mb-1">
                 <span className="font-heading text-[15px] font-medium text-primary">
                   {tier.name[lang]}
@@ -214,7 +214,7 @@ export default function SuspendedScreen() {
 
       <TrialFeedbackPrompt />
       {err && (
-        <div className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-sm px-[13px] py-[10px] mb-4 leading-[1.5]">
+        <div className="text-[13px] text-foreground-secondary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-4 leading-[1.5]">
           {err}
         </div>
       )}

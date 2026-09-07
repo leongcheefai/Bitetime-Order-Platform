@@ -168,7 +168,7 @@ export default function BrandColourCard({ onDirtyChange }: {
       {/* The preview renders inside the SAME component the storefront mounts, fed the pending
           value — so what the merchant sees here cannot drift from what the customer gets. */}
       <BrandTheme color={pending}>
-        <div className="rounded-xl border border-border bg-brand-100 p-4 flex flex-wrap items-center gap-3">
+        <div className="rounded-xl border border-border bg-brand-wash p-4 flex flex-wrap items-center gap-3">
           <Button type="button" size="none" className="rounded-lg py-[6px] px-[14px] text-[13px]">
             {t('Add to cart', '加入购物车')}
           </Button>

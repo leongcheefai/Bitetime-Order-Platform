@@ -109,7 +109,7 @@ export default function FulfilDatePicker({ available, value, onChange, t, lang }
                 'h-10 pointer-coarse:min-h-11 rounded-md text-[14px] font-sans transition-all border',
                 'focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2',
                 selected
-                  ? 'border-[0.5px] border-primary bg-brand-100 text-primary font-medium'
+                  ? 'border-[0.5px] border-primary bg-brand-wash text-primary font-medium'
                   : selectable
                     ? 'border-border bg-card text-foreground hover:border-primary cursor-pointer'
                     // Greyed, not gone: the customer must be able to SEE that the shop is shut

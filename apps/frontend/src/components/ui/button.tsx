@@ -23,13 +23,13 @@ const buttonVariants = cva(
           "border-[0.5px] border-border bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
         // .add-btn / .admin-toggle button — dashed clay border
         dashed:
-          "border border-dashed border-border bg-transparent text-muted-foreground hover:border-primary hover:text-primary hover:bg-brand-100",
+          "border border-dashed border-border bg-transparent text-muted-foreground hover:border-primary hover:text-primary hover:bg-brand-wash",
         // Generic ghost — no border, subtle hover
         ghost:
           "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
         // .del-btn — rose-tinted destructive (border-rose, oxblood-tint bg)
         destructive:
-          "border border-border bg-brand-100 text-primary hover:bg-ink-200 disabled:bg-disabled-bg",
+          "border border-border bg-brand-wash text-primary hover:bg-ink-200 disabled:bg-disabled-bg",
         // .invoice-btn — white bg / clay-rose text, inverts on hover + self-encodes geometry (use size="none")
         invoice:
           "w-full px-[14px] py-[10px] text-[13px] rounded-sm border border-border bg-white text-muted-foreground font-semibold hover:bg-ink-600 hover:text-white hover:border-ink-600 disabled:bg-disabled-bg",

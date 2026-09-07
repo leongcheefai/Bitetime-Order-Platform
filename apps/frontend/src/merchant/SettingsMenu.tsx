@@ -109,11 +109,11 @@ export default function SettingsMenu<K extends string>({ heading, items, active,
               'flex items-center w-full px-3 py-2 rounded-md',
               '[@media(pointer:coarse)]:py-2.5',
               'border-0 bg-transparent text-left',
-              'text-[13px] font-sans font-medium tracking-[0.01em] text-ink-700',
+              'text-[13px] font-sans font-medium tracking-[0.01em] text-foreground-secondary',
               'cursor-pointer transition-[background,color] duration-150',
               'hover:bg-ink-200 hover:text-primary',
               'focus-visible:outline-1 focus-visible:outline-primary focus-visible:outline-offset-1',
-              active === key && 'bg-brand-100 text-primary font-semibold',
+              active === key && 'bg-brand-wash text-primary font-semibold',
             )}
           >
             {label}

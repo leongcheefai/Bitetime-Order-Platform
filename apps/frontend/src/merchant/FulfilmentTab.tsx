@@ -163,7 +163,7 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
       {/* The merchant-facing half of the pause. Not dismissible: a shop that has stopped taking
           orders is not a thing its owner should be able to hide from themselves. */}
       {needsReview && (
-        <div className="bg-brand-100 border-[0.5px] border-primary rounded-2xl p-5 mb-8 w-full box-border max-sm:p-4">
+        <div className="bg-brand-wash border-[0.5px] border-primary rounded-2xl p-5 mb-8 w-full box-border max-sm:p-4">
           <h3 className="font-heading text-[15px] font-medium text-primary mb-2">
             {t('Your shop is paused', '店铺已暂停接单')}
           </h3>
@@ -277,7 +277,7 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
                   'border rounded-md py-2 px-[14px] pointer-coarse:min-h-11 cursor-pointer text-[14px] font-sans transition-all ' +
                   'hover:border-primary focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 ' +
                   (on
-                    ? 'border-[0.5px] border-primary bg-brand-100 text-primary font-medium'
+                    ? 'border-[0.5px] border-primary bg-brand-wash text-primary font-medium'
                     : 'border-border bg-card text-foreground')
                 }
               >

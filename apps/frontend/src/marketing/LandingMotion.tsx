@@ -182,7 +182,7 @@ export const StorefrontPreview = memo(function StorefrontPreview({ t }: { t: TFn
       <div className="rounded-2xl border-[0.5px] border-border bg-card p-5 text-left shadow-elev-3">
         {/* Shop header */}
         <div className="flex items-center gap-3 pb-4 border-b border-border">
-          <span className="grid h-10 w-10 place-items-center rounded-round bg-brand-100 font-heading text-[15px] font-medium text-primary">
+          <span className="grid h-10 w-10 place-items-center rounded-round bg-brand-wash font-heading text-[15px] font-medium text-primary">
             NK
           </span>
           <div className="min-w-0">

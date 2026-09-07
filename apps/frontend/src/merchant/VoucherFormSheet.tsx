@@ -13,6 +13,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '../components/ui/checkbox'
 // Never a native `<input type="date">` — see the note at the top of DateField.
 import DateField from './DateField'
@@ -236,7 +237,7 @@ export default function VoucherFormSheet({
                           type="button"
                           variant="outline"
                           size="none"
-                          className="shrink-0 rounded-sm px-3 text-[12px] bg-card whitespace-nowrap hover:border-primary hover:text-primary hover:bg-brand-100"
+                          className="shrink-0 rounded-sm px-3 text-[12px] bg-card whitespace-nowrap hover:border-primary hover:text-primary hover:bg-brand-wash"
                           onClick={() => setForm({ ...form, code: generateVoucherCode(merchant!.slug) })}
                         >
                           {t('Generate', '生成')}
@@ -448,16 +449,11 @@ export default function VoucherFormSheet({
                   nobody asked for, and the create route does not take the field. */}
               {editing && (
                 <div className="flex items-center gap-3 min-w-0">
-                  <button
+                  <Switch
                     id="vm-active"
-                    type="button"
-                    role="switch"
-                    aria-checked={form.active}
-                    onClick={() => setForm({ ...form, active: !form.active })}
-                    className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-pill transition-colors cursor-pointer ${form.active ? 'bg-primary' : 'bg-border'}`}
-                  >
-                    <span className={`inline-block size-5 rounded-pill bg-white shadow-elev-1 transition-transform ${form.active ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
-                  </button>
+                    checked={form.active}
+                    onCheckedChange={v => setForm({ ...form, active: v })}
+                  />
                   <Label htmlFor="vm-active" className="min-w-0 truncate text-[13px]">
                     {form.active ? t('Active at checkout', '结账时可用') : t('Paused — not redeemable', '已暂停 — 无法兑换')}
                   </Label>

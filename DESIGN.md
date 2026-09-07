@@ -160,7 +160,7 @@ Every pair named here is asserted by `apps/frontend/src/tokens.test.ts`, which r
 - **Brand 500** (`#7A1028`): oxblood. The brand voice — primary buttons, headings, active nav, focus rings. Carries identity on every platform screen, and is the default a shop inherits until its merchant picks another (ADR 0017). 10.41:1 on the page background.
 - **Brand 600** (`#550A1A`): hover/pressed on oxblood fills only. Never a resting fill.
 - **Brand 700** (`#3F0713`): text on a brand tint (chips, active rows).
-- **Brand 100 / 50** (`#F4E7E6` / `#FCF1EF`): the accent at low strength — selected-row wash, chip backgrounds.
+- **Brand 100 / 50** (`#F4E7E6` / `#FCF1EF`): the accent at low strength — selected-row wash, chip backgrounds. Brand 100 as a **surface** has a semantic name, `--color-brand-wash` (`bg-brand-wash`), because it is a role, not a one-off: sixty call sites reached for the primitive before it was named. `BrandTheme` restates it for a shop's own colour.
 - **Brand 400** (`#D4708A`): a light rose, used **only** as the dark-theme accent. It exists because `-500` is far too dark to read on `#09090B`.
 
 ### Secondary
@@ -176,6 +176,7 @@ Every pair named here is asserted by `apps/frontend/src/tokens.test.ts`, which r
 - **Ink 200** (`#E4E4E7`): the default `0.5px` border. The system's edge.
 - **Ink 300** (`#D4D4D8`): a stronger border where one rule must read above another.
 - **Ink 900** (`#18181B`): primary text. 14.87:1 on cream.
+- **Ink 700** (`#3F3F46`): the third text weight, between body and muted — marketing prose, the auth screens' running copy. `--color-text-secondary` (`text-foreground-secondary`). 10.6:1 on cream.
 - **Ink 600** (`#636369`): secondary text, field labels, captions, table meta. 5.01:1 on cream, 5.97:1 on white. **This is the muted TEXT token.**
 - **Ink 500** (`#71717A`): borders and icons that need more weight than Ink 200. **Not text** — it reaches only 4.06:1 on cream and fails AA there, even though it passes on white.
 - **Ink 400** (`#A1A1AA`): borders and decorative icons **only** — 2.15:1 on cream, a straight AA failure as text.
@@ -275,6 +276,9 @@ One treatment for every control: fill `--color-disabled-bg` (`--ink-200`), label
 The rule is about **fills**, and that scope is deliberate. Form primitives whose resting state is already white or transparent — input, textarea, select, checkbox, radio, menu items — keep shadcn's `disabled:opacity-50`. There is no brand fill to composite, so nothing goes off-palette, and it is the convention every user has already learned. Do not "fix" those.
 
 Only filled variants take the fill. `ghost`, `link`, `outline` and `dashed` keep their transparent background and change only their label — a grey slab where a text link used to be reads as broken layout.
+
+### Switch
+`components/ui/switch.tsx`, on Base UI. 44×24 track, accent when on, hairline grey when off, white thumb on `--elev-1`. Extracted from two verbatim hand-rolled `role="switch"` buttons (product visibility, voucher active); there is no third way to draw a toggle.
 
 ### Chips (status)
 Pill (`9999px`), 3px×10px padding, no border at rest. Background + text from the four-tone set. As a *filter* control the chip gains a matching-colour border to read as selected.

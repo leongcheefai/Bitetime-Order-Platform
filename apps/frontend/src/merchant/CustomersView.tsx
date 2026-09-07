@@ -27,10 +27,10 @@ const PANEL = 'bg-card border-[0.5px] border-border rounded-2xl p-5 mb-8 w-full 
 const TH = 'text-[10px] font-semibold uppercase tracking-[0.08em] text-primary px-[14px] py-[10px] border-b-[0.5px] border-border text-left whitespace-nowrap'
 
 // Table data cell (base) — pixel-match of .mm-customers-table td + hover
-const TD = 'px-[14px] py-[12px] border-b border-muted text-foreground align-middle group-hover:bg-brand-100'
+const TD = 'px-[14px] py-[12px] border-b border-muted text-foreground align-middle group-hover:bg-brand-wash'
 
 // Count cell — pixel-match of .mm-customers-count overrides
-const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-semibold text-center align-middle group-hover:bg-brand-100'
+const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-semibold text-center align-middle group-hover:bg-brand-wash'
 
 /**
  * One tag chip, on `Badge` rather than hand-rolled — the filter row's, the table row's and the
@@ -45,7 +45,7 @@ const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-se
  * Hand-rolled, these were 12px regular with a resting border, which is a fourth chip style on a
  * screen that already had three.
  */
-const TAG_CHIP = 'px-[10px] border-transparent bg-brand-100 text-brand-700'
+const TAG_CHIP = 'px-[10px] border-transparent bg-brand-wash text-brand-700'
 
 // `button.tsx`'s focus treatment, borrowed for the raw buttons `Badge` cannot cover — the two
 // nested inside the drawer's chip. A control a keyboard reaches needs this app's ring, not the
@@ -604,7 +604,7 @@ function DrawerContents({
                       key={o.id}
                       type="button"
                       onClick={() => setSelectedOrder(o)}
-                      className="flex flex-col gap-1 w-full text-left rounded-lg border border-border bg-background px-3 py-2.5 hover:bg-brand-100 transition-colors"
+                      className="flex flex-col gap-1 w-full text-left rounded-lg border border-border bg-background px-3 py-2.5 hover:bg-brand-wash transition-colors"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-heading text-[14px] font-medium text-primary">{o.order_number || '—'}</span>

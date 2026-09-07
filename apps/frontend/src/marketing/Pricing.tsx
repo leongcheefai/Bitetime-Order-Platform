@@ -40,7 +40,7 @@ export default function Pricing() {
             '固定价格。订单一分钱都不抽成。',
           )}
         </h1>
-        <p className="text-base leading-[1.75] text-ink-700 max-w-[580px] mx-auto mb-4">
+        <p className="text-base leading-[1.75] text-foreground-secondary max-w-[580px] mx-auto mb-4">
           {t(
             'You pay a subscription and nothing else — the month your shop does well is the month you keep the difference. Every shop starts with seven free days, and we ask for no card to begin.',
             '你只需支付订阅费，不再有其他费用——生意好的那个月，多出来的部分全归你。每家店铺都有七天免费期，开始时无需信用卡。',
@@ -86,7 +86,7 @@ export default function Pricing() {
                       <span aria-hidden="true" className="text-primary font-semibold shrink-0">✓</span>
                       <span className="text-foreground">{t(row.label.en, row.label.zh)}</span>
                       {row.detail && (
-                        <span className="ml-auto pl-4 text-right text-ink-700">
+                        <span className="ml-auto pl-4 text-right text-foreground-secondary">
                           {t(row.detail.en, row.detail.zh)}
                         </span>
                       )}
@@ -108,7 +108,7 @@ export default function Pricing() {
           <h2 className={sectionTitle}>
             {t('How billing works', '扣款方式')}
           </h2>
-          <div className="flex flex-col gap-5 text-[15px] leading-[1.75] text-ink-700">
+          <div className="flex flex-col gap-5 text-[15px] leading-[1.75] text-foreground-secondary">
             <p className="m-0">
               {t(
                 'Every shop starts with seven free days and we ask for no card. The clock starts when you sign up, and your shop is open from that moment. We remind you before it ends. If you decide not to continue, it stops on its own and you are never charged.',
@@ -140,7 +140,7 @@ export default function Pricing() {
           <h2 className={sectionTitle}>
             {t('What we do not charge for', '我们不收费的部分')}
           </h2>
-          <div className="flex flex-col gap-5 text-[15px] leading-[1.75] text-ink-700">
+          <div className="flex flex-col gap-5 text-[15px] leading-[1.75] text-foreground-secondary">
             <p className="m-0">
               {t(
                 'No commission, on any order, ever. A marketplace takes a percentage of every sale for as long as you use it, which means the better your shop does the more it costs you. Your subscription here is the same number whether you take four orders this month or four hundred.',
@@ -164,7 +164,7 @@ export default function Pricing() {
       </section>
 
       {/* ── Closing CTA ── */}
-      <section className="border-t border-border px-8 py-16 text-center bg-brand-100 max-[600px]:px-5 max-[600px]:py-10">
+      <section className="border-t border-border px-8 py-16 text-center bg-brand-wash max-[600px]:px-5 max-[600px]:py-10">
         <Reveal>
           <h2 className="font-heading italic text-[18px] text-foreground mb-6 max-w-[520px] mx-auto">
             {t(
