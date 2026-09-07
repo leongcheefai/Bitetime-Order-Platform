@@ -43,7 +43,7 @@ export default function FeedbackDetailSheet({
       >
         {item && (
           <>
-            <SheetHeader className="shrink-0 border-b border-border pr-9">
+            <SheetHeader className="shrink-0 border-b border-border">
               <SheetTitle className="text-[17px] sm:text-[19px]">
                 {item.shop_name ?? t('Deleted shop', '已删除的店铺')}
               </SheetTitle>

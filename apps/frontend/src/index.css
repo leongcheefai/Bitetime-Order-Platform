@@ -290,8 +290,10 @@
     font-size: 16px;
   }
 }
-html[lang="zh"] :is(th, [data-slot="table-head"]) {
+html[lang="zh"] :is(th, [data-slot="table-head"], .uppercase) {
   letter-spacing: 0;
+}
+html[lang="zh"] :is(th, [data-slot="table-head"], .uppercase.text-\[10px\], .uppercase.text-\[11px\]) {
   font-size: 12px;
 }
 

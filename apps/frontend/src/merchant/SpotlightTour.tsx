@@ -92,7 +92,7 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
   if (!rect) return null
 
   // Place the tooltip below the target when there's room, else above it.
-  const placeBelow = window.innerHeight - rect.bottom > 220
+  const placeBelow = window.innerHeight - rect.bottom > 220 || rect.top < 240
   // Never wider than the viewport less its gutters: at 300px fixed the clamp below held at
   // 360px and failed under it.
   const tooltipW = Math.min(TOOLTIP_W, window.innerWidth - 24)

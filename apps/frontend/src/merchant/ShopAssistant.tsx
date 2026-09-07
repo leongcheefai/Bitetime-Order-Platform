@@ -80,7 +80,7 @@ export default function ShopAssistant() {
           onChange={e => setQuestion(e.target.value)}
           maxLength={MAX_QUESTION}
           placeholder={t('e.g. Which product sold best last month?', '例如：上个月哪个产品卖得最好？')}
-          className="flex-1 min-w-[220px] h-9 text-[13px]"
+          className="flex-1 min-w-[220px] h-9 pointer-coarse:h-11 text-[13px]"
           aria-label={t('Your question', '您的问题')}
         />
         <Button

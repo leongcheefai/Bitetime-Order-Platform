@@ -509,7 +509,7 @@ function CustomerDrawer({
 }) {
   return (
     <Sheet open={customer !== null} onOpenChange={open => { if (!open) onClose() }}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="data-[side=right]:w-full data-[side=right]:sm:max-w-md overflow-y-auto">
         {/* Keyed, so switching customers REMOUNTS this: the order list and the note draft
             reset because they are born fresh, not because an effect remembered to clear them. */}
         {customer && (

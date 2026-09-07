@@ -83,7 +83,7 @@ function DownloadReport({ selection, granularity }: { selection: RevenueSelectio
             disabled={busy}
             onClick={download}
             className={cn(
-              'rounded-pill p-1.5',
+              'rounded-pill p-1.5 pointer-coarse:p-3',
               'hover:border-primary hover:bg-transparent hover:text-primary',
               'disabled:cursor-default disabled:hover:border-border disabled:hover:text-muted-foreground',
             )}
@@ -157,7 +157,7 @@ function CustomRangePill({
             type="button"
             aria-pressed={active}
             className={cn(
-              'rounded-pill border-[0.5px] px-2.5 py-0.5 text-[11px] font-semibold transition-colors',
+              'rounded-pill border-[0.5px] px-2.5 py-0.5 pointer-coarse:min-h-9 pointer-coarse:px-3 text-[11px] font-semibold transition-colors',
               active
                 ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-border bg-transparent text-muted-foreground hover:text-primary',

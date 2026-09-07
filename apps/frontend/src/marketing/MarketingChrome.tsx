@@ -156,6 +156,10 @@ export function MarketingNav() {
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen(o => !o)}
+              // Capped and truncated: a long address in a `whitespace-nowrap` pill pushed the
+              // whole nav row past a 360px viewport, where body's overflow clip hid the end.
+              className="max-w-[9rem] truncate sm:max-w-[14rem]"
+              title={account.email}
             >
               {account.email}
             </Button>

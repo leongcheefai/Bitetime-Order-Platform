@@ -40,7 +40,7 @@ export default function StatusFooter({
   }))
 
   return (
-    <div className="shrink-0 border-t border-border bg-card px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+    <div className="shrink-0 border-t border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
       <Select
         value={status}
         // `if (v)` rather than `??` — this handler writes to the database, so a null must be

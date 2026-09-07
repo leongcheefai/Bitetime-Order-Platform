@@ -102,7 +102,7 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
     <>
       {/* Mobile top bar — hamburger + brand. Hidden on desktop. */}
       <header className={cn(
-        'hidden max-md:flex fixed top-0 inset-x-0 z-sticky h-14 items-center gap-3 px-4',
+        'hidden max-md:flex fixed top-0 inset-x-0 z-sticky h-[calc(3.5rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] items-center gap-3 px-4',
         'bg-muted border-b border-border',
       )}>
         <Button
@@ -201,7 +201,7 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
 
       {/* Main content — capped + centered so it doesn't stretch empty on wide screens.
           On mobile the top bar is fixed, so pad the content down to clear it. */}
-      <SidebarInset className="min-w-0 pt-7 px-8 pb-16 max-md:px-4 max-md:pt-[72px] max-md:pb-12">
+      <SidebarInset className="min-w-0 pt-7 px-8 pb-16 max-md:px-4 max-md:pt-[calc(72px+env(safe-area-inset-top))] max-md:pb-12">
         <div className="w-full max-w-5xl">
           {/* The page's one h1, for the outline and nothing else: the sections open with their
               own visible h3s, and a sighted merchant already reads the active row in the rail.
