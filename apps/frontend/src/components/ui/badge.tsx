@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
   // Base: pill shape, 11px semibold — matches `.order-status-badge` / `.cust-status-badge`
-  "group/badge inline-flex h-fit w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-pill border border-transparent px-[9px] py-[3px] text-[11px] font-semibold whitespace-nowrap transition-all focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex h-fit w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-pill border border-transparent px-[9px] py-[3px] text-[11px] font-semibold whitespace-nowrap transition focus-visible:border-primary focus-visible:ring-[3px] focus-visible:ring-primary/50 has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {

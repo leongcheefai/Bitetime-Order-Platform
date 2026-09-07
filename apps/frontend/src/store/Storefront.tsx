@@ -237,12 +237,18 @@ export default function Storefront() {
     }
   }
 
-  const activeProducts = products.filter(p => p.active)
+  // Memoised, all of it: this component holds the checkout form's every keystroke in state,
+  // and unmemoised these four passes over the whole menu re-ran per character typed.
+  const activeProducts = useMemo(() => products.filter(p => p.active), [products])
   // The shop's menu sections (ADR 0013), already on the merchant row `MerchantProvider` loaded —
   // no second request. `menuSections` decides everything about how they render, including the
   // three ways a product ends up in the trailing un-headed block; a shop with none gets one
   // section holding its whole menu, which is the storefront that existed before this feature.
-  const sections = menuSections(activeProducts, menuCategoriesFromRow(merchant?.product_categories))
+  const productCategories = merchant?.product_categories
+  const sections = useMemo(
+    () => menuSections(activeProducts, menuCategoriesFromRow(productCategories)),
+    [activeProducts, productCategories],
+  )
   // The rates come from the SAME function the backend prices with: it commits at its own
   // total and refuses a quote that disagrees (`price_changed`), so a fallback that differed
   // by a ringgit would not be a display bug — it would refuse the checkout.
@@ -428,8 +434,11 @@ export default function Storefront() {
   // The menu, mapped once for the pricing rule: the rows arrive snake_cased from PostgREST and
   // `priceOrder` reads `promoPrice`. Unmapped, every promo silently prices at the base price here
   // and at the promo price on the backend — which is a refused checkout for every promo order.
-  const pricedProducts = activeProducts.map(productFromRow)
+  const pricedProducts = useMemo(() => activeProducts.map(productFromRow), [activeProducts])
   const promoById = new Map(pricedProducts.map(p => [p.id, promoState(p, now)]))
+  // Which products have a line in the cart, as a set: the menu used to ask `cart.some(...)`
+  // once per product, products × cart lines on every render.
+  const inCart = useMemo(() => new Set(cart.map(l => l.productId)), [cart])
 
   // One pricing breakdown drives the summary, the order, and the success view.
   const bd = priceOrder({
@@ -1174,7 +1183,7 @@ export default function Storefront() {
                     imagePaths={p.image_urls ?? []}
                     onImageClick={() => setGallery(p)}
                     imageLabel={t('View photos', '查看图片')}
-                    className={cn(cart.some(l => l.productId === p.id) && "border-primary bg-brand-100")}
+                    className={cn(inCart.has(p.id) && "border-primary bg-brand-100")}
                     title={productName(p)}
                     subtitle={productDescr(p) || undefined}
                     meta={(() => {

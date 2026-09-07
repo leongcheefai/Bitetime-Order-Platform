@@ -5,7 +5,7 @@ import type { Order, ShopCustomer, ShopCustomerSegment, ShopCustomerSort, ShopCu
 import { useSession } from '../SessionContext'
 import { fetchShopCustomers, fetchShopCustomerOrders, saveShopCustomer } from '../store'
 import { SkeletonText } from '../components/Loaders'
-import { StatCard } from '../components/charts/DashCharts'
+import { StatCard } from '../components/charts/StatCard'
 import { formatMoney } from '../currency'
 import { fmtDate } from '../merchantDate'
 import { StatusBadge } from '../orderStatus'

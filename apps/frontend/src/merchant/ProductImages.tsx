@@ -75,6 +75,8 @@ export default function ImagePicker({
             <img
               src={productImageUrl(path)}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="size-16 object-cover rounded-lg border-[0.5px] border-border"
             />
             <button

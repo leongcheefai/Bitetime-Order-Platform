@@ -49,6 +49,8 @@ export default function MenuRow({
             <img
               src={productImageUrl(first)}
               alt=""
+              loading="lazy"
+              decoding="async"
               className="size-full object-cover transition-transform duration-200 group-hover:scale-110"
             />
             {/* Desktop cue: a veil + expand glyph on hover says "this opens". */}
@@ -67,6 +69,8 @@ export default function MenuRow({
           <img
             src={productImageUrl(first)}
             alt=""
+            loading="lazy"
+            decoding="async"
             className="size-14 shrink-0 rounded-lg object-cover border-[0.5px] border-border"
           />
         )

@@ -79,7 +79,7 @@ export default function ImageLightbox({
                     n === idx ? 'border-primary' : 'border-border opacity-70 hover:opacity-100',
                   )}
                 >
-                  <img src={productImageUrl(p)} alt="" className="size-full object-cover" />
+                  <img src={productImageUrl(p)} alt="" loading="lazy" decoding="async" className="size-full object-cover" />
                 </button>
               ))}
             </div>

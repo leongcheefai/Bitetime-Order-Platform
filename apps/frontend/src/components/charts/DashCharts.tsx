@@ -3,7 +3,6 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts'
 import type { ReactNode } from 'react'
-import { cn } from '@/lib/utils'
 
 /* Recharts takes colours as props, not classes, so these cannot ride the token
    indirection the rest of the app uses — they are literals by necessity and must be
@@ -24,24 +23,8 @@ const tooltipStyle = {
   color: '#18181B',                   // --ink-900
 } as const
 
-// ── KPI stat card ──────────────────────────────────────────────────────────
-export function StatCard({ label, value, delta, icon }: {
-  label: string; value: string; delta?: { pct: number; dir: 'up' | 'down' | 'flat' }; icon?: ReactNode
-}) {
-  return (
-    <div className="rounded-xl border-[0.5px] border-border bg-card px-5 py-4">
-      <div className="mb-1 inline-flex items-center text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">{icon && <span className="mr-1.5 inline-flex text-ink-400" aria-hidden="true">{icon}</span>}{label}</div>
-      <div className="flex flex-wrap items-baseline gap-2">
-        <span className="font-heading text-[22px] font-medium leading-[1.2] text-primary">{value}</span>
-        {delta && delta.dir !== 'flat' && (
-          <span className={cn('whitespace-nowrap text-[11px] font-semibold', delta.dir === 'up' ? 'text-success-fg' : 'text-danger-fg')}>
-            {delta.dir === 'up' ? '▲' : '▼'} {Math.abs(delta.pct)}%
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
+// ── KPI stat card — lives in ./StatCard so it can be imported without Recharts.
+export { StatCard } from './StatCard'
 
 // ── Panel wrapper ────────────────────────────────────────────────────────────
 export function ChartPanel({ title, legend, children }: { title: string; legend?: ReactNode; children: ReactNode }) {

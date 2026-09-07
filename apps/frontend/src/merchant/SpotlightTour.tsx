@@ -30,7 +30,18 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
     let settle = 0
     let tries = 0
     let target: HTMLElement | null = null
-    const measure = () => { if (alive && target) setRect(target.getBoundingClientRect()) }
+    let pending = 0
+    // One measurement per frame, however many scroll events arrive in it. The listener below
+    // is capture-phase, so it fires for every scrolling container on the page; measuring
+    // synchronously in each event forced a layout per event and, with the scroll listener
+    // non-passive, made the browser wait on it before it could scroll at all.
+    const measure = () => {
+      if (pending) return
+      pending = requestAnimationFrame(() => {
+        pending = 0
+        if (alive && target) setRect(target.getBoundingClientRect())
+      })
+    }
     // The target may not be mounted yet — a step navigates to another section and its
     // control mounts a frame or two later. Poll on animation frames until it appears
     // (~1.5s cap), then measure and track it. measure() runs inside the rAF callback,
@@ -42,8 +53,8 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
         target.scrollIntoView({ block: 'center', behavior: 'smooth' })
         measure()
         settle = window.setTimeout(measure, 320)   // re-measure once the smooth scroll settles
-        window.addEventListener('resize', measure)
-        window.addEventListener('scroll', measure, true)
+        window.addEventListener('resize', measure, { passive: true })
+        window.addEventListener('scroll', measure, { capture: true, passive: true })
         return
       }
       if (tries++ < 90) raf = requestAnimationFrame(find)
@@ -52,9 +63,10 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
     return () => {
       alive = false
       cancelAnimationFrame(raf)
+      cancelAnimationFrame(pending)
       window.clearTimeout(settle)
       window.removeEventListener('resize', measure)
-      window.removeEventListener('scroll', measure, true)
+      window.removeEventListener('scroll', measure, { capture: true })
     }
   }, [targetSelector])
 
@@ -66,15 +78,17 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
 
   return createPortal(
     <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label={title}>
-      {/* Transparent box with a massive shadow: dims everything but the target. */}
+      {/* Transparent box with a massive shadow: dims everything but the target. Positioned by
+          `transform`, not top/left, and transitioning only what moves between steps: the old
+          `transition-all` on four layout properties repainted a 9999px shadow every frame of a
+          smooth scroll. The scrim is `--ink-900` at 62%, the same ink the dialog scrim uses. */}
       <div
-        className="pointer-events-none absolute rounded-xl ring-2 ring-primary transition-all duration-200"
+        className="pointer-events-none absolute top-0 left-0 rounded-xl ring-2 ring-primary transition-[transform,width,height] duration-200"
         style={{
-          top: rect.top - PAD,
-          left: rect.left - PAD,
+          transform: `translate(${rect.left - PAD}px, ${rect.top - PAD}px)`,
           width: rect.width + PAD * 2,
           height: rect.height + PAD * 2,
-          boxShadow: '0 0 0 9999px rgba(43,20,20,0.62)',
+          boxShadow: '0 0 0 9999px rgba(24,24,27,0.62)',
         }}
       />
       <div

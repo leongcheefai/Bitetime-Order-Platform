@@ -48,6 +48,8 @@ const columns: ColumnDef<any>[] = [
         <img
           src={productImageUrl(p.image_urls[0])}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="size-11 shrink-0 object-cover rounded-lg border-[0.5px] border-border"
         />
       ) : (
