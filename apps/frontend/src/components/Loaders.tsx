@@ -61,7 +61,7 @@ export function Spinner({ label }: { label?: string }) {
   return (
     <span className="inline-flex items-center gap-[10px] text-muted-foreground text-[14px]" role="status">
       <span
-        className="w-[18px] h-[18px] rounded-pill border-2 border-border border-t-oxblood animate-[spin_0.7s_linear_infinite]"
+        className="w-[18px] h-[18px] rounded-pill border-2 border-border border-t-primary animate-[spin_0.7s_linear_infinite]"
         aria-hidden="true"
       />
       {label && <span className="font-sans">{label}</span>}

@@ -117,8 +117,10 @@
    `inline` means utilities emit var(--color-*) and resolve against :root. ── */
 @theme inline {
   /* Status tones, named directly. `-100` is the chip tint, `-fg` its label, `-500` the
-     solid fill. `--color-danger` is the plain inline-error red and is the one status name
-     without a numeric suffix, because it reads as prose in `text-danger`. */
+     solid fill. `--color-danger` is the one status name without a numeric suffix, and it is a
+     FILL and BORDER colour: `border-danger`, `bg-danger`. It is NOT a text colour — as 13px
+     text `#EF4444` reaches 3.76:1 on white and 3.16:1 on cream, and tokens.test.ts pins it
+     below the text floor. Inline error copy is `text-danger-fg`. */
   --color-danger: var(--danger-500);
   --color-danger-fg: var(--danger-fg);
   --color-success-fg: var(--success-fg);

@@ -161,6 +161,7 @@ export default function CustomersView({ segment }: { segment: ShopCustomerSegmen
         <Input
           value={search}
           onChange={e => narrow(setSearch)(e.target.value)}
+          aria-label={t('Search customers', '搜索顾客')}
           placeholder={t('Search by name or WhatsApp…', '按姓名或 WhatsApp 搜索…')}
           className="max-w-sm bg-background border-border text-[13px]"
         />
@@ -209,7 +210,15 @@ export default function CustomersView({ segment }: { segment: ShopCustomerSegmen
                   <tr
                     key={c.phoneKey}
                     onClick={() => setSelected(c)}
-                    className="group cursor-pointer [&:last-child>td]:border-b-0"
+                    // The row is the only way to open a customer, so it is reachable and
+                    // operable from the keyboard — the same shape ui/data-table.tsx gives its
+                    // clickable rows. Space is claimed too, or it scrolls the page instead.
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(c) }
+                    }}
+                    className="group cursor-pointer [&:last-child>td]:border-b-0 focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
                   >
                     <td className={TD}>
                       <span className="inline-flex items-center gap-1.5">
@@ -692,6 +701,7 @@ function NotesPanel({
             e.preventDefault()
             addTag(tagDraft.trim())
           }}
+          aria-label={t('Add a tag', '添加标签')}
           placeholder={t('Add a tag, press Enter…', '添加标签，按回车…')}
           className="bg-background border-border text-[13px]"
         />
@@ -722,6 +732,7 @@ function NotesPanel({
           value={note}
           onChange={e => setNote(e.target.value)}
           rows={3}
+          aria-label={t('Private note', '私密备注')}
           placeholder={t('Private note — only your shop sees this…', '私密备注，仅本店可见…')}
           className="bg-background border-border text-[13px]"
         />

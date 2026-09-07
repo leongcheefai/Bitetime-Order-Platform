@@ -42,7 +42,7 @@ export default function LogCard({ order, events }: { order: Order; events: Order
       {events === null ? (
         <p className="text-[13px] text-muted-foreground">{t('Loading…', '加载中…')}</p>
       ) : events === 'failed' ? (
-        <p className="text-[13px] text-danger">{t('Could not load the log.', '无法加载日志。')}</p>
+        <p role="alert" className="text-[13px] text-danger-fg">{t('Could not load the log.', '无法加载日志。')}</p>
       ) : lines.length === 0 ? (
         <p className="text-[13px] text-muted-foreground">{t('Nothing recorded yet.', '尚无记录。')}</p>
       ) : (

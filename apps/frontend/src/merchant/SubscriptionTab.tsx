@@ -250,7 +250,7 @@ function ConfirmAction({
             HTML. aria-describedby keeps it accessible. */}
         <DialogContent aria-describedby={descId}>
           <DialogHeader>
-            <DialogTitle className={severe ? 'text-danger flex items-center gap-2' : undefined}>
+            <DialogTitle className={severe ? 'text-danger-fg flex items-center gap-2' : undefined}>
               {severe && <AlertTriangle size={17} strokeWidth={2.25} className="shrink-0" aria-hidden />}
               {title}
             </DialogTitle>

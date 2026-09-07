@@ -155,7 +155,7 @@ export default function OrderReviewCard({
                  `留言不能超过 ${ORDER_REVIEW_COMMENT_MAX_LENGTH} 个字`)}
             </p>
           )}
-          {error && <p className="text-[13px] text-danger-fg">{error}</p>}
+          {error && <p role="alert" className="text-[13px] text-danger-fg">{error}</p>}
           <Button
             type="button"
             onClick={() => void send()}

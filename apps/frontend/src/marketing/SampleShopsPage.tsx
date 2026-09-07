@@ -28,6 +28,7 @@ export default function SampleShopsPage() {
     <div className="mm-land relative isolate flex flex-col items-stretch min-h-screen font-sans text-foreground bg-background">
 
       <MarketingNav />
+      <main className="flex-1 flex flex-col items-stretch">
 
       <section className="px-8 pt-16 pb-16 max-[600px]:px-5 max-[600px]:pt-10 max-[600px]:pb-10">
         <Reveal>
@@ -50,6 +51,7 @@ export default function SampleShopsPage() {
         </Reveal>
       </section>
 
+      </main>
       <MarketingFooter />
     </div>
   )

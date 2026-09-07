@@ -327,10 +327,10 @@ export default function FeedbackFab() {
                   </ul>
                 )}
 
-                {imageError && <p className="text-[12px] text-danger-fg">{imageError}</p>}
+                {imageError && <p role="alert" className="text-[12px] text-danger-fg">{imageError}</p>}
               </div>
 
-              {error && <p className="text-[13px] text-danger-fg">{error}</p>}
+              {error && <p role="alert" className="text-[13px] text-danger-fg">{error}</p>}
 
               <Button onClick={send} disabled={!canSubmit}>
                 {busy ? t('Sending…', '发送中…') : t('Send', '发送')}

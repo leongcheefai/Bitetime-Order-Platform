@@ -40,6 +40,7 @@ export default function Landing() {
     <div className="mm-land relative isolate flex flex-col items-stretch min-h-screen font-sans text-foreground bg-background">
 
       <MarketingNav />
+      <main className="flex-1 flex flex-col items-stretch">
 
       {/* ── Hero ── */}
       <section className="max-w-[700px] mx-auto px-8 pt-20 pb-16 text-center max-[600px]:px-5 max-[600px]:pt-12 max-[600px]:pb-10">
@@ -360,6 +361,7 @@ export default function Landing() {
         </Reveal>
       </section>
 
+      </main>
       <MarketingFooter />
     </div>
   )

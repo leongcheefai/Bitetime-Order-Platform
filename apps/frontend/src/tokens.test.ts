@@ -140,6 +140,20 @@ describe('status chips clear AA', () => {
     expect(contrastRatio(token(fg), token(bg))).toBeGreaterThanOrEqual(AA_TEXT)
   })
 
+  /* The inline-error colour is `--danger-fg`, on every surface — not `--danger-500`. The
+     `-500` red is a FILL and a border: as 13px text it reaches 3.76:1 on white, 3.16:1 on cream
+     and 3.08:1 on its own tint, and the audit found it under fifteen error messages, the customer's
+     checkout refusal among them. These pins hold both halves: the text token clears AA wherever
+     an error can land, and the fill token stays a colour nobody can promote to text by accident. */
+  it('inline-error text clears AA on white and on the canvas', () => {
+    expect(contrastRatio(token('--danger-fg'), token('--white'))).toBeGreaterThanOrEqual(AA_TEXT)
+    expect(contrastRatio(token('--danger-fg'), token('--cream'))).toBeGreaterThanOrEqual(AA_TEXT)
+  })
+  it('the danger fill is not a text colour', () => {
+    expect(contrastRatio(token('--danger-500'), token('--white'))).toBeLessThan(AA_TEXT)
+    expect(contrastRatio(token('--danger-500'), token('--cream'))).toBeLessThan(AA_TEXT)
+  })
+
   /* Against WHITE, because a status chip lives inside a card — an order row, a detail
      drawer — never directly on the cream canvas. Asserting it against the page would be
      testing a pairing the UI does not produce. */

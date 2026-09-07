@@ -34,7 +34,7 @@ export function StatCard({ label, value, delta, icon }: {
       <div className="flex flex-wrap items-baseline gap-2">
         <span className="font-heading text-[22px] font-medium leading-[1.2] text-primary">{value}</span>
         {delta && delta.dir !== 'flat' && (
-          <span className={cn('whitespace-nowrap text-[11px] font-semibold', delta.dir === 'up' ? 'text-success-fg' : 'text-danger')}>
+          <span className={cn('whitespace-nowrap text-[11px] font-semibold', delta.dir === 'up' ? 'text-success-fg' : 'text-danger-fg')}>
             {delta.dir === 'up' ? '▲' : '▼'} {Math.abs(delta.pct)}%
           </span>
         )}

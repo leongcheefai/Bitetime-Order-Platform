@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useSession } from '../SessionContext'
 import { fetchOrderCount } from '../store'
 import { useEnterTransition } from '../motion'
+import { useDynamicDocumentTitle } from '../documentMeta'
 import { LayoutDashboard, ReceiptText, Cake, LayoutList, Ticket, Users, Settings } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
 import BrandTheme from '../components/BrandTheme'
@@ -61,6 +62,12 @@ function DashboardInner() {
   // the group existed — lands on the full list rather than nowhere.
   const [segment] = useDashboardSubsection('customers', CUSTOMER_SEGMENTS.map(s => s.key), 'all')
   const enter = useEnterTransition()
+  // "Orders — Sunny Bakes | TinyOrder": section first, because it is what changes between a
+  // merchant's tabs, then the shop, because a superadmin viewing as a shop has several open.
+  const sectionLabel = SECTIONS.find(s => s.key === section)
+  useDynamicDocumentTitle(
+    `${sectionLabel ? t(sectionLabel.en, sectionLabel.zh) : section} — ${merchant!.name} | TinyOrder`,
+  )
 
   // Count of pending "new" orders — surfaced as a badge on the Orders nav item.
   // Refetched whenever an order's status changes so the badge stays live.

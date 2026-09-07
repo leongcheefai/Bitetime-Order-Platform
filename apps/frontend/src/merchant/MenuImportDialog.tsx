@@ -433,13 +433,13 @@ export default function MenuImportDialog({
                             />
                           </div>
                           <div>
-                            <Label className="text-[11px] text-muted-foreground">{t('Unit', '单位')}</Label>
+                            <Label htmlFor={`menu-import-${row.key}-unit`} className="text-[11px] text-muted-foreground">{t('Unit', '单位')}</Label>
                             <Select
                               value={row.unit ?? 'pcs'}
                               onValueChange={v => edit(row.key, { unit: v ?? 'pcs' })}
                               items={unitItems}
                             >
-                              <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                              <SelectTrigger id={`menu-import-${row.key}-unit`} className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {unitItems.map(u => (
                                   <SelectItem key={u.value} value={u.value}>{u.label}</SelectItem>
@@ -448,7 +448,7 @@ export default function MenuImportDialog({
                             </Select>
                           </div>
                           <div>
-                            <Label className="text-[11px] text-muted-foreground">{t('Category', '分类')}</Label>
+                            <Label htmlFor={`menu-import-${row.key}-category`} className="text-[11px] text-muted-foreground">{t('Category', '分类')}</Label>
                             {/* The sections the panel above will create are ordinary choices here,
                                 marked "new". A row filed under one has to SAY so: a dropdown
                                 reading "No category" beside a panel that creates the section is
@@ -458,7 +458,7 @@ export default function MenuImportDialog({
                               onValueChange={v => edit(row.key, categoryPatch(v))}
                               items={categoryItems}
                             >
-                              <SelectTrigger className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
+                              <SelectTrigger id={`menu-import-${row.key}-category`} className="h-8 text-[13px]"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="">{t('No category', '不分类')}</SelectItem>
                                 {categories.map(c => (

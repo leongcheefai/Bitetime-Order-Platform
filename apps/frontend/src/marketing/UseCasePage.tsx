@@ -29,6 +29,7 @@ export default function UseCasePage({ useCase }: { useCase: UseCase }) {
     // Keep mm-land class — body:has(.mm-land) in index.css resets body padding/alignment
     <div className="mm-land relative isolate flex flex-col items-stretch min-h-screen font-sans text-foreground bg-background">
       <MarketingNav />
+      <main className="flex-1 flex flex-col items-stretch">
 
       {/* ── Header ── */}
       <section className="max-w-[720px] mx-auto px-8 pt-16 pb-4 text-center max-[600px]:px-5 max-[600px]:pt-10">
@@ -105,6 +106,7 @@ export default function UseCasePage({ useCase }: { useCase: UseCase }) {
         </Reveal>
       </section>
 
+      </main>
       <MarketingFooter />
     </div>
   )

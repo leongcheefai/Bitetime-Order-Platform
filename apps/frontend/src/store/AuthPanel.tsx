@@ -179,7 +179,7 @@ export default function AuthPanel({ heading, subheading, initialMode = 'signin',
       {error && (
         <div
           role="alert"
-          className="text-[13px] text-danger bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]"
+          className="text-[13px] text-danger-fg bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]"
         >
           {error}
         </div>

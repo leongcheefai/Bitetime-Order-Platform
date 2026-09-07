@@ -121,6 +121,12 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
 
       <Sidebar
         collapsible="offcanvas"
+        // The rail is the page's navigation landmark. Stock shadcn renders it as a bare div, so
+        // the brand block, the rows and the footer sat outside every landmark on the page — axe's
+        // "region" finding on every dashboard load. On mobile the same props reach the Sheet,
+        // which is already a dialog; the role is harmless there.
+        role="navigation"
+        aria-label={t('Dashboard sections', '仪表板栏目')}
         // Right-only hairline (flush layout — no radius) and the rail's shadow, as before.
         className="border-0 [border-right:0.5px_solid_var(--color-border)] shadow-[2px_0_12px_rgba(122,16,40,0.06)]"
       >
@@ -198,11 +204,23 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
           On mobile the top bar is fixed, so pad the content down to clear it. */}
       <SidebarInset className="min-w-0 pt-7 px-8 pb-16 max-md:px-4 max-md:pt-[72px] max-md:pb-12">
         <div className="w-full max-w-5xl">
+          {/* The page's one h1, for the outline and nothing else: the sections open with their
+              own visible h3s, and a sighted merchant already reads the active row in the rail.
+              Without this the first heading a screen reader met was an h3 — no h1, no h2. */}
+          <h1 className="sr-only">{activeLabel(nav, active, activeSub)}</h1>
           {children}
         </div>
       </SidebarInset>
     </>
   )
+}
+
+/** "Customers" or "Customers — Members": the active section, and its active child if the section is a group. */
+function activeLabel(nav: NavItem[], active: string, activeSub: string | undefined): string {
+  const item = nav.find(n => n.key === active)
+  if (!item) return active
+  const sub = activeSub ? item.children?.find(c => c.key === activeSub) : undefined
+  return sub ? `${item.label} — ${sub.label}` : item.label
 }
 
 /**

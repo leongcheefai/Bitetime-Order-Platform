@@ -1,5 +1,6 @@
 import { useSession } from '../SessionContext'
 import { useEnterTransition } from '../motion'
+import { useDynamicDocumentTitle } from '../documentMeta'
 import { useDashboardSection } from '../useDashboardSection'
 import { LayoutDashboard, Store, MessageSquare, Star, Megaphone } from 'lucide-react'
 import DashboardShell, { type NavItem } from '../components/DashboardShell'
@@ -24,6 +25,10 @@ export default function AdminHome() {
   const enter = useEnterTransition()
 
   const nav: NavItem[] = SECTIONS.map(s => ({ key: s.key, label: t(s.en, s.zh), icon: s.icon }))
+  const sectionLabel = SECTIONS.find(s => s.key === section)
+  useDynamicDocumentTitle(
+    `${sectionLabel ? t(sectionLabel.en, sectionLabel.zh) : section} — ${t('Platform admin', '平台管理')} | TinyOrder`,
+  )
 
   return (
     <DashboardShell

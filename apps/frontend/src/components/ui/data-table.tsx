@@ -123,6 +123,7 @@ export function DataTable<TData, TValue>({
           {searchPlaceholder && (
             <Input
               placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
               value={searchState}
               onChange={(e) => setSearch(e.target.value)}
               className="max-w-xs"

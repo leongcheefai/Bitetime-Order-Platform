@@ -900,7 +900,7 @@ export default function Storefront() {
     <>
       {success ? (
         // ── Success view ──────────────────────────────────────────────────────
-        <div key="success" {...enterView} className={cn('form-wrap', enterView.className)}>
+        <div key="success" role="main" {...enterView} className={cn('form-wrap', enterView.className)}>
           {/* Header */}
           <div className="flex items-start justify-between gap-4 mb-8 max-[480px]:flex-col max-[480px]:gap-2">
             <div>
@@ -1050,6 +1050,7 @@ export default function Storefront() {
         // ── Order form ──────────────────────────────────────────────────────
         <div
           key="form"
+          role="main"
           {...enterView}
           className={cn('form-wrap', enterView.className)}
           data-preview={preview ? '1' : undefined}
@@ -1247,11 +1248,13 @@ export default function Storefront() {
                         onClick={() => updateQty({ productId: p.id, selections: [] }, -1)}
                         aria-label={t('Decrease quantity', '减少数量')}
                       >−</Button>
+                      {/* The label is real text, hidden visually: `aria-label` is prohibited on a
+                          plain span (no role), so assistive tech ignored it and read a bare
+                          number. `sr-only` text reads "Quantity 2" and passes axe. */}
                       <span
                         className="text-[14px] font-medium min-w-[20px] pointer-coarse:min-w-[28px] text-center text-foreground"
                         aria-live="polite"
-                        aria-label={t('Quantity', '数量')}
-                      >{plainQty(cart, p.id)}</span>
+                      ><span className="sr-only">{t('Quantity', '数量')} </span>{plainQty(cart, p.id)}</span>
                       <Button
                         variant="soft"
                         size="iconRound"
@@ -1689,7 +1692,7 @@ export default function Storefront() {
           </div>
 
           {error && (
-            <div className="text-[13px] text-danger bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+            <div role="alert" className="text-[13px] text-danger-fg bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
               {noticeText(error, noticeCtx)}
             </div>
           )}

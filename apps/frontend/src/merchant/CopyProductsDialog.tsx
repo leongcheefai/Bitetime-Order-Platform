@@ -164,6 +164,7 @@ export default function CopyProductsDialog({
             <Input
               value={query}
               onChange={e => setQuery(e.target.value)}
+              aria-label={t('Search shops', '搜索店铺')}
               placeholder={t('Search shops by name or slug…', '按名称或网址搜索店铺…')}
               className="mb-2"
               autoFocus

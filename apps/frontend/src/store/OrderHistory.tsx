@@ -101,7 +101,7 @@ export default function OrderHistory() {
   }
 
   return (
-    <div className="form-wrap pt-8 pb-24">
+    <div role="main" className="form-wrap pt-8 pb-24">
       <div className="flex items-start justify-between gap-4 mb-7 max-[480px]:flex-col max-[480px]:gap-2">
         <div>
           <h1 className="font-heading text-[26px] font-medium text-primary tracking-[0.3px]">{merchant.name}</h1>
@@ -151,7 +151,7 @@ export default function OrderHistory() {
       {/* A failed read must never wear the empty state's clothes: "you haven't ordered here yet"
           is a lie to a customer whose history simply didn't load, and the one they'd believe. */}
       {failed && (
-        <div className="bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] text-[13px] text-danger leading-[1.5]">
+        <div role="alert" className="bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] text-[13px] text-danger-fg leading-[1.5]">
           {t(
             "Couldn't load your orders. Check your connection and try again.",
             '无法加载你的订单。请检查网络后重试。',

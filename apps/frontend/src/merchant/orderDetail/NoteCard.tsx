@@ -49,6 +49,7 @@ export default function NoteCard({
         value={note}
         onChange={e => onChange(e.target.value)}
         rows={3}
+        aria-label={t('Order note', '订单备注')}
         placeholder={t('Add a note for this order…', '为此订单添加备注…')}
         className="text-[13px] bg-background border-border resize-none"
       />

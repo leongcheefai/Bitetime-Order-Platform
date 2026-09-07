@@ -135,13 +135,14 @@ export default function BrandColourCard({ onDirtyChange }: {
           // disagreeing with the swatch it just matched. Invalid text is left exactly as typed.
           onBlur={() => { if (parsed.ok && parsed.value) setText(parsed.value) }}
           aria-invalid={invalid}
+          aria-describedby="brand-colour-hex-hint"
         />
         {invalid ? (
-          <p className="text-[11px] text-danger-fg leading-[1.5]">
+          <p id="brand-colour-hex-hint" role="alert" className="text-[11px] text-danger-fg leading-[1.5]">
             {t('Use a colour code like #7A1028.', '请输入类似 #7A1028 的颜色代码。')}
           </p>
         ) : (
-          <p className="text-[11px] text-muted-foreground leading-[1.5]">
+          <p id="brand-colour-hex-hint" className="text-[11px] text-muted-foreground leading-[1.5]">
             {pending
               ? t('Reset to go back to the default colour.', '重置可恢复默认颜色。')
               : t('Your shop uses the default colour.', '您的店铺使用默认颜色。')}

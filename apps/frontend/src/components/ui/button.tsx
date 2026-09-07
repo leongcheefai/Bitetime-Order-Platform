@@ -32,7 +32,7 @@ const buttonVariants = cva(
           "border border-border bg-brand-100 text-primary hover:bg-ink-200 disabled:bg-disabled-bg",
         // .invoice-btn — white bg / clay-rose text, inverts on hover + self-encodes geometry (use size="none")
         invoice:
-          "w-full px-[14px] py-[10px] text-[13px] rounded-sm border border-border bg-white text-ink-400 font-semibold hover:bg-ink-400 hover:text-white hover:border-ink-400 disabled:bg-disabled-bg",
+          "w-full px-[14px] py-[10px] text-[13px] rounded-sm border border-border bg-white text-muted-foreground font-semibold hover:bg-ink-600 hover:text-white hover:border-ink-600 disabled:bg-disabled-bg",
         // .qty-btn — cream bg, clay border, oxblood text (use size="iconRound")
         soft:
           "border border-border bg-background text-primary hover:bg-muted disabled:bg-disabled-bg",
