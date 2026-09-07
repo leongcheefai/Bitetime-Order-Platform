@@ -51,7 +51,7 @@ export default function ConsentBanner({
       ref={ref}
       role="region"
       aria-label={t('Advertising cookies', '广告 Cookie')}
-      className="fixed inset-x-0 bottom-0 z-50 border-t-[0.5px] border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-2px_12px_rgba(0,0,0,0.06)]"
+      className="fixed inset-x-0 bottom-0 z-sticky border-t-[0.5px] border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
     >
       <div className="mx-auto flex max-w-[720px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[13px] leading-[1.6] text-muted-foreground">

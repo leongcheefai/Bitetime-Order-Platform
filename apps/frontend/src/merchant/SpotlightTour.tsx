@@ -80,7 +80,7 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
   const left = Math.max(12, Math.min(rect.left, window.innerWidth - tooltipW - 12))
 
   return createPortal(
-    <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="fixed inset-0 z-modal" role="dialog" aria-modal="true" aria-label={title}>
       {/* Transparent box with a massive shadow: dims everything but the target. Positioned by
           `transform`, not top/left, and transitioning only what moves between steps: the old
           `transition-all` on four layout properties repainted a 9999px shadow every frame of a
@@ -95,7 +95,7 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
         }}
       />
       <div
-        className="absolute rounded-2xl border-[0.5px] border-border bg-card p-4 shadow-xl"
+        className="absolute rounded-2xl border-[0.5px] border-border bg-card p-4 shadow-elev-2"
         style={{
           width: tooltipW,
           left,

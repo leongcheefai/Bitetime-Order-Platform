@@ -155,11 +155,11 @@ export function MarketingNav() {
               <>
                 {/* Transparent click-catcher overlay */}
                 <div
-                  className="fixed inset-0 z-[var(--z-dropdown)]"
+                  className="fixed inset-0 z-dropdown"
                   onClick={() => setMenuOpen(false)}
                 />
                 <div
-                  className="absolute top-[calc(100%+8px)] right-0 z-[var(--z-modal-popover)] min-w-[160px] bg-card border-[0.5px] border-border rounded-lg shadow-elev-2 overflow-hidden p-1"
+                  className="absolute top-[calc(100%+8px)] right-0 z-modal-popover min-w-[160px] bg-card border-[0.5px] border-border rounded-lg shadow-elev-2 overflow-hidden p-1"
                   role="menu"
                 >
                   {portal && (

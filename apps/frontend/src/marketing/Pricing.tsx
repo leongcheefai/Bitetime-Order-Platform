@@ -66,7 +66,7 @@ export default function Pricing() {
               a single object a reader scans top to bottom — and on the page's own ground it had no
               edges to say where it started or stopped. bg-card is the surface the plan card above
               already uses, so the two read as the same kind of thing. */}
-          <div className="flex flex-col gap-8 mt-2 rounded-xl bg-card border-[0.5px] border-border p-8 shadow-[0_6px_24px_rgba(122,16,40,0.06)] max-[600px]:p-5 max-[600px]:gap-7">
+          <div className="flex flex-col gap-8 mt-2 rounded-xl bg-card border-[0.5px] border-border p-8 shadow-elev-3 max-[600px]:p-5 max-[600px]:gap-7">
             {INCLUDED_GROUPS.map(group => (
               <div key={group.id}>
                 <h3 className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground mb-3">

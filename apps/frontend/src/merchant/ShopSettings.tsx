@@ -5,6 +5,7 @@ import { updateMerchantConfig, fetchMerchantSecret, upsertMerchantSecret, delete
 import { shopRates, shopTax, shopDistance, shopMethods } from '@bitetime/shared'
 import { CURRENCIES, CURRENCY_CODES, DEFAULT_CURRENCY, currencyDef } from '../currency'
 import { Button } from '../components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../components/ui/select'
@@ -299,27 +300,18 @@ function ShippingTab({ onDirtyChange }: TabProps) {
         <h3 className={HEADING}>{t('What customers can choose', '顾客可选的方式')}</h3>
         <div className="flex flex-col gap-2">
           <label className="flex items-start gap-2 text-[14px] text-foreground">
-            <input type="checkbox" className="mt-1 accent-primary"
-              checked={fields.pickupEnabled}
-              disabled={onlyMethod === 'pickup'}
-              onChange={e => setFields(f => ({ ...f, pickupEnabled: e.target.checked }))} />
+            <Checkbox className="mt-1" checked={fields.pickupEnabled} disabled={onlyMethod === 'pickup'} onCheckedChange={v => setFields(f => ({ ...f, pickupEnabled: v === true }))} />
             <span>{t('Pickup — customers collect from you.', '自取 — 顾客自行前来领取。')}</span>
           </label>
           <label className="flex items-start gap-2 text-[14px] text-foreground">
-            <input type="checkbox" className="mt-1 accent-primary"
-              checked={fields.deliveryEnabled}
-              disabled={onlyMethod === 'delivery'}
-              onChange={e => setFields(f => ({ ...f, deliveryEnabled: e.target.checked }))} />
+            <Checkbox className="mt-1" checked={fields.deliveryEnabled} disabled={onlyMethod === 'delivery'} onCheckedChange={v => setFields(f => ({ ...f, deliveryEnabled: v === true }))} />
             <span>
               {t('Delivery — one flat rate for West Malaysia, one for East Malaysia.',
                  '送货 — 西马一个统一运费，东马一个。')}
             </span>
           </label>
           <label className="flex items-start gap-2 text-[14px] text-foreground">
-            <input type="checkbox" className="mt-1 accent-primary"
-              checked={fields.expressEnabled}
-              disabled={onlyMethod === 'express'}
-              onChange={e => setFields(f => ({ ...f, expressEnabled: e.target.checked }))} />
+            <Checkbox className="mt-1" checked={fields.expressEnabled} disabled={onlyMethod === 'express'} onCheckedChange={v => setFields(f => ({ ...f, expressEnabled: v === true }))} />
             <span>
               {t('Express delivery — a base fee plus a rate for every kilometre your rider drives.',
                  '快速配送 — 基本运费加上每公里费率。')}
@@ -542,12 +534,7 @@ function PaymentTab({ onDirtyChange }: TabProps) {
         <h3 className={HEADING}>{t('Tax', '税')}</h3>
         <div className="flex flex-col gap-2">
           <label className="flex items-center gap-2 text-[14px] text-foreground">
-            <input
-              type="checkbox"
-              className="accent-primary"
-              checked={fields.taxEnabled}
-              onChange={e => setFields(f => ({ ...f, taxEnabled: e.target.checked }))}
-            />
+            <Checkbox checked={fields.taxEnabled} onCheckedChange={v => setFields(f => ({ ...f, taxEnabled: v === true }))} />
             {t('Charge tax on orders', '订单收取税费')}
           </label>
           <div className="flex flex-col gap-[6px]">

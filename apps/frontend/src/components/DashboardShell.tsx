@@ -102,7 +102,7 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
     <>
       {/* Mobile top bar — hamburger + brand. Hidden on desktop. */}
       <header className={cn(
-        'hidden max-md:flex fixed top-0 inset-x-0 z-30 h-14 items-center gap-3 px-4',
+        'hidden max-md:flex fixed top-0 inset-x-0 z-sticky h-14 items-center gap-3 px-4',
         'bg-muted border-b border-border',
       )}>
         <Button
@@ -126,8 +126,8 @@ function Shell({ title, role, nav, active, activeSub, onSelect, backTo, footerEx
         // which is already a dialog; the role is harmless there.
         role="navigation"
         aria-label={t('Dashboard sections', '仪表板栏目')}
-        // Right-only hairline (flush layout — no radius) and the rail's shadow, as before.
-        className="border-0 [border-right:0.5px_solid_var(--color-border)] shadow-[2px_0_12px_rgba(122,16,40,0.06)]"
+        // Right-only hairline (flush layout — no radius) and the rail's own elevation token.
+        className="border-0 [border-right:0.5px_solid_var(--color-border)] shadow-elev-rail"
       >
         {/* Brand block */}
         <SidebarHeader className="px-5 pt-7 pb-5 border-b border-border gap-0">

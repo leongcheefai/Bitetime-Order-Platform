@@ -322,7 +322,7 @@ export default function MenuImportDialog({
                   alt={t('The menu photo you chose', '您选择的菜单照片')}
                   className="w-full rounded-xl border-[0.5px] border-border object-contain max-h-[60vh]"
                 />
-                <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-card/90 px-2 py-1 text-[11px] text-muted-foreground shadow-sm group-hover:text-foreground">
+                <span className="absolute bottom-2 right-2 flex items-center gap-1 rounded-lg bg-card/90 px-2 py-1 text-[11px] text-muted-foreground shadow-elev-1 group-hover:text-foreground">
                   <ZoomIn className="size-3.5" />
                   {t('Enlarge', '放大')}
                 </span>

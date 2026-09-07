@@ -454,7 +454,7 @@ export default function VoucherFormSheet({
                     onClick={() => setForm({ ...form, active: !form.active })}
                     className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-pill transition-colors cursor-pointer ${form.active ? 'bg-primary' : 'bg-border'}`}
                   >
-                    <span className={`inline-block size-5 rounded-pill bg-white shadow-sm transition-transform ${form.active ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
+                    <span className={`inline-block size-5 rounded-pill bg-white shadow-elev-1 transition-transform ${form.active ? 'translate-x-[22px]' : 'translate-x-0.5'}`} />
                   </button>
                   <Label htmlFor="vm-active" className="min-w-0 truncate text-[13px]">
                     {form.active ? t('Active at checkout', '结账时可用') : t('Paused — not redeemable', '已暂停 — 无法兑换')}

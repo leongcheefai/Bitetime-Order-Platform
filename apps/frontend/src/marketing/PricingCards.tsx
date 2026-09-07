@@ -61,7 +61,7 @@ export default function PricingCards() {
             className={cn(
               'text-[11px] font-medium py-[2px] px-2 rounded-pill',
               billing === 'yearly'
-                ? 'bg-[rgba(255,255,255,0.2)] text-background'
+                ? 'bg-white/20 text-background'
                 : 'bg-brand-100 text-primary'
             )}
           >
@@ -80,7 +80,7 @@ export default function PricingCards() {
             return (
               <div
                 key={tier.id}
-                className="flex flex-col p-7 rounded-lg bg-card border-[0.5px] border-primary shadow-[0_6px_24px_rgba(122,16,40,0.12)]"
+                className="flex flex-col p-7 rounded-lg bg-card border-[0.5px] border-primary shadow-elev-3"
               >
                 {tier.badge && (
                   <span className="self-start text-[11px] font-semibold py-[3px] px-[10px] mb-3 rounded-pill bg-primary text-primary-foreground">
