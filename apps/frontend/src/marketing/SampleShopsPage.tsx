@@ -31,10 +31,13 @@ export default function SampleShopsPage() {
       <main className="flex-1 flex flex-col items-stretch">
 
       <section className="px-8 pt-16 pb-16 max-[600px]:px-5 max-[600px]:pt-10 max-[600px]:pb-10">
+        {/* The h1 stays OUTSIDE the reveal, as on every other marketing page: it is prerendered,
+            and a heading whose visibility waits on JS and an IntersectionObserver is the one that
+            ships blank to a crawler and to a paused tab. */}
+        <h1 className={sectionTitle}>
+          {t('Real shops on TinyOrder', 'TinyOrder 上的真实店铺')}
+        </h1>
         <Reveal>
-          <h1 className={sectionTitle}>
-            {t('Real shops on TinyOrder', 'TinyOrder 上的真实店铺')}
-          </h1>
           <p className="-mt-6 mb-10 text-[15px] leading-[1.7] text-ink-700 text-center max-w-[560px] mx-auto">
             {t(
               'A few real shops built with TinyOrder. Open one and place a real order — these are live storefronts, not pictures.',

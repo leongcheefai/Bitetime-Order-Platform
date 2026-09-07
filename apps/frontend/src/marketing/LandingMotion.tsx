@@ -166,7 +166,9 @@ export const StorefrontPreview = memo(function StorefrontPreview({ t }: { t: TFn
         {ping && (
           <motion.div
             initial={{ opacity: 0, y: -8, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 420, damping: 18 } }}
+            // Ease-out, not a spring: the spring this replaced (stiffness 420, damping 18) overshot and
+            // wobbled, the one bounce in an app whose every other motion is a decelerating curve.
+            animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: EASE } }}
             exit={{ opacity: 0, y: -6, scale: 0.96, transition: { duration: 0.18 } }}
             className="absolute -top-3 -right-2 z-10 flex items-center gap-2 rounded-pill border border-border bg-card py-1.5 px-3 shadow-elev-2"
           >

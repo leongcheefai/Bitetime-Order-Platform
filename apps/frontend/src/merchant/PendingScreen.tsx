@@ -39,7 +39,7 @@ export default function PendingScreen() {
       </div>
       <Card className="px-8 pt-8 pb-7 gap-0">
         <span className="inline-flex items-center gap-[5px] px-3 py-[4px] rounded-pill bg-warning-100 text-warning-fg text-[12px] font-semibold tracking-[0.04em] mb-4">
-          ⏳ {t('Finishing setup', '正在完成设置')}
+          {t('Finishing setup', '正在完成设置')}
         </span>
         <h2 className="font-heading text-[20px] font-medium text-primary mb-1">{t('One step left', '还差一步')}</h2>
         <p className="text-[13px] text-muted-foreground mb-6">

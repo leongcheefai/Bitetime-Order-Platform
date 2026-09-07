@@ -33,7 +33,7 @@ export default function CheckoutActivating({ stalled, onRetry }: {
         {stalled ? (
           <>
             <span className="inline-flex items-center gap-[5px] px-3 py-[4px] rounded-pill bg-warning-100 text-warning-fg text-[12px] font-semibold tracking-[0.04em] mb-4">
-              ⏳ {t('Still confirming', '仍在确认')}
+              {t('Still confirming', '仍在确认')}
             </span>
             <h2 className="font-heading text-[20px] font-medium text-primary mb-1">
               {t('Your payment went through', '款项已收到')}
