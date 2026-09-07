@@ -205,7 +205,7 @@ export default function MenuCategoriesDialog({
           {t('Add category', '添加分类')}
         </Button>
 
-        {msg && <p className="text-[12px] text-destructive mt-3">{msg}</p>}
+        {msg && <p role="alert" className="text-[12px] text-danger-fg mt-3">{msg}</p>}
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>

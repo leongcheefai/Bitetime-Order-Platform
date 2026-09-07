@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Button } from '@/components/ui/button'
 
@@ -70,6 +70,25 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
     }
   }, [targetSelector])
 
+  // The dialog claims `aria-modal`, so it has to behave like one for the keyboard: focus lands
+  // on the tooltip when a step opens, Tab cycles between Skip and Next, and Escape is Skip.
+  // Without this the merchant's focus stayed on whatever was behind the scrim and the
+  // "modal" was one they could neither reach nor dismiss without a mouse.
+  const tooltipRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (rect) tooltipRef.current?.focus()
+  }, [rect === null, targetSelector]) // eslint-disable-line react-hooks/exhaustive-deps -- refocus per step, not per measurement
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { e.preventDefault(); onSkip(); return }
+    if (e.key !== 'Tab' || !tooltipRef.current) return
+    const focusable = tooltipRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])')
+    if (focusable.length === 0) return
+    const first = focusable[0], last = focusable[focusable.length - 1]
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === tooltipRef.current)) { e.preventDefault(); last.focus() }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+  }
+
   if (!rect) return null
 
   // Place the tooltip below the target when there's room, else above it.
@@ -80,7 +99,7 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
   const left = Math.max(12, Math.min(rect.left, window.innerWidth - tooltipW - 12))
 
   return createPortal(
-    <div className="fixed inset-0 z-modal" role="dialog" aria-modal="true" aria-label={title}>
+    <div className="fixed inset-0 z-modal" role="dialog" aria-modal="true" aria-label={title} onKeyDown={onKeyDown}>
       {/* Transparent box with a massive shadow: dims everything but the target. Positioned by
           `transform`, not top/left, and transitioning only what moves between steps: the old
           `transition-all` on four layout properties repainted a 9999px shadow every frame of a
@@ -95,7 +114,9 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
         }}
       />
       <div
-        className="absolute rounded-2xl border-[0.5px] border-border bg-card p-4 shadow-elev-2"
+        ref={tooltipRef}
+        tabIndex={-1}
+        className="absolute rounded-2xl border-[0.5px] border-border bg-card p-4 shadow-elev-2 outline-none focus-visible:ring-3 focus-visible:ring-primary/20"
         style={{
           width: tooltipW,
           left,

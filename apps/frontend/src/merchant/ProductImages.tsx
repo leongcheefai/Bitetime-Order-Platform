@@ -84,7 +84,7 @@ export default function ImagePicker({
               disabled={busy}
               onClick={() => setPendingDelete(path)}
               aria-label={t('Remove image', '删除图片')}
-              className="absolute -top-1.5 -right-1.5 size-6 pointer-coarse:size-8 pointer-coarse:text-[15px] rounded-pill bg-primary text-white text-[12px] leading-none flex items-center justify-center shadow-elev-1 hover:bg-brand-600 disabled:bg-disabled-bg disabled:text-disabled-fg cursor-pointer"
+              className="absolute -top-1.5 -right-1.5 size-6 pointer-coarse:size-8 pointer-coarse:text-[15px] rounded-pill bg-primary text-primary-foreground text-[12px] leading-none flex items-center justify-center shadow-elev-1 hover:bg-brand-600 disabled:bg-disabled-bg disabled:text-disabled-fg cursor-pointer"
             >
               ×
             </button>

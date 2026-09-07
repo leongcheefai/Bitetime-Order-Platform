@@ -37,7 +37,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <p className="text-muted-foreground text-[14px] leading-[1.6] mt-3">
             Something went wrong loading the page.
             <br />
-            <span className="text-muted-foreground/80">页面加载出错了。</span>
+            <span className="text-muted-foreground">页面加载出错了。</span>
           </p>
           <Button
             type="button"

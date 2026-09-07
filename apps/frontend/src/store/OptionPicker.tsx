@@ -200,14 +200,14 @@ function PickerBody({ basePrice, currency, groups, t, label, onAdd }: PickerBody
                             variant="soft" size="iconRound" className="text-[16px]"
                             disabled={qty === 0}
                             onClick={() => bump(group, option.id, -1)}
-                            aria-label={t('Decrease', '减少')}
+                            aria-label={`${t('Decrease', '减少')} ${label(option.name, option.name_zh)}`}
                           >−</Button>
                           <span className="text-[13px] min-w-[20px] text-center" aria-live="polite">{qty}</span>
                           <Button
                             variant="soft" size="iconRound" className="text-[16px]"
                             disabled={atGroupCap || atOptionCap}
                             onClick={() => bump(group, option.id, 1)}
-                            aria-label={t('Increase', '增加')}
+                            aria-label={`${t('Increase', '增加')} ${label(option.name, option.name_zh)}`}
                           >+</Button>
                         </div>
                       ) : (

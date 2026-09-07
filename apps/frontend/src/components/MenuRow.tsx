@@ -60,7 +60,7 @@ export default function MenuRow({
             {/* Touch cue (no hover on a phone): a persistent photo pill, with a count
                 when there's more than one. The bare number badge read as decoration —
                 nothing said "tap me". */}
-            <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-pill bg-primary/90 px-1.5 py-[3px] text-white text-[10px] font-medium leading-none">
+            <span className="absolute bottom-1 right-1 flex items-center gap-0.5 rounded-pill bg-primary/90 px-1.5 py-[3px] text-primary-foreground text-[10px] font-medium leading-none">
               <Images className="size-[11px]" strokeWidth={2} />
               {imagePaths.length > 1 && imagePaths.length}
             </span>

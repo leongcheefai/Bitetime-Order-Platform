@@ -301,7 +301,7 @@ export default function MenuImportDialog({
           )}
         </div>
 
-        {msg && <p className="text-[13px] text-destructive mb-3">{msg}</p>}
+        {msg && <p role="alert" className="text-[13px] text-danger-fg mb-3">{msg}</p>}
 
         {preview && (
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
@@ -481,7 +481,7 @@ export default function MenuImportDialog({
                           <p className="text-[11px] text-muted-foreground mt-1 pl-6">
                             {t('Printed on the menu:', '菜单上印的：')} <span className="font-mono">{row.price_text}</span>
                             {priceMissing && (
-                              <span className="text-destructive">
+                              <span className="text-danger-fg">
                                 {' · '}{t('Type the price yourself.', '请自行输入价格。')}
                               </span>
                             )}
@@ -500,7 +500,7 @@ export default function MenuImportDialog({
         {rows && rows.length > 0 && (
           <div className="flex flex-wrap items-center justify-end gap-3 mt-4 pt-3 border-t-[0.5px] border-border">
             {unpriced.length > 0 && (
-              <p className="text-[12px] text-destructive mr-auto">
+              <p className="text-[12px] text-danger-fg mr-auto">
                 {t(
                   `${unpriced.length} of the selected products still need a price.`,
                   `已选产品中有 ${unpriced.length} 个还没有价格。`,
@@ -508,7 +508,7 @@ export default function MenuImportDialog({
               </p>
             )}
             {overCategoryCap && (
-              <p className="text-[12px] text-destructive mr-auto">
+              <p className="text-[12px] text-danger-fg mr-auto">
                 {t(
                   `That is more than ${MAX_MENU_CATEGORIES} categories. Untick some.`,
                   `分类数超过 ${MAX_MENU_CATEGORIES} 个。请取消部分勾选。`,

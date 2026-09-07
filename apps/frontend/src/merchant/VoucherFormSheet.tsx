@@ -297,6 +297,7 @@ export default function VoucherFormSheet({
                       id="vm-max" variant="compact" type="number" step="1" min="1"
                       value={form.maxUses}
                       onChange={e => setForm({ ...form, maxUses: e.target.value })}
+                      aria-label={t('Maximum redemptions', '最多兑换次数')}
                       placeholder="100"
                     />
                     {/* Lowering the cap under what is already taken is allowed, and says what it
@@ -331,7 +332,7 @@ export default function VoucherFormSheet({
                     {/* The one combination the server refuses, said BEFORE they submit. Unlimited
                         each and unlimited in total is an unlimited discount for one person. */}
                     {form.perCustomerLimit === '' && !form.limitTotal && (
-                      <p className="text-[12px] text-destructive">
+                      <p className="text-[12px] text-danger-fg">
                         {t('Also set a total limit above.', '请同时设置上方的总次数上限。')}
                       </p>
                     )}
@@ -368,6 +369,7 @@ export default function VoucherFormSheet({
                       id="vm-min-order" variant="compact" type="number" step="0.01" min="0"
                       value={form.minOrder}
                       onChange={e => setForm({ ...form, minOrder: e.target.value })}
+                      aria-label={t('Minimum order amount', '最低消费金额')}
                       placeholder="50.00"
                     />
                     {/* Says which number, because it is not the one at the bottom of the

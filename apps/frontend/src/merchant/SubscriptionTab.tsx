@@ -279,7 +279,7 @@ function ConfirmAction({
               // deleting a row, and the confirm must read as the most dangerous thing on screen —
               // heavier than "Never mind", never lighter. Scoped to this button; the shared
               // variant is untouched.
-              className={severe ? 'bg-danger text-white border-danger hover:bg-danger/90 hover:border-danger' : undefined}
+              className={severe ? 'bg-danger-fg text-white border-danger-fg hover:bg-danger-fg/90 hover:border-danger-fg' : undefined}
               onClick={confirm} disabled={busy}
             >
               {busy ? t('Working…', '处理中…') : confirmLabel}

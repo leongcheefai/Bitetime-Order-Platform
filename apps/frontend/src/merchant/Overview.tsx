@@ -186,7 +186,7 @@ function CustomRangePill({
             disabled={{ after: todayDate }}
             aria-label={t('Revenue range', '营收时间范围')}
           />
-          <span className={cn('px-1 text-[12px]', problem ? 'text-destructive' : 'text-muted-foreground')}>
+          <span className={cn('px-1 text-[12px]', problem ? 'text-danger-fg' : 'text-muted-foreground')}>
             {problem
               ? message[problem]
               : parsed.ok

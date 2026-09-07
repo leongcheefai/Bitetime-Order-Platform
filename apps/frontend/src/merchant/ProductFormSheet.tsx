@@ -387,7 +387,7 @@ export default function ProductFormSheet({
           <form onSubmit={save} className="flex-1 min-h-0 flex flex-col">
             <div className="flex-1 min-h-0 overflow-y-auto bg-background flex flex-col gap-3 p-3 sm:p-4">
               {msg && (
-                <div className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-lg px-[13px] py-[10px] leading-[1.5]">
+                <div role="status" className="text-[13px] text-ink-700 bg-brand-100 border border-border rounded-lg px-[13px] py-[10px] leading-[1.5]">
                   {msg}
                 </div>
               )}

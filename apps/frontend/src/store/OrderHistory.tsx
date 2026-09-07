@@ -228,7 +228,7 @@ export default function OrderHistory() {
                               <span className="truncate">{itemName(item)} × {item.qty}</span>
                               {/* Missing `promo` (rows written before I-2) reads as false. */}
                               {item.promo && (
-                                <span className="shrink-0 px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium">
+                                <span className="shrink-0 px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium">
                                   {t('Promo', '优惠')}
                                 </span>
                               )}

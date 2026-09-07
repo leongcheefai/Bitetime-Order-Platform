@@ -954,7 +954,7 @@ export default function Storefront() {
                     <span className="flex items-center gap-1.5 flex-wrap">
                       {item.name} × {item.qty}
                       {item.promo && (
-                        <span className="px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium">
+                        <span className="px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium">
                           {t('Promo', '优惠')}
                         </span>
                       )}
@@ -1228,7 +1228,7 @@ export default function Storefront() {
                             <span className="text-[12px] text-muted-foreground line-through">
                               {formatMoney(p.price, currency)}
                             </span>
-                            <span className="px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium">
+                            <span className="px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium">
                               {t('Promo', '优惠')}
                             </span>
                             {Number.isFinite(remainingForNextUnit) && (
@@ -1565,6 +1565,7 @@ export default function Storefront() {
                   type="text"
                   value={voucherInput}
                   onChange={e => setVoucherInput(e.target.value)}
+                  aria-label={t('Voucher code', '优惠码')}
                   placeholder={t('Enter voucher code', '输入优惠码')}
                   className="flex-1 min-w-0"
                 />
@@ -1622,7 +1623,7 @@ export default function Storefront() {
                           <ItemSelections item={item} />
                         </span>
                         {item.promo && (
-                          <span className="px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium">
+                          <span className="px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium">
                             {t('Promo', '优惠')}
                           </span>
                         )}
@@ -1646,7 +1647,7 @@ export default function Storefront() {
                                does not dominate a summary row; the `after` overlay is what makes
                                the touch target 44px, so a coarse pointer gets the size without
                                the visual weight. */
-                            className="relative grid place-items-center shrink-0 size-7 -my-1 rounded-pill border border-border bg-white/60 text-muted-foreground cursor-pointer transition-colors hover:bg-danger hover:border-danger hover:text-white active:bg-danger active:border-danger active:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary after:absolute after:content-[''] after:-inset-2"
+                            className="relative grid place-items-center shrink-0 size-7 -my-1 rounded-pill border border-border bg-white/60 text-muted-foreground cursor-pointer transition-colors hover:bg-danger-fg hover:border-danger-fg hover:text-white active:bg-danger-fg active:border-danger-fg active:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary after:absolute after:content-[''] after:-inset-2"
                           >
                             <X className="size-3.5" strokeWidth={2.5} aria-hidden="true" />
                           </button>

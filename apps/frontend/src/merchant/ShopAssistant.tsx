@@ -110,7 +110,7 @@ export default function ShopAssistant() {
         </div>
       )}
 
-      {error && <p className="text-[13px] text-destructive mt-3">{error}</p>}
+      {error && <p role="alert" className="text-[13px] text-danger-fg mt-3">{error}</p>}
 
       {answer && (
         <div className="mt-3 rounded-lg border-[0.5px] border-border bg-background/50 px-4 py-3">

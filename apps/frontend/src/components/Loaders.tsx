@@ -23,12 +23,20 @@ export function Skeleton({ width = '100%', height = '1rem', radius = 'var(--radi
   )
 }
 
+// The bars are decoration and stay hidden from assistive tech; the sr-only line is what a
+// screen reader gets instead, so a section chunk or a data load is "loading" rather than a
+// silent pause. Both languages in one string: this renders below any provider that knows `lang`.
+const LOADING = 'Loading… 加载中…'
+
 export function SkeletonText({ lines = 3 }: { lines?: number }) {
   return (
-    <span className="flex flex-col gap-2" aria-hidden="true">
-      {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton key={i} height="0.85rem" width={i === lines - 1 ? '60%' : '100%'} />
-      ))}
+    <span className="flex flex-col gap-2" role="status">
+      <span className="sr-only">{LOADING}</span>
+      <span className="contents" aria-hidden="true">
+        {Array.from({ length: lines }).map((_, i) => (
+          <Skeleton key={i} height="0.85rem" width={i === lines - 1 ? '60%' : '100%'} />
+        ))}
+      </span>
     </span>
   )
 }
@@ -39,7 +47,8 @@ export function SkeletonText({ lines = 3 }: { lines?: number }) {
 // NOTE: form-wrap, form-wrap--wide are shared classes — kept in index.css.
 export function PageSkeleton() {
   return (
-    <div className="form-wrap form-wrap--wide flex flex-col gap-[18px] pt-2" aria-hidden="true">
+    <div className="form-wrap form-wrap--wide flex flex-col gap-[18px] pt-2" role="status">
+      <span className="sr-only">{LOADING}</span>
       <div className="flex flex-col gap-[10px]">
         <Skeleton width="44%" height="1.9rem" />
         <Skeleton width="26%" height="0.85rem" />
