@@ -74,7 +74,10 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
 
   // Place the tooltip below the target when there's room, else above it.
   const placeBelow = window.innerHeight - rect.bottom > 220
-  const left = Math.max(12, Math.min(rect.left, window.innerWidth - TOOLTIP_W - 12))
+  // Never wider than the viewport less its gutters: at 300px fixed the clamp below held at
+  // 360px and failed under it.
+  const tooltipW = Math.min(TOOLTIP_W, window.innerWidth - 24)
+  const left = Math.max(12, Math.min(rect.left, window.innerWidth - tooltipW - 12))
 
   return createPortal(
     <div className="fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label={title}>
@@ -94,7 +97,7 @@ export default function SpotlightTour({ targetSelector, stepLabel, title, body, 
       <div
         className="absolute rounded-2xl border-[0.5px] border-border bg-card p-4 shadow-xl"
         style={{
-          width: TOOLTIP_W,
+          width: tooltipW,
           left,
           ...(placeBelow
             ? { top: rect.bottom + 12 }

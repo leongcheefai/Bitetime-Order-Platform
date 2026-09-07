@@ -169,7 +169,7 @@ export default function ScrollCta() {
             type="button"
             onClick={close}
             aria-label={t('Close', '关闭')}
-            className="absolute top-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground [transition:color_0.15s,background_0.15s] hover:bg-brand-100 hover:text-primary"
+            className="absolute top-2.5 right-2.5 flex h-7 w-7 pointer-coarse:h-10 pointer-coarse:w-10 items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground [transition:color_0.15s,background_0.15s] hover:bg-brand-100 hover:text-primary"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

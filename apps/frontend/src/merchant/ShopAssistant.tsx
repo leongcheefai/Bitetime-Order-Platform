@@ -102,7 +102,7 @@ export default function ShopAssistant() {
               key={ex}
               type="button"
               onClick={() => { setQuestion(ex); ask(ex) }}
-              className="rounded-full border-[0.5px] border-border bg-background/60 px-3 py-1 text-[12px] text-muted-foreground hover:text-foreground"
+              className="rounded-pill border-[0.5px] border-border bg-background/60 px-3 py-1 pointer-coarse:min-h-9 text-[12px] text-muted-foreground hover:text-foreground"
             >
               {ex}
             </button>

@@ -25,7 +25,7 @@ export default function SampleShopsPage() {
   useTopOnRouteChange()
 
   return (
-    <div className="mm-land relative isolate flex flex-col items-stretch min-h-screen font-sans text-foreground bg-background">
+    <div className="mm-land relative isolate flex flex-col items-stretch min-h-dvh font-sans text-foreground bg-background">
 
       <MarketingNav />
       <main className="flex-1 flex flex-col items-stretch">

@@ -33,7 +33,7 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'rounded-pill border-[0.5px] px-2.5 py-0.5 text-[11px] font-semibold transition-colors',
+        'rounded-pill border-[0.5px] px-2.5 py-0.5 pointer-coarse:min-h-9 pointer-coarse:px-3 text-[11px] font-semibold transition-colors',
         active
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-transparent text-muted-foreground hover:text-primary',

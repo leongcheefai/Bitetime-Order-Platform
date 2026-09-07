@@ -686,7 +686,7 @@ function NotesPanel({
                 type="button"
                 aria-label={t(`Remove tag ${tag}`, `移除标签 ${tag}`)}
                 onClick={() => save({ note: customer.note, tags: customer.tags.filter(x => x !== tag) })}
-                className={`cursor-pointer rounded-pill opacity-60 hover:opacity-100 ${FOCUS_RING}`}
+                className={`cursor-pointer rounded-pill p-0.5 -m-0.5 pointer-coarse:p-2 pointer-coarse:-m-1.5 opacity-60 hover:opacity-100 ${FOCUS_RING}`}
               >
                 <X size={11} />
               </button>

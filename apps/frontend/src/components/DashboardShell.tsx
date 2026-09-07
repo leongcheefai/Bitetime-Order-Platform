@@ -82,7 +82,6 @@ export default function DashboardShell(props: DashboardShellProps) {
       open
       onOpenChange={() => {}}
       data-layout-flush=""
-      className="min-h-screen"
       style={{ '--sidebar-width': SIDEBAR_WIDTH } as CSSProperties}
     >
       <Shell {...props} />

@@ -210,7 +210,7 @@ export default function FeedbackFab() {
         aria-label={title}
         title={title}
         className={cn(
-          'fixed z-30 bottom-6 right-6 max-sm:bottom-5 max-sm:right-5',
+          'fixed z-30 bottom-[calc(1.5rem+env(safe-area-inset-bottom))] right-6 max-sm:bottom-[calc(1.25rem+env(safe-area-inset-bottom))] max-sm:right-5',
           'gap-2 rounded-pill px-4 py-3 shadow-lg',
           '[@media(pointer:coarse)]:min-h-[48px]',
         )}
@@ -317,7 +317,7 @@ export default function FeedbackFab() {
                           aria-label={t(`Remove ${p.file.name}`, `移除 ${p.file.name}`)}
                           className={cn(
                             'absolute -top-1.5 -right-1.5 rounded-pill bg-foreground text-background',
-                            'flex items-center justify-center h-5 w-5 cursor-pointer',
+                            'flex items-center justify-center h-6 w-6 pointer-coarse:h-8 pointer-coarse:w-8 cursor-pointer',
                           )}
                         >
                           <X size={12} strokeWidth={2} />

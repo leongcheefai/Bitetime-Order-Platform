@@ -271,6 +271,30 @@
   }
 }
 
+/* ── Touch and Chinese, two rules the utilities cannot express per call site ────────────────────
+
+   iOS Safari zooms the viewport when a field under 16px takes focus, and then leaves the page
+   zoomed. The default Input and Textarea are 16px for exactly that reason, but the compact
+   variant, the menu-import rows, the assistant box and the order note all pass their own 13–14px
+   — eighteen sites, and a nineteenth is one `text-[13px]` away. Unlayered and pointer-gated: on a
+   phone every text control is 16px, whatever utility it carries; on a desktop the compact sizes
+   stand. Checkbox, radio, range and file inputs have no text to zoom on.
+
+   `uppercase` and letter-spacing are Latin devices. On a Chinese page a 10px tracked table header
+   is an unreadable smear, so the header tracks normally and gains two pixels there. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select,
+  [role="combobox"] {
+    font-size: 16px;
+  }
+}
+html[lang="zh"] :is(th, [data-slot="table-head"]) {
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
 /* Smooth in-page anchor scrolling (e.g. nav "Pricing" → #pricing). Disabled
    under prefers-reduced-motion by the media query below. */
 html { scroll-behavior: smooth; }
@@ -303,7 +327,7 @@ html { scroll-behavior: smooth; }
   }
 }
 
-body { font-family: 'Poppins', 'Poppins Fallback', 'Noto Sans SC', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); min-height: 100vh; padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; scrollbar-gutter: stable; overflow-x: hidden; }
+body { font-family: 'Poppins', 'Poppins Fallback', 'Noto Sans SC', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); min-height: 100vh; min-height: 100dvh; padding: 2rem 1rem 4rem; padding-bottom: calc(4rem + var(--consent-banner-h, 0px)); display: flex; flex-direction: column; align-items: center; scrollbar-gutter: stable; overflow-x: hidden; }
 /* AA-passing placeholder (the browser default fails contrast on the page background).
    The FLOOR for raw inputs, which the Input/Textarea components then override a step lighter on
    their white surface.

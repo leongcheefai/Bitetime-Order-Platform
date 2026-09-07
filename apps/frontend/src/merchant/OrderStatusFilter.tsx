@@ -41,7 +41,7 @@ export default function OrderStatusFilter({
             type="button"
             aria-pressed={on}
             onClick={() => onSelect(on && chip.status ? '' : chip.status)}
-            className={`inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-[3px] text-[12px] font-medium
+            className={`inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-[3px] pointer-coarse:min-h-9 pointer-coarse:px-3 text-[12px] font-medium
                         cursor-pointer transition-colors ${tone}`}
           >
             <span>{label}</span>

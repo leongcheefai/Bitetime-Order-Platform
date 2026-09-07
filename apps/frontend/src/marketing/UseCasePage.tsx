@@ -27,7 +27,7 @@ export default function UseCasePage({ useCase }: { useCase: UseCase }) {
 
   return (
     // Keep mm-land class — body:has(.mm-land) in index.css resets body padding/alignment
-    <div className="mm-land relative isolate flex flex-col items-stretch min-h-screen font-sans text-foreground bg-background">
+    <div className="mm-land relative isolate flex flex-col items-stretch min-h-dvh font-sans text-foreground bg-background">
       <MarketingNav />
       <main className="flex-1 flex flex-col items-stretch">
 

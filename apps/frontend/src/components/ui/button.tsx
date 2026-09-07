@@ -69,19 +69,22 @@ const buttonVariants = cva(
         // .voucher-apply-btn — inline, 18 px H / 10 px V, 14 px text
         // Note: .add-btn uses py-[7px] px-[14px] w-full rounded-sm; screens must override
         sm:
-          "px-[18px] py-[10px] text-sm rounded-lg",
+          "px-[18px] py-[10px] text-sm rounded-lg pointer-coarse:min-h-11",
         // .cust-account-btn — pill, 14 px H / 7 px V, 13 px text, pill radius (9999 px = stadium)
         // Note: .lang-btn uses py-[5px] + bg-card; screens must override those
         pill:
-          "px-[14px] py-[7px] text-[13px] rounded-pill",
+          "px-[14px] py-[7px] text-[13px] rounded-pill pointer-coarse:min-h-10",
         // .hamburger-btn / .notif-bell — 36×36 px square (dimension only)
         // Pair with variant="outline" for the hairline border + hover muted-surface appearance
+        // Every icon and round button grows to 44px under a coarse pointer, HERE rather than
+        // at each call site: the sheet/dialog close, the month steppers, the carousel arrows
+        // and the option steppers all forgot to, and each was a 26–36px target under a thumb.
         icon:
-          "size-9 rounded-lg",
+          "size-9 rounded-lg pointer-coarse:size-11",
         // .qty-btn / .del-btn — 26×26 px round icon button (dimension only)
         // Pair with variant="soft" for qty-btn; variant="destructive" + className="size-[30px]" for del-btn
         iconRound:
-          "size-[26px] rounded-round",
+          "size-[26px] rounded-round pointer-coarse:size-11",
         // Geometry-neutral: suppresses defaultVariants.size so variant="invoice" controls all geometry
         none:
           "",

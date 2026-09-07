@@ -103,7 +103,7 @@ export function BreakdownList({ rows }: { rows: { label: string; value: string; 
     <ul className="m-0 flex list-none flex-col gap-[10px] p-0">
       {rows.map((r, i) => (
         <li key={r.label} className="flex items-center gap-[10px] text-xs">
-          <span className="flex-[0_0_32%] overflow-hidden text-ellipsis whitespace-nowrap text-foreground">{r.label}</span>
+          <span className="flex-[0_0_32%] overflow-hidden text-ellipsis whitespace-nowrap text-foreground" title={r.label}>{r.label}</span>
           <span className="h-2 flex-1 overflow-hidden rounded-xs bg-muted">
             <span className="block h-full min-w-[3px] rounded-xs" style={{ width: `${r.pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
           </span>

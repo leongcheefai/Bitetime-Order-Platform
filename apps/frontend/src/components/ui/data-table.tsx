@@ -185,7 +185,7 @@ export function DataTable<TData, TValue>({
           <Button
             variant="outline"
             size="none"
-            className="py-[4px] px-3 rounded-pill text-[12px] bg-card hover:bg-brand-100 hover:text-primary hover:border-primary"
+            className="py-[4px] px-3 pointer-coarse:min-h-10 pointer-coarse:px-4 rounded-pill text-[12px] bg-card hover:bg-brand-100 hover:text-primary hover:border-primary"
             onClick={() => goToPage(pageIndex - 1)}
             disabled={pageIndex <= 0}
           >{prevLabel}</Button>
@@ -200,7 +200,7 @@ export function DataTable<TData, TValue>({
           <Button
             variant="outline"
             size="none"
-            className="py-[4px] px-3 rounded-pill text-[12px] bg-card hover:bg-brand-100 hover:text-primary hover:border-primary"
+            className="py-[4px] px-3 pointer-coarse:min-h-10 pointer-coarse:px-4 rounded-pill text-[12px] bg-card hover:bg-brand-100 hover:text-primary hover:border-primary"
             onClick={() => goToPage(pageIndex + 1)}
             disabled={pageIndex >= pageCount - 1}
           >{nextLabel}</Button>
@@ -221,7 +221,7 @@ export function SortableHeader<TData, TValue>({
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1 -ml-1 px-1 py-0.5 rounded cursor-pointer hover:text-primary transition-colors"
+      className="inline-flex items-center gap-1 -ml-1 px-1 py-0.5 pointer-coarse:px-2 pointer-coarse:py-2 rounded cursor-pointer hover:text-primary transition-colors"
       onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
     >
       {label}

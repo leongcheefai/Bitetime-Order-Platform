@@ -118,7 +118,7 @@ export default function MenuCategoriesDialog({
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!saving) onOpenChange(o) }}>
-      <DialogContent className="max-w-[560px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{t('Menu categories', '菜单分类')}</DialogTitle>
         </DialogHeader>

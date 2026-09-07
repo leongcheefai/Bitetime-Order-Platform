@@ -42,7 +42,7 @@ export default function LegalPage({ doc }: { doc: LegalDocument }) {
   }, [pathname, hash])
 
   return (
-    <div className="mm-land flex flex-col min-h-screen bg-background text-foreground font-sans">
+    <div className="mm-land flex flex-col min-h-dvh bg-background text-foreground font-sans">
       <nav className="flex items-center justify-between px-8 py-5 border-b border-border max-[600px]:px-5 max-[600px]:py-4">
         <Link to="/" aria-label={t('TinyOrder home', 'TinyOrder 首页')}>
           <Wordmark className="h-7 max-[600px]:h-6" />
