@@ -479,7 +479,7 @@ export default function MenuImportDialog({
                             menu untouched. */}
                         {row.price_text && (
                           <p className="text-[11px] text-muted-foreground mt-1 pl-6">
-                            {t('Printed on the menu:', '菜单上印的：')} <span className="font-mono">{row.price_text}</span>
+                            {t('Printed on the menu:', '菜单上印的：')} <span>{row.price_text}</span>
                             {priceMissing && (
                               <span className="text-danger-fg">
                                 {' · '}{t('Type the price yourself.', '请自行输入价格。')}

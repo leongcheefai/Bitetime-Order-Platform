@@ -136,12 +136,12 @@ export default function LoginScreen() {
           </div>
         )}
         {deviceNotice && (
-          <div role="status" className="text-[13px] text-primary bg-danger-100 border border-danger-100 rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div role="status" className="text-[13px] text-primary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {deviceNotice}
           </div>
         )}
         {notice && (
-          <div role="status" className="text-[13px] text-primary bg-danger-100 border border-danger-100 rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+          <div role="status" className="text-[13px] text-primary bg-brand-wash border border-border rounded-sm px-[13px] py-[10px] mb-[10px] leading-[1.5]">
             {notice}
           </div>
         )}

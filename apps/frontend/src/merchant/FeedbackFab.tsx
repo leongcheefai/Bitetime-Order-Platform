@@ -309,7 +309,7 @@ export default function FeedbackFab() {
                         <img
                           src={p.url}
                           alt={p.file.name}
-                          className="h-16 w-16 rounded object-cover border border-border"
+                          className="h-16 w-16 rounded-md object-cover border border-border"
                         />
                         <button
                           type="button"

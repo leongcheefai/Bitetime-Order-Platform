@@ -170,7 +170,7 @@ export default function AuthPanel({ heading, subheading, initialMode = 'signin',
       {notice && (
         <div
           role="status"
-          className="text-[13px] text-primary bg-danger-100 border border-danger-100 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]"
+          className="text-[13px] text-primary bg-brand-wash border border-border rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]"
         >
           {notice}
         </div>

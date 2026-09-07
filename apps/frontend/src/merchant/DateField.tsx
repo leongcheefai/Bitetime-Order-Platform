@@ -67,7 +67,7 @@ export default function DateField({ value, onChange, tz, isDisabled, t, lang, pl
             id={id}
             type="button"
             className={cn(
-              'w-full rounded-sm border-[0.5px] border-border bg-background px-3 py-2 text-left text-[13px] transition-colors hover:border-primary',
+              'w-full rounded-md border-[0.5px] border-border bg-background px-3 py-2 text-left text-[13px] transition-colors hover:border-primary',
               !value && 'text-muted-foreground',
             )}
           />

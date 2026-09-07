@@ -99,7 +99,7 @@ export default function OptionGroupsEditor({
               render={
                 <Button
                   type="button" variant="outline" size="none"
-                  className="text-[12px] px-2 py-1 rounded"
+                  className="text-[12px] px-2 py-1 rounded-md"
                 />
               }
             >

@@ -221,7 +221,7 @@ export function SortableHeader<TData, TValue>({
   return (
     <button
       type="button"
-      className="inline-flex items-center gap-1 -ml-1 px-1 py-0.5 pointer-coarse:px-2 pointer-coarse:py-2 rounded cursor-pointer hover:text-primary transition-colors"
+      className="inline-flex items-center gap-1 -ml-1 px-1 py-0.5 pointer-coarse:px-2 pointer-coarse:py-2 rounded-md cursor-pointer hover:text-primary transition-colors"
       onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
     >
       {label}

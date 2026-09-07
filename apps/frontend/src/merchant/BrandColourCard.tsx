@@ -114,7 +114,7 @@ export default function BrandColourCard({ onDirtyChange }: {
             aria-pressed={pending === s.hex}
             title={t(s.name[0], s.name[1])}
             className={cn(
-              'size-8 rounded-full border transition-shadow',
+              'size-8 rounded-round border transition-shadow',
               pending === s.hex ? 'border-foreground shadow-elev-1' : 'border-border',
             )}
             style={{ backgroundColor: s.hex }}

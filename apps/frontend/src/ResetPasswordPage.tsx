@@ -78,7 +78,7 @@ export default function ResetPasswordPage() {
       </h1>
 
       {done ? (
-        <p role="status" className="text-[13px] text-primary bg-danger-100 border border-danger-100 rounded-md px-[13px] py-[10px] mt-4 leading-[1.5]">
+        <p role="status" className="text-[13px] text-primary bg-brand-wash border border-border rounded-md px-[13px] py-[10px] mt-4 leading-[1.5]">
           {t(
             "Password updated. You're signed in — taking you back…",
             '密码已更新。你已登录——正在返回…',
