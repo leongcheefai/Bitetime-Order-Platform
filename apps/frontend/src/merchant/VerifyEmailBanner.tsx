@@ -93,7 +93,7 @@ export default function VerifyEmailBanner() {
       <button
         type="button"
         onClick={hide}
-        className="text-[12px] underline underline-offset-2 opacity-80 hover:opacity-100"
+        className="text-[12px] underline underline-offset-2 decoration-current/50 hover:decoration-current"
       >
         {t('Not now', '暂不')}
       </button>

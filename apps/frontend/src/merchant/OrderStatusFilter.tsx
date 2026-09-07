@@ -45,7 +45,7 @@ export default function OrderStatusFilter({
                         cursor-pointer transition-colors ${tone}`}
           >
             <span>{label}</span>
-            <span className="tabular-nums opacity-80">{chip.count}</span>
+            <span className="tabular-nums">{chip.count}</span>
           </button>
         )
       })}

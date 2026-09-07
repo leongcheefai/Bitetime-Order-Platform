@@ -203,6 +203,8 @@ Since ADR 0017 the voice is not always oxblood. A merchant picks their shop's co
 
 **The Subtle-Is-Not-Text Rule.** `--ink-400` (`#A1A1AA`) and `--ink-500` (`#71717A`) are border and icon colours. Neither clears AA as text on the cream canvas. All muted text goes on `--color-text-muted` (`--ink-600`). `tokens.test.ts` pins both below the text threshold on cream, so a future edit cannot quietly promote either.
 
+**The Danger-Is-Not-Text Rule.** `--danger-500` (`#EF4444`, `text-danger`) is a fill and a border. As 13px text it reaches 3.76:1 on white, 3.16:1 on cream and 3.08:1 on its own tint — and an audit on 2026-09-07 found it under fifteen error messages, the customer's checkout refusal among them. Every inline error is `text-danger-fg` (`#991B1B`, 8.31:1 on white), and `tokens.test.ts` pins the fill below the text floor so the promotion cannot recur.
+
 **The Warm-Canvas Rule.** The page is cream; everything raised off it is white or zinc. Do not paint a large surface cream to "warm it up" — the warmth is the canvas showing through, and a cream card on a cream page has no edge. Equally, do not swap the canvas for a zinc grey: that is the single change that turns this system into the generic dashboard it is trying not to be.
 
 ## 3. Typography
@@ -304,6 +306,7 @@ The mono order number (`PREFIX-YYMMDD-XXXX`) is the brand's receipt stamp — th
 
 ### Don't:
 - **Don't** set any text in `--ink-400` (`#A1A1AA`, 2.15:1 on cream) or `--ink-500` (`#71717A`, 4.06:1 on cream). Both fail AA there. All muted text goes on `--color-text-muted`.
+- **Don't** write an error message in `text-danger`. That is the fill red, and it fails AA as text on every surface; inline errors are `text-danger-fg` (The Danger-Is-Not-Text Rule).
 - **Don't** replace the cream canvas with a grey, or paint cards cream (The Warm-Canvas Rule).
 - **Don't** introduce a second accent colour. The status set is for status; nothing else gets a hue.
 - **Don't** lower the 16px body floor for density (The 16px Body Floor).
