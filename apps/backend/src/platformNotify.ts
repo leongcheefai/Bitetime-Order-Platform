@@ -37,9 +37,6 @@ export interface MerchantSignupInput {
     id: string
     name: string
     slug: string
-    business_nature?: string | null
-    currency?: string | null
-    billing_cycle?: string | null
     status: string
   }
   /** The account that owns the shop. Null when the caller could not read it — see below. */
@@ -52,9 +49,13 @@ export interface MerchantSignupInput {
 /**
  * Pure: render the alert.
  *
- * The status line is the point of the message. A shop at `active` is open and selling; a shop at
- * `pending` is one Stripe refused, and until its owner retries it sells nothing. Both look like
- * a successful signup from every other angle, so the alert names which one happened.
+ * Four lines and a link, and the shortness is the design. This is a ping on a phone, so every
+ * line it carries competes with the one line that has to be read: the status. A shop at `active`
+ * is open and selling; a shop at `pending` is one Stripe refused, and until its owner retries it
+ * sells nothing. Both look like a successful signup from every other angle.
+ *
+ * The trade, the currency and the billing cycle used to sit here. They are all one tap away on
+ * the shop the link opens, and none of them is news.
  */
 export function buildMerchantSignupMessage(input: MerchantSignupInput): string {
   const { merchant: m, frontendUrl } = input
@@ -66,12 +67,8 @@ export function buildMerchantSignupMessage(input: MerchantSignupInput): string {
   msg += `*Shop:* ${plainField(m.name)}\n`
   msg += `*Slug:* ${plainField(m.slug)}\n`
   msg += `*Owner:* ${owner}\n`
-  msg += `*Trade:* ${plainField(m.business_nature) || 'unknown'}\n`
-  msg += `*Currency:* ${plainField(m.currency) || 'unknown'}\n`
-  msg += `*Billing:* ${plainField(m.billing_cycle) || 'unknown'}\n`
   msg += `*Status:* ${status}\n`
-  msg += `\n${base}/s/${plainField(m.slug)}\n`
-  msg += `${base}/admin/merchants`
+  msg += `\n${base}/s/${plainField(m.slug)}`
   return msg
 }
 

@@ -14,9 +14,6 @@ const INPUT: MerchantSignupInput = {
     id: '11111111-1111-1111-1111-111111111111',
     name: 'Joe Coffee',
     slug: 'joe-coffee',
-    business_nature: 'bakery',
-    currency: 'MYR',
-    billing_cycle: 'monthly',
     status: 'active',
   },
   ownerEmail: 'joe@example.com',
@@ -25,15 +22,21 @@ const INPUT: MerchantSignupInput = {
 }
 
 describe('buildMerchantSignupMessage', () => {
-  it('names the shop, its owner and how the shop was set up', () => {
+  it('names the shop, its slug and its owner', () => {
     const msg = buildMerchantSignupMessage(INPUT)
     expect(msg).toContain('New merchant')
     expect(msg).toContain('Joe Coffee')
     expect(msg).toContain('joe-coffee')
-    expect(msg).toContain('bakery')
-    expect(msg).toContain('MYR')
-    expect(msg).toContain('monthly')
     expect(msg).toContain('joe@example.com')
+  })
+
+  // The alert is a ping, not a record. The trade, the currency and the billing cycle are all one
+  // tap away on the shop the link opens, and every line here competes with the status line.
+  it('carries nothing else about the shop', () => {
+    const msg = buildMerchantSignupMessage(INPUT)
+    expect(msg).not.toContain('Trade')
+    expect(msg).not.toContain('Currency')
+    expect(msg).not.toContain('Billing')
   })
 
   it('reports an active shop as open with its trial running', () => {
@@ -53,10 +56,9 @@ describe('buildMerchantSignupMessage', () => {
     expect(msg).toContain('trial not started')
   })
 
-  it('links the storefront and the admin list', () => {
+  it('links the storefront', () => {
     const msg = buildMerchantSignupMessage(INPUT)
     expect(msg).toContain('https://tinyorder.vercel.app/s/joe-coffee')
-    expect(msg).toContain('https://tinyorder.vercel.app/admin/merchants')
   })
 
   it('says so when the owner email is missing rather than printing an empty label', () => {
