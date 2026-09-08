@@ -2,9 +2,8 @@
 // Cancelling an order RELEASES the voucher redemption it spent, and un-cancelling takes it back.
 //
 // The rule is state-driven, not transition-driven: a redemption is void if and only if its order
-// is `cancelled`. That is what makes the write idempotent and a half-done write self-correcting —
-// the order patch and the void are two statements, not one transaction, so the next patch of the
-// same order is what repairs a void that failed.
+// is `cancelled`. That is what makes the write idempotent. The void now runs inside the order
+// patch's own transaction (ADR 0025), so a void that fails rolls the patch back with it.
 //
 // Every assertion here is against the CAP, not against the column. `voided_at` is only real if
 // `claimVoucher` stops counting the row: a suite that read the column would pass just as happily

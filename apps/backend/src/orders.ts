@@ -1,7 +1,10 @@
 import type postgres from 'postgres'
 import { priceOrder, validateSelections, voucherFromRow, voucherExpired, voucherBelowMinimum, shopRates, shopTax, shopDistance, shopMethods, offersMethod, routedKm, isDistancePriced, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
-import type { CartLine, PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax, ShopDistance, ShopMethods, OrderRefusal } from '@bitetime/shared'
+import type { CartLine, PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax, ShopDistance, ShopMethods, OrderRefusal, OrderEvent } from '@bitetime/shared'
 import { sql, withTransaction } from './db.js'
+import { recordOrderEvents, SYSTEM_ACTOR, type OrderActor } from './orderEventsDb.js'
+import { orderPatchEvents, type OrderPatch, type OrderPatchBefore } from './orderEvents.js'
+import { syncOrderRedemptionVoid } from './voucherRedemptionsDb.js'
 import { phoneKey } from './phone.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
 import { type DistanceDeps } from './distance.js'
@@ -342,6 +345,16 @@ export async function placeOrder(
     // that made the claim part of this transaction in the first place (#122's swallowed redeem).
     await claimed?.claim(id)
 
+    // The order's first event, in the same transaction (ADR 0025). The actor is the customer
+    // whether or not they have an account — a guest is a customer with no id, and the log tells
+    // the two apart by `actor_id` alone.
+    await recordOrderEvents(
+      tx,
+      { id, merchantId: input.merchantId },
+      { kind: 'customer', id: input.userId },
+      [{ kind: 'created', detail: { status } }],
+    )
+
     // The status is returned, not re-derived by the caller. It decides whether the order-placed
     // screen can offer the invoice at all (a `pending_payment` order cannot be issued one), and
     // the shape of the rule — "born pending_payment when the shop takes manual payment" — is
@@ -376,47 +389,140 @@ export async function orderMerchantId(orderId: string): Promise<string | null> {
 }
 
 /**
- * Stamps the storage path onto the order row, and advances a pending order past the payment
- * gate (#182) in the same statement — a successful upload is the ONLY thing that turns
- * pending_payment into new. The CASE guard is deliberate: it moves an order OUT of
+ * Stamps a receipt's storage path onto the order row, and advances a pending order past the
+ * payment gate (#182) in the same statement — a receipt landing on the order IS the gate
+ * clearing, whichever side put it there. The CASE guard is deliberate: it moves an order OUT of
  * pending_payment and never overwrites any other status, so a proof landing after a merchant
  * already cancelled (or completed) the order leaves that decision alone.
+ *
+ * One transaction with the order log (ADR 0025): the upload event as the uploader's, and — when
+ * the gate cleared — a `status_changed` by the SYSTEM, because whoever attached the file did not
+ * choose a workflow state. The events are returned for the merchant route's response.
+ *
+ * Two columns, never one: what the customer attached and what the shop filed are different
+ * claims, and neither upload may replace the other's evidence (20260828120000).
  */
-export async function setOrderPaymentProof(
+async function recordProof<C extends 'payment_proof' | 'payment_proof_merchant'>(
   orderId: string,
+  column: C,
   path: string,
-): Promise<{ payment_proof: string; status: string } | null> {
-  const rows = await sql<{ payment_proof: string; status: string }[]>`
-    update orders
-    set payment_proof = ${path},
-        status = case when status = 'pending_payment' then 'new' else status end
-    where id = ${orderId}
-    returning payment_proof, status
-  `
-  return rows[0] ?? null
+  kind: 'payment_proof_uploaded' | 'merchant_payment_proof_uploaded',
+  actor: (row: ProofWriteRow) => OrderActor,
+): Promise<(Record<C, string> & { status: string; events: OrderEvent[] }) | null> {
+  return withTransaction(async (tx) => {
+    // The column is one of two literals this function's own signature names — never caller text.
+    const col = tx(column as string)
+    const rows = await tx<(ProofWriteRow & Record<C, string>)[]>`
+      update orders o
+      set ${col} = ${path},
+          status = case when o.status = 'pending_payment' then 'new' else o.status end
+      from (select id, status as prev_status from orders where id = ${orderId} for update) p
+      where o.id = p.id
+      returning o.${col}, o.status, p.prev_status, o.merchant_id, o.user_id
+    `
+    const row = rows[0]
+    if (!row) return null
+    const order = { id: orderId, merchantId: row.merchant_id }
+    const events = await recordOrderEvents(tx, order, actor(row), [{ kind, detail: {} }])
+    if (row.prev_status !== row.status) {
+      events.push(...await recordOrderEvents(tx, order, SYSTEM_ACTOR, [
+        { kind: 'status_changed', detail: { from: row.prev_status ?? 'new', to: row.status } },
+      ]))
+    }
+    return { [column]: row[column], status: row.status, events } as Record<C, string> & { status: string; events: OrderEvent[] }
+  })
+}
+
+type ProofWriteRow = { status: string; prev_status: string | null; merchant_id: string; user_id: string | null }
+
+/**
+ * The customer's upload. The actor is the order's own `user_id`: the customer door has no auth,
+ * and the order's owner is the only person that route lets upload for it. A guest is a customer
+ * with no id.
+ */
+export function setOrderPaymentProof(orderId: string, path: string) {
+  return recordProof(orderId, 'payment_proof', path, 'payment_proof_uploaded', row => ({ kind: 'customer', id: row.user_id }))
+}
+
+/** The shop's own copy — filed when the customer sent the slip over WhatsApp. The actor is the merchant who filed it. */
+export function setOrderMerchantPaymentProof(orderId: string, path: string, merchantUserId: string) {
+  return recordProof(orderId, 'payment_proof_merchant', path, 'merchant_payment_proof_uploaded', () => ({ kind: 'merchant', id: merchantUserId }))
 }
 
 /**
- * The merchant's own copy of the receipt (20260828120000), which the shop files when the
- * customer sent the slip over WhatsApp instead of uploading it. Same status rule as the
- * customer's upload above, and for the same reason: a receipt landing on the order IS the
- * payment gate clearing, whichever side put it there. The CASE guard keeps every other status
- * exactly as the merchant left it.
+ * The merchant's PATCH of an order — status, note, courier, awb — as ONE transaction with the
+ * order log and the voucher void (ADR 0025). Reads the row under lock, writes the patch, records
+ * one event per field that actually moved, and voids or restores the redemption when the status
+ * crossed `cancelled` (ADR 0023) — logging that as the SYSTEM'S doing, since the merchant chose
+ * a status and not a voucher outcome. An empty patch is refused by the caller; a patch of
+ * identical values commits, changes nothing and records nothing.
  *
- * A separate column, so filing this can never overwrite what the customer themselves attached.
+ * A completed order's status is FINAL (ADR 0024), and that is judged HERE, on the row this
+ * transaction holds locked — not on the row the route loaded a moment earlier, which another
+ * device may have completed since. Only a status that DIFFERS is refused: a retried patch must
+ * stay a no-op rather than become an error. `{ refused }` is returned, not thrown, so the
+ * transaction ends having written nothing and the route answers 409.
+ *
+ * `null` when there is no such order. Tenancy is the caller's — `requireOwnsChild` proved the
+ * id — and `patch` must already be through `pickOrderFields`: this spreads its keys into the
+ * statement.
  */
-export async function setOrderMerchantPaymentProof(
+/** Why a merchant patch was not applied. Each is a wire code the drawer has words for. */
+export type PatchRefusal = 'order_completed' | 'fulfil_date_unavailable'
+
+export async function patchOrder(
   orderId: string,
-  path: string,
-): Promise<{ payment_proof_merchant: string; status: string } | null> {
-  const rows = await sql<{ payment_proof_merchant: string; status: string }[]>`
-    update orders
-    set payment_proof_merchant = ${path},
-        status = case when status = 'pending_payment' then 'new' else status end
-    where id = ${orderId}
-    returning payment_proof_merchant, status
-  `
-  return rows[0] ?? null
+  patch: OrderPatch,
+  merchantUserId: string,
+): Promise<{ events: OrderEvent[] } | { refused: PatchRefusal } | null> {
+  return withTransaction(async (tx) => {
+    // The shop's clock and its Fulfilment settings ride along with the row: a date is judged by
+    // the rule intake applies, against the SHOP's today, and reading both under the lock is what
+    // makes the judgement match the row it is about. `fulfil_date::text` because the driver would
+    // otherwise hand a `date` column back as a JS Date, and the event's `from` must be the same
+    // `YYYY-MM-DD` string the `to` is.
+    const [before] = await tx<(OrderPatchBefore & { merchant_id: string; voucher_code: string | null; timezone: string | null; config: unknown })[]>`
+      select o.status, o.note, o.courier, o.awb, o.fulfil_date::text, o.merchant_id, o.voucher_code, m.timezone, m.config
+      from orders o join merchants m on m.id = o.merchant_id
+      where o.id = ${orderId} for update of o
+    `
+    if (!before) return null
+    const completed = (before.status ?? 'new') === 'completed'
+    if (patch.status !== undefined && completed && patch.status !== 'completed') {
+      return { refused: 'order_completed' as const }
+    }
+    if (patch.fulfil_date !== undefined) {
+      // A completed order's date is as final as its status (ADR 0024): the goods have been
+      // handed over, and the day they were handed over on is not the merchant's to rewrite.
+      // Only a date that DIFFERS is refused, for the same reason the status rule reads that way.
+      if (completed && patch.fulfil_date !== (before.fulfil_date ?? null)) {
+        return { refused: 'order_completed' as const }
+      }
+      // The CUSTOMER's rule, on purpose: the shop's lead time, window, closed weekdays and
+      // ticked dates are what the merchant told the platform they can serve, and the drawer must
+      // not be a door around their own settings — a merchant who closes Mondays and then moves an
+      // order to a Monday has either changed their mind (the Fulfilment tab is where that goes)
+      // or mis-clicked. Same rule, same refusal code, as a stray POST to intake.
+      const open = isDateSelectable(patch.fulfil_date, fulfilmentConfig(before.config), before.timezone ?? DEFAULT_TIMEZONE, new Date())
+      if (!open) return { refused: 'fulfil_date_unavailable' as const }
+    }
+
+    await tx`update orders set ${tx(patch as Record<string, string | null>)} where id = ${orderId}`
+
+    const order = { id: orderId, merchantId: before.merchant_id }
+    const events = await recordOrderEvents(tx, order, { kind: 'merchant', id: merchantUserId }, orderPatchEvents(before, patch))
+
+    if (patch.status !== undefined) {
+      const cancelled = patch.status === 'cancelled'
+      const moved = await syncOrderRedemptionVoid(tx, orderId, cancelled)
+      if (moved > 0) {
+        events.push(...await recordOrderEvents(tx, order, SYSTEM_ACTOR, [
+          { kind: cancelled ? 'voucher_released' : 'voucher_restored', detail: { code: before.voucher_code } },
+        ]))
+      }
+    }
+    return { events }
+  })
 }
 
 /**

@@ -88,7 +88,7 @@ export default function CustomDatesCalendar({ value, onChange, first, last, t, l
                   onClick={() => onChange(value.filter(d => d !== iso))}
                   aria-label={t(`Remove ${label(iso)}`, `移除 ${label(iso)}`)}
                   className={
-                    'shrink-0 leading-none rounded-sm px-[6px] py-[2px] text-[15px] cursor-pointer ' +
+                    'shrink-0 leading-none rounded-sm px-[6px] py-[2px] pointer-coarse:px-2.5 pointer-coarse:py-2 text-[15px] cursor-pointer ' +
                     'text-muted-foreground hover:text-primary ' +
                     'focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2'
                   }

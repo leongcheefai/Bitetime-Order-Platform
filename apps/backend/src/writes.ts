@@ -311,6 +311,10 @@ export function pickProductFields(body: any): Record<string, unknown> {
 //     client-side already, but that is not a security boundary, so the handler re-validates.
 //   setOrderNote (store.ts:670) writes { note: trimmed || null }.
 //   setOrderTracking (store.ts:678) writes { courier: courier || null, awb: trimmed || null }.
+//   setOrderFulfilDate writes { fulfil_date: 'YYYY-MM-DD' } — a non-empty string only. There is
+//     no way to CLEAR it: a null date means "placed before #91", a fact and not a choice, and a
+//     merchant cannot turn a scheduled order back into one. Whether the day is one the shop's
+//     clock allows is patchOrder's call, judged under the row lock; only the shape is read here.
 // Nothing else is accepted — in particular `total`, `user_id`, `order_number`, `merchant_id`
 // stay out: the update goes through `admin` (service_role) with no RLS or trigger backstop,
 // so this allowlist plus the handler's forced `merchant_id === :id` check (Global Constraint 2)
@@ -321,5 +325,6 @@ export function pickOrderFields(body: any): Record<string, unknown> {
   if (body?.note !== undefined) out.note = String(body.note ?? '').trim() || null
   if (body?.courier !== undefined) out.courier = body.courier || null
   if (body?.awb !== undefined) out.awb = String(body.awb ?? '').trim() || null
+  if (typeof body?.fulfil_date === 'string' && body.fulfil_date.trim()) out.fulfil_date = body.fulfil_date.trim()
   return out
 }

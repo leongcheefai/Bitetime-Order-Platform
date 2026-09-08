@@ -15,6 +15,7 @@ function group(g: Partial<ShopCustomerGroup>): ShopCustomerGroup {
     latestName: 'Ali',
     latestWa: '0123456789',
     hasAccount: false,
+    latestEmail: null,
     ...g,
   }
 }
@@ -120,6 +121,27 @@ describe('shopCustomers — folding groups into customers', () => {
       group({ status: 'new', hasAccount: true }),
     ])
     expect(r.customers[0]?.hasAccount).toBe(true)
+  })
+
+  it('carries a member’s account email, from their most recent signed-in order', () => {
+    const r = page([
+      group({ status: 'completed', lastAt: '2026-07-01T00:00:00Z', hasAccount: true, latestEmail: 'old@example.com' }),
+      group({ status: 'new', lastAt: '2026-07-20T00:00:00Z', hasAccount: true, latestEmail: 'new@example.com' }),
+    ])
+    expect(r.customers[0]?.email).toBe('new@example.com')
+  })
+
+  it('keeps the email a guest-only bucket cannot supply, however recent that bucket is', () => {
+    const r = page([
+      group({ status: 'completed', lastAt: '2026-07-01T00:00:00Z', hasAccount: true, latestEmail: 'ali@example.com' }),
+      group({ status: 'new', lastAt: '2026-07-20T00:00:00Z', hasAccount: false, latestEmail: null }),
+    ])
+    expect(r.customers[0]?.email).toBe('ali@example.com')
+  })
+
+  it('gives a guest no email, not an empty string', () => {
+    const r = page([group({ hasAccount: false })])
+    expect(r.customers[0]?.email).toBeNull()
   })
 })
 
@@ -401,5 +423,78 @@ describe('shopCustomers — the shop’s tag vocabulary', () => {
     const r = shopCustomers([group({})], [rec('nobody00', ['catering'])], { now: NOW })
     expect(r.customers).toHaveLength(1)
     expect(r.shopTags).toEqual(['catering'])
+  })
+})
+
+describe('shopCustomers — segments', () => {
+  // Member = a shop customer with an account (CONTEXT.md → Shop customer → Member).
+  const ali = () => group({ phoneKey: '23456789', latestName: 'Ali', hasAccount: true })
+  const bob = () => group({ phoneKey: '87654321', latestName: 'Bob', hasAccount: false })
+
+  it('keeps only members when asked for the members segment', () => {
+    const r = shopCustomers([ali(), bob()], [], { now: NOW, segment: 'members' })
+    expect(r.customers.map(c => c.name)).toEqual(['Ali'])
+    expect(r.total).toBe(1)
+  })
+
+  it('keeps everyone for the all segment, and when no segment is asked for', () => {
+    expect(shopCustomers([ali(), bob()], [], { now: NOW, segment: 'all' }).total).toBe(2)
+    expect(shopCustomers([ali(), bob()], [], { now: NOW }).total).toBe(2)
+  })
+
+  it('counts a member’s guest orders as the member’s — membership is per customer, not per order', () => {
+    // One signed-in order and nine as a guest, under one phone: one member, ten orders.
+    const r = shopCustomers([
+      group({ status: 'completed', orders: 1, total: 10, hasAccount: true }),
+      group({ status: 'new', orders: 9, total: 90, hasAccount: false }),
+    ], [], { now: NOW, segment: 'members' })
+    expect(r.customers).toHaveLength(1)
+    expect(r.customers[0]?.bookedOrders).toBe(10)
+  })
+
+  it('still reports every unattributed order, which no segment can explain away', () => {
+    const r = shopCustomers([ali(), group({ phoneKey: null, orders: 3 })], [], { now: NOW, segment: 'members' })
+    expect(r.unattributedOrders).toBe(3)
+  })
+})
+
+describe('shopCustomers — the stat row', () => {
+  const ali = () => group({ phoneKey: '23456789', latestName: 'Ali', hasAccount: true, orders: 3, total: 30 })
+  const bob = () => group({ phoneKey: '87654321', latestName: 'Bob', hasAccount: false, orders: 2, total: 50 })
+
+  it('sums customers, booked orders and spend over the matched rows', () => {
+    const r = shopCustomers([ali(), bob()], [], { now: NOW })
+    expect(r.stats).toEqual({ customers: 2, bookedOrders: 5, spend: 80 })
+  })
+
+  it('follows the segment, so the members page and its rows share one scope', () => {
+    const r = shopCustomers([ali(), bob()], [], { now: NOW, segment: 'members' })
+    expect(r.stats).toEqual({ customers: 1, bookedOrders: 3, spend: 30 })
+  })
+
+  it('follows the search and the tag filter, exactly as `total` does', () => {
+    const records = [{ phoneKey: '87654321', note: null, tags: ['vip'] }]
+    expect(shopCustomers([ali(), bob()], records, { now: NOW, search: 'bob' }).stats).toEqual({ customers: 1, bookedOrders: 2, spend: 50 })
+    expect(shopCustomers([ali(), bob()], records, { now: NOW, tag: 'vip' }).stats).toEqual({ customers: 1, bookedOrders: 2, spend: 50 })
+  })
+
+  it('is taken before paging — a page is a slice of it', () => {
+    const r = shopCustomers([ali(), bob()], [], { now: NOW, page: 1, pageSize: 1 })
+    expect(r.customers).toHaveLength(1)
+    expect(r.stats.customers).toBe(2)
+  })
+
+  it('excludes cancelled orders, the booked rule the rows already follow', () => {
+    const r = shopCustomers([ali(), group({ phoneKey: '23456789', status: 'cancelled', orders: 4, total: 400 })], [], { now: NOW })
+    expect(r.stats).toEqual({ customers: 1, bookedOrders: 3, spend: 30 })
+  })
+
+  it('sums money in cents, so a spend never ends in floating dust', () => {
+    const r = shopCustomers([group({ phoneKey: '1', total: 0.1 }), group({ phoneKey: '2', total: 0.2 })], [], { now: NOW })
+    expect(r.stats.spend).toBe(0.3)
+  })
+
+  it('is all zeroes for an empty shop', () => {
+    expect(shopCustomers([], [], { now: NOW }).stats).toEqual({ customers: 0, bookedOrders: 0, spend: 0 })
   })
 })

@@ -28,8 +28,9 @@ export default function Pricing() {
 
   return (
     // Keep mm-land class — body:has(.mm-land) in index.css resets body padding/alignment
-    <div className="mm-land relative isolate flex flex-col items-stretch min-h-screen font-sans text-foreground bg-background">
+    <div className="mm-land relative isolate flex flex-col items-stretch min-h-dvh font-sans text-foreground bg-background">
       <MarketingNav />
+      <main className="flex-1 flex flex-col items-stretch">
 
       {/* ── Header ── */}
       <section className="max-w-[720px] mx-auto px-8 pt-16 pb-4 text-center max-[600px]:px-5 max-[600px]:pt-10">
@@ -39,7 +40,7 @@ export default function Pricing() {
             '固定价格。订单一分钱都不抽成。',
           )}
         </h1>
-        <p className="text-base leading-[1.75] text-ink-700 max-w-[580px] mx-auto mb-4">
+        <p className="text-base leading-[1.75] text-foreground-secondary max-w-[580px] mx-auto mb-4">
           {t(
             'You pay a subscription and nothing else — the month your shop does well is the month you keep the difference. Every shop starts with seven free days, and we ask for no card to begin.',
             '你只需支付订阅费，不再有其他费用——生意好的那个月，多出来的部分全归你。每家店铺都有七天免费期，开始时无需信用卡。',
@@ -65,7 +66,7 @@ export default function Pricing() {
               a single object a reader scans top to bottom — and on the page's own ground it had no
               edges to say where it started or stopped. bg-card is the surface the plan card above
               already uses, so the two read as the same kind of thing. */}
-          <div className="flex flex-col gap-8 mt-2 rounded-xl bg-card border-[0.5px] border-border p-8 shadow-[0_6px_24px_rgba(122,16,40,0.06)] max-[600px]:p-5 max-[600px]:gap-7">
+          <div className="flex flex-col gap-8 mt-2 rounded-xl bg-card border-[0.5px] border-border p-8 shadow-elev-3 max-[600px]:p-5 max-[600px]:gap-7">
             {INCLUDED_GROUPS.map(group => (
               <div key={group.id}>
                 <h3 className="font-sans text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground mb-3">
@@ -85,7 +86,7 @@ export default function Pricing() {
                       <span aria-hidden="true" className="text-primary font-semibold shrink-0">✓</span>
                       <span className="text-foreground">{t(row.label.en, row.label.zh)}</span>
                       {row.detail && (
-                        <span className="ml-auto pl-4 text-right text-ink-700">
+                        <span className="ml-auto pl-4 text-right text-foreground-secondary">
                           {t(row.detail.en, row.detail.zh)}
                         </span>
                       )}
@@ -107,7 +108,7 @@ export default function Pricing() {
           <h2 className={sectionTitle}>
             {t('How billing works', '扣款方式')}
           </h2>
-          <div className="flex flex-col gap-5 text-[15px] leading-[1.75] text-ink-700">
+          <div className="flex flex-col gap-5 text-[15px] leading-[1.75] text-foreground-secondary">
             <p className="m-0">
               {t(
                 'Every shop starts with seven free days and we ask for no card. The clock starts when you sign up, and your shop is open from that moment. We remind you before it ends. If you decide not to continue, it stops on its own and you are never charged.',
@@ -139,7 +140,7 @@ export default function Pricing() {
           <h2 className={sectionTitle}>
             {t('What we do not charge for', '我们不收费的部分')}
           </h2>
-          <div className="flex flex-col gap-5 text-[15px] leading-[1.75] text-ink-700">
+          <div className="flex flex-col gap-5 text-[15px] leading-[1.75] text-foreground-secondary">
             <p className="m-0">
               {t(
                 'No commission, on any order, ever. A marketplace takes a percentage of every sale for as long as you use it, which means the better your shop does the more it costs you. Your subscription here is the same number whether you take four orders this month or four hundred.',
@@ -163,7 +164,7 @@ export default function Pricing() {
       </section>
 
       {/* ── Closing CTA ── */}
-      <section className="border-t border-border px-8 py-16 text-center bg-brand-100 max-[600px]:px-5 max-[600px]:py-10">
+      <section className="border-t border-border px-8 py-16 text-center bg-brand-wash max-[600px]:px-5 max-[600px]:py-10">
         <Reveal>
           <h2 className="font-heading italic text-[18px] text-foreground mb-6 max-w-[520px] mx-auto">
             {t(
@@ -184,6 +185,7 @@ export default function Pricing() {
         </Reveal>
       </section>
 
+      </main>
       <MarketingFooter />
     </div>
   )

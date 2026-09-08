@@ -25,6 +25,12 @@ interface Props {
   onChange: (iso: string) => void
   /** The shop's timezone. Decides which day is "today", and so which days are past. */
   tz?: string | null
+  /**
+   * Which further days render DISABLED, by their `YYYY-MM-DD`, on top of the past. The order
+   * drawer passes the shop's own Fulfilment settings through it, so the picker offers exactly
+   * the days the save would accept.
+   */
+  isDisabled?: (iso: string) => boolean
   t: (en: string, zh: string) => string
   lang: 'en' | 'zh'
   /** What the trigger says with no date set. */
@@ -46,7 +52,7 @@ interface Props {
  * day assumes the calendar is broken. It is the shop's today and not the browser's, so a merchant
  * abroad sees the same floor their shop would.
  */
-export default function DateField({ value, onChange, tz, t, lang, placeholder, clearable, id }: Props) {
+export default function DateField({ value, onChange, tz, isDisabled, t, lang, placeholder, clearable, id }: Props) {
   const [open, setOpen] = useState(false)
   const today = toDate(todayInZone(tz ?? DEFAULT_TIMEZONE, new Date()))
   // A stored date in the PAST still renders — an existing promo whose end has gone by must show
@@ -61,7 +67,7 @@ export default function DateField({ value, onChange, tz, t, lang, placeholder, c
             id={id}
             type="button"
             className={cn(
-              'w-full rounded-sm border-[0.5px] border-border bg-background px-3 py-2 text-left text-[13px] transition-colors hover:border-primary',
+              'w-full rounded-md border-[0.5px] border-border bg-background px-3 py-2 text-left text-[13px] transition-colors hover:border-primary',
               !value && 'text-muted-foreground',
             )}
           />
@@ -81,7 +87,7 @@ export default function DateField({ value, onChange, tz, t, lang, placeholder, c
           // `selected ?? today`, so reopening a set field lands on the month it is in rather than
           // on this one — otherwise editing next year's date starts with a year of scrolling.
           defaultMonth={selected ?? today}
-          disabled={{ before: today }}
+          disabled={isDisabled ? [{ before: today }, (d: Date) => isDisabled(toIso(d))] : { before: today }}
           // A month and year dropdown, not twelve presses of an arrow: the dates these fields
           // hold are months out, and three years is past anything a shop would set.
           captionLayout="dropdown"
@@ -91,7 +97,7 @@ export default function DateField({ value, onChange, tz, t, lang, placeholder, c
         {clearable && value && (
           <button
             type="button"
-            className="mt-1 w-full rounded-sm px-2 py-1.5 text-[12px] text-muted-foreground transition-colors hover:text-primary"
+            className="mt-1 w-full rounded-lg px-2 py-1.5 text-[12px] text-muted-foreground transition-colors hover:text-primary"
             onClick={() => { onChange(''); setOpen(false) }}
           >
             {t('Clear date', '清除日期')}

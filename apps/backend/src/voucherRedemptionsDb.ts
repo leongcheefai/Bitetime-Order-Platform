@@ -9,6 +9,7 @@
 // `db.ts` is RLS-exempt. Neither function is a tenancy boundary: both take voucher ids the caller
 // has already been proved to own (`requireMerchantOwns`) or a single id already filtered by
 // `merchant_id` in the query that produced it.
+import type postgres from 'postgres'
 import { sql } from './db.js'
 
 /**
@@ -48,17 +49,19 @@ export async function myRedemptionCount(voucherId: string, customerKey: string):
 }
 
 /**
- * Hold one order's redemptions in step with its status: void while the order is `cancelled`,
- * live otherwise.
+ * Voids or restores the redemption(s) an order spent, driven off what the order's status now IS,
+ * never what it changed from — so the statement is idempotent and a void that failed is repaired
+ * by the next patch of the same order rather than lost.
  *
- * STATE-DRIVEN, not transition-driven, and that is the whole design. The caller passes what the
- * order's status now IS, never what it changed from — so the statement is idempotent, needs no
- * read of the previous status, and a void that failed is repaired by the next patch of the same
- * order rather than lost. It is also why this is safe to run outside the order patch's own write:
- * the two are not atomic, and the failure direction is the old behaviour (the use stays spent).
+ * Runs on the ORDER PATCH'S OWN TRANSACTION (ADR 0025). It used to trail the patch as a
+ * best-effort second write, accepted because the failure direction was the old behaviour (the
+ * use stays spent); the order log needed the patch to be a transaction anyway, so this joined it.
  *
- * `coalesce` keeps the FIRST void's timestamp across repeats — the record of when a slot was
- * released must not move because a merchant pressed Cancel twice.
+ * Returns how many redemptions actually MOVED — only a row that was live is voided, only a
+ * voided row is restored — which is what lets the caller log "voucher released" exactly once,
+ * and never for an order that spent no voucher or a Cancel pressed twice. The `where` on
+ * `voided_at` is also what keeps the FIRST void's timestamp across repeats: the record of when
+ * a slot was released must not move because a merchant pressed Cancel twice.
  *
  * The un-void is unconditional: no cap is re-checked. A merchant correcting their own mis-click
  * must not be blocked because another customer took the freed slot meanwhile, so a restore can
@@ -68,12 +71,19 @@ export async function myRedemptionCount(voucherId: string, customerKey: string):
  * `db.ts` is RLS-exempt, and this takes no merchant id: the order id has already been proved to
  * belong to the caller's shop by `requireOwnsChild`. Do not call it with an id from a body.
  */
-export async function syncOrderRedemptionVoid(orderId: string, cancelled: boolean): Promise<void> {
-  await sql`
+export async function syncOrderRedemptionVoid(
+  tx: postgres.TransactionSql,
+  orderId: string,
+  cancelled: boolean,
+): Promise<number> {
+  const rows = await tx<{ id: string }[]>`
     update voucher_redemptions
-    set voided_at = ${cancelled ? sql`coalesce(voided_at, now())` : sql`null`}
+    set voided_at = ${cancelled ? tx`now()` : tx`null`}
     where order_id = ${orderId}
+      and ${cancelled ? tx`voided_at is null` : tx`voided_at is not null`}
+    returning id
   `
+  return rows.length
 }
 
 /** One line of a voucher's history, as the merchant may see it. */

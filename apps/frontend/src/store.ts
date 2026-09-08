@@ -1,13 +1,14 @@
 import type { User } from '@supabase/auth-js';
 import { voucherFromRow, QUOTE_REFUSALS, validateFeedbackImages } from '@bitetime/shared';
-import type { FeedbackDraft, FeedbackStatus, Granularity, MerchantStats, OrderRefusal, PendingShop, QuoteRefusal } from '@bitetime/shared';
+import type { FeedbackDraft, FeedbackStatus, Granularity, MerchantStats, OrderEvent, OrderRefusal, PendingShop, QuoteRefusal } from '@bitetime/shared';
 import { revenueQuery, type RevenueSelection } from './merchant/revenueRange';
 import { auth, storage } from './supabase';
 import { RESERVED_SLUGS } from './slug';
 import { SignupError, signupErrorCode } from './signupError'
-import type { AddressParts, AdminRelease, EarnedReward, FeedbackItem, Order, PublicRelease, ReferredShop, ReleaseDetail, ShopCustomer, ShopCustomerPage, ShopCustomerSort, TrialFeedbackAdminItem, TrialFeedbackOwn, Voucher, VoucherRedemption } from './types';
+import type { AddressParts, AdminRelease, EarnedReward, FeedbackItem, Order, PublicRelease, ReferredShop, ReleaseDetail, ShopCustomer, ShopCustomerPage, ShopCustomerSegment, ShopCustomerSort, TrialFeedbackAdminItem, TrialFeedbackOwn, Voucher, VoucherRedemption } from './types';
 import type { SavedDetails } from './savedDetails';
 import { resetRedirectUrl } from './resetPassword';
+import { downscaleImage } from './imageResize';
 import { API_URL, apiGet, apiGetFile, apiSend, apiSendFile, apiSendForFile, apiSendForm, mapOk, toVoid } from './api'
 import type { Result } from './api'
 import type { CartLine } from '@bitetime/shared'
@@ -1018,6 +1019,15 @@ export async function setOrderTracking(orderId: string, courier: string | null, 
 }
 
 /**
+ * Move the day an order is for. `fulfilDate` is `YYYY-MM-DD` and never empty — a date cannot be
+ * cleared, only moved. The backend judges it by the shop's own Fulfilment settings, the same
+ * `isDateSelectable` intake applies, and answers `fulfil_date_unavailable` or `order_completed`.
+ */
+export async function setOrderFulfilDate(orderId: string, fulfilDate: string, merchantId: string): Promise<Result<any>> {
+  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', { fulfil_date: fulfilDate }, { auth: true })
+}
+
+/**
  * The shop's customers (#143), aggregated by the BACKEND.
  *
  * This used to fetch every order and group them here, on the raw `customer_wa` string. That was
@@ -1029,11 +1039,16 @@ export async function setOrderTracking(orderId: string, courier: string | null, 
  */
 export async function fetchShopCustomers(
   merchantId: string,
-  opts: { sort?: ShopCustomerSort; tag?: string; search?: string; page?: number; pageSize?: number } = {},
+  opts: {
+    sort?: ShopCustomerSort; segment?: ShopCustomerSegment; tag?: string; search?: string; page?: number; pageSize?: number
+  } = {},
 ): Promise<Result<ShopCustomerPage>> {
-  if (!merchantId) return { ok: true, data: { customers: [], shopTags: [], total: 0, unattributedOrders: 0 } }
+  if (!merchantId) {
+    return { ok: true, data: { customers: [], shopTags: [], stats: { customers: 0, bookedOrders: 0, spend: 0 }, total: 0, unattributedOrders: 0 } }
+  }
   const q = new URLSearchParams()
   if (opts.sort) q.set('sort', opts.sort)
+  if (opts.segment) q.set('segment', opts.segment)
   if (opts.tag) q.set('tag', opts.tag)
   if (opts.search?.trim()) q.set('search', opts.search.trim())
   if (opts.page) q.set('page', String(opts.page))
@@ -1195,13 +1210,18 @@ export async function uploadProductImages(
   files: File[],
 ): Promise<string[]> {
   const paths: string[] = []
-  for (const file of files) {
-    if (!PRODUCT_IMAGE_TYPES.includes(file.type)) {
-      throw new Error(`Unsupported image type: ${file.name}`)
+  for (const original of files) {
+    if (!PRODUCT_IMAGE_TYPES.includes(original.type)) {
+      throw new Error(`Unsupported image type: ${original.name}`)
     }
-    if (file.size > MAX_PRODUCT_IMAGE_BYTES) {
-      throw new Error(`Image too large (max 5MB): ${file.name}`)
+    if (original.size > MAX_PRODUCT_IMAGE_BYTES) {
+      throw new Error(`Image too large (max 5MB): ${original.name}`)
     }
+    // Bounded to 1600px on the long edge BEFORE it is stored (imageResize.ts): the bucket serves
+    // originals, and a 4MB phone photo behind a 56px thumbnail was the storefront's largest
+    // download. Validated on the original, uploaded as the smaller file; on any failure the
+    // original goes up as before.
+    const file = await downscaleImage(original)
     const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const path = `${merchantId}/${productId}/${crypto.randomUUID()}-${safe}`
     const { error } = await storage
@@ -1289,13 +1309,21 @@ export async function fetchPaymentProof(merchantId: string, orderId: string): Pr
   return mapOk(r, d => d.blob)
 }
 
+/** The merchant twin also returns the order events it recorded (#268), so the sheet can append
+ *  them to the log it is showing without a second request. */
+export type MerchantProofSaved = { payment_proof_merchant: string; status: string; events: OrderEvent[] }
+
+/** The order log (#268, CONTEXT.md → Order log), oldest first. Merchant dashboard only. */
+export async function fetchOrderEvents(merchantId: string, orderId: string): Promise<Result<OrderEvent[]>> {
+  const r = await apiGet<{ events: OrderEvent[] }>(`/api/merchants/${merchantId}/orders/${orderId}/events`, { auth: 'required' })
+  return mapOk(r, d => d.events)
+}
+
 /**
  * The SHOP's own copy of the receipt, filed from the order detail sheet when the customer sent
  * the slip over WhatsApp instead of uploading it. A separate slot from the customer's, so filing
  * one never replaces the other. `auth: 'required'` — the route is merchant-owned.
  */
-export type MerchantProofSaved = { payment_proof_merchant: string; status: string }
-
 export async function uploadMerchantPaymentProof(
   merchantId: string,
   orderId: string,

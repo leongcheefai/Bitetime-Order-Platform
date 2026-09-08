@@ -85,6 +85,9 @@
   --color-border-strong: var(--ink-300);
   --color-text:          var(--ink-900);
   --color-text-muted:    var(--ink-600);
+  /* The third text weight, between body and muted: marketing prose and the auth screens' running
+     copy. It had no name and sat at 30 call sites as the raw primitive `text-ink-700`. */
+  --color-text-secondary: var(--ink-700);
   --color-text-subtle:   var(--ink-400);
   --color-accent:        var(--brand-500);
   --color-accent-hover:  var(--brand-600);
@@ -93,6 +96,10 @@
      letters can be invisible as letters itself. Oxblood needs no darkening, so at platform values
      the two are the same colour and this token changes nothing. */
   --color-accent-text:   var(--color-accent);
+  /* The accent at low strength as a SURFACE — selected rows, chip backgrounds, the hover wash.
+     A semantic name because sixty call sites reached for `bg-brand-100` directly, which is the
+     point at which DESIGN.md says a primitive has become a role. BrandTheme restates it. */
+  --color-brand-wash:    var(--brand-100);
   /* Disabled. A real pair, not opacity: fading an oxblood fill to 50% over the cream canvas
      composites to #B67D84, a mauve that is in no palette and reads as a third brand colour
      rather than as "inert". Grey says inert. 4.70:1, so the label stays readable. */
@@ -183,9 +190,11 @@
   --color-border-strong: var(--ink-700);
   --color-text:          var(--ink-50);
   --color-text-muted:    var(--ink-400);
+  --color-text-secondary: var(--ink-300);
   --color-text-subtle:   var(--ink-500);
   --color-accent:        var(--brand-400);
   --color-accent-hover:  var(--brand-500);
   --color-accent-text:   var(--color-accent);
+  --color-brand-wash:    var(--brand-700);
   --color-focus-ring:    rgba(212, 112, 138, 0.50);
 }

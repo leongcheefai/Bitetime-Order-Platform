@@ -62,7 +62,7 @@ export default function InvoicePage() {
   }
 
   return (
-    <div className="form-wrap pt-12 pb-24">
+    <div role="main" className="form-wrap pt-12 pb-24">
       <h1 className="font-heading text-[22px] font-medium text-primary mb-1">
         {t('Get your invoice', '获取账单')}
       </h1>
@@ -77,7 +77,7 @@ export default function InvoicePage() {
           every attempt with the same sentence as a wrong phone. The link always carries it; a
           hand-typed URL may not. */}
       {!shop ? (
-        <p role="alert" className="text-[13px] text-danger bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] leading-[1.5]">
+        <p role="alert" className="text-[13px] text-danger-fg bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] leading-[1.5]">
           {t(
             'Open this page from the shop you ordered from — its link carries the shop name.',
             '请从你下单的店铺打开此页面——店铺链接中包含店名。',
@@ -86,7 +86,7 @@ export default function InvoicePage() {
       ) : (
         <>
           {error && (
-            <div role="alert" className="text-[13px] text-danger bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+            <div role="alert" className="text-[13px] text-danger-fg bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
               {error}
             </div>
           )}

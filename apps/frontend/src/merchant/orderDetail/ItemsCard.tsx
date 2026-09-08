@@ -31,7 +31,7 @@ export default function ItemsCard({ items, currency }: { items: any[]; currency?
               <ItemSelections item={it} />
               {/* `it.promo` missing (rows written before I-2) reads as false, not a crash. */}
               {it.promo && (
-                <span className="ml-1.5 px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium align-middle">
+                <span className="ml-1.5 px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium align-middle">
                   {t('Promo', '优惠')}
                 </span>
               )}

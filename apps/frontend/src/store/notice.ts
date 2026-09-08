@@ -57,16 +57,16 @@ export interface NoticeCtx {
 /** What a voucher refusal says. Its own function because two strips render the same codes. */
 export function voucherErrorText(code: VoucherErrorCode | 'invalid', t: Translate): string {
   switch (code) {
-    case 'invalid': return t('❌ Invalid voucher code.', '❌ 无效的优惠码。')
-    case 'fully_used': return t('❌ This voucher has been fully redeemed.', '❌ 此优惠券已用完。')
+    case 'invalid': return t('Invalid voucher code.', '无效的优惠码。')
+    case 'fully_used': return t('This voucher has been fully redeemed.', '此优惠券已用完。')
     // Not "you have already used this": a merchant may allow several redemptions each, so the
     // customer being turned away here may be on their fourth of three.
-    case 'customer_limit_reached': return t('❌ You have used this voucher as many times as allowed.', '❌ 您使用此优惠券的次数已达上限。')
-    case 'expired': return t('❌ This voucher has expired.', '❌ 此优惠券已过期。')
+    case 'customer_limit_reached': return t('You have used this voucher as many times as allowed.', '您使用此优惠券的次数已达上限。')
+    case 'expired': return t('This voucher has expired.', '此优惠券已过期。')
     // The FALLBACK wording only. A basket under the minimum keeps the voucher applied and gets
     // `voucher_shortfall` instead, which can name the amount still needed; this is what a caller
     // with no figure to hand says.
-    case 'min_order': return t('❌ Your order is below this voucher\u2019s minimum.', '❌ 您的订单未达到此优惠券的最低消费。')
+    case 'min_order': return t('Your order is below this voucher\u2019s minimum.', '您的订单未达到此优惠券的最低消费。')
     default: return ''
   }
 }
@@ -108,7 +108,7 @@ export function noticeText(notice: Notice, ctx: NoticeCtx): string {
       )
 
     case 'voucher_gone':
-      return t('❌ That voucher is no longer available.', '❌ 此优惠券已失效。')
+      return t('That voucher is no longer available.', '此优惠券已失效。')
 
     case 'voucher_shortfall': {
       const gap = formatMoney(notice.shortfall, ctx.currency)

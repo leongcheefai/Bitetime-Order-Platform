@@ -160,7 +160,7 @@ Every pair named here is asserted by `apps/frontend/src/tokens.test.ts`, which r
 - **Brand 500** (`#7A1028`): oxblood. The brand voice — primary buttons, headings, active nav, focus rings. Carries identity on every platform screen, and is the default a shop inherits until its merchant picks another (ADR 0017). 10.41:1 on the page background.
 - **Brand 600** (`#550A1A`): hover/pressed on oxblood fills only. Never a resting fill.
 - **Brand 700** (`#3F0713`): text on a brand tint (chips, active rows).
-- **Brand 100 / 50** (`#F4E7E6` / `#FCF1EF`): the accent at low strength — selected-row wash, chip backgrounds.
+- **Brand 100 / 50** (`#F4E7E6` / `#FCF1EF`): the accent at low strength — selected-row wash, chip backgrounds. Brand 100 as a **surface** has a semantic name, `--color-brand-wash` (`bg-brand-wash`), because it is a role, not a one-off: sixty call sites reached for the primitive before it was named. `BrandTheme` restates it for a shop's own colour.
 - **Brand 400** (`#D4708A`): a light rose, used **only** as the dark-theme accent. It exists because `-500` is far too dark to read on `#09090B`.
 
 ### Secondary
@@ -176,6 +176,7 @@ Every pair named here is asserted by `apps/frontend/src/tokens.test.ts`, which r
 - **Ink 200** (`#E4E4E7`): the default `0.5px` border. The system's edge.
 - **Ink 300** (`#D4D4D8`): a stronger border where one rule must read above another.
 - **Ink 900** (`#18181B`): primary text. 14.87:1 on cream.
+- **Ink 700** (`#3F3F46`): the third text weight, between body and muted — marketing prose, the auth screens' running copy. `--color-text-secondary` (`text-foreground-secondary`). 10.6:1 on cream.
 - **Ink 600** (`#636369`): secondary text, field labels, captions, table meta. 5.01:1 on cream, 5.97:1 on white. **This is the muted TEXT token.**
 - **Ink 500** (`#71717A`): borders and icons that need more weight than Ink 200. **Not text** — it reaches only 4.06:1 on cream and fails AA there, even though it passes on white.
 - **Ink 400** (`#A1A1AA`): borders and decorative icons **only** — 2.15:1 on cream, a straight AA failure as text.
@@ -202,6 +203,8 @@ Six order statuses, four colour families. `new` and `preparing` share the info h
 Since ADR 0017 the voice is not always oxblood. A merchant picks their shop's colour, and `brandTheme.ts` derives the whole `--brand-*` ramp from it for that shop's storefront and dashboard. Oxblood stays the platform's voice — marketing, `/admin`, the auth screens — and the default for a shop that never chose. The rule itself is unchanged: still exactly one accent on any page. Derived palettes are contrast-gated by `brandTheme.test.ts` rather than `tokens.test.ts`, because they do not exist until a merchant types one.
 
 **The Subtle-Is-Not-Text Rule.** `--ink-400` (`#A1A1AA`) and `--ink-500` (`#71717A`) are border and icon colours. Neither clears AA as text on the cream canvas. All muted text goes on `--color-text-muted` (`--ink-600`). `tokens.test.ts` pins both below the text threshold on cream, so a future edit cannot quietly promote either.
+
+**The Danger-Is-Not-Text Rule.** `--danger-500` (`#EF4444`, `text-danger`) is a fill and a border. As 13px text it reaches 3.76:1 on white, 3.16:1 on cream and 3.08:1 on its own tint — and an audit on 2026-09-07 found it under fifteen error messages, the customer's checkout refusal among them. Every inline error is `text-danger-fg` (`#991B1B`, 8.31:1 on white), and `tokens.test.ts` pins the fill below the text floor so the promotion cannot recur.
 
 **The Warm-Canvas Rule.** The page is cream; everything raised off it is white or zinc. Do not paint a large surface cream to "warm it up" — the warmth is the canvas showing through, and a cream card on a cream page has no edge. Equally, do not swap the canvas for a zinc grey: that is the single change that turns this system into the generic dashboard it is trying not to be.
 
@@ -274,6 +277,9 @@ The rule is about **fills**, and that scope is deliberate. Form primitives whose
 
 Only filled variants take the fill. `ghost`, `link`, `outline` and `dashed` keep their transparent background and change only their label — a grey slab where a text link used to be reads as broken layout.
 
+### Switch
+`components/ui/switch.tsx`, on Base UI. 44×24 track, accent when on, hairline grey when off, white thumb on `--elev-1`. Extracted from two verbatim hand-rolled `role="switch"` buttons (product visibility, voucher active); there is no third way to draw a toggle.
+
 ### Chips (status)
 Pill (`9999px`), 3px×10px padding, no border at rest. Background + text from the four-tone set. As a *filter* control the chip gains a matching-colour border to read as selected.
 
@@ -304,6 +310,7 @@ The mono order number (`PREFIX-YYMMDD-XXXX`) is the brand's receipt stamp — th
 
 ### Don't:
 - **Don't** set any text in `--ink-400` (`#A1A1AA`, 2.15:1 on cream) or `--ink-500` (`#71717A`, 4.06:1 on cream). Both fail AA there. All muted text goes on `--color-text-muted`.
+- **Don't** write an error message in `text-danger`. That is the fill red, and it fails AA as text on every surface; inline errors are `text-danger-fg` (The Danger-Is-Not-Text Rule).
 - **Don't** replace the cream canvas with a grey, or paint cards cream (The Warm-Canvas Rule).
 - **Don't** introduce a second accent colour. The status set is for status; nothing else gets a hue.
 - **Don't** lower the 16px body floor for density (The 16px Body Floor).

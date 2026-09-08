@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { BUSINESS_NATURES, SHOP_DESCRIPTION_MAX } from '@bitetime/shared'
-import { pickMerchantConfig, pickProductFields } from '../../src/writes.js'
+import { pickMerchantConfig, pickOrderFields, pickProductFields } from '../../src/writes.js'
 
 // The shop being written. Only `payment_qr` is judged against it (a Storage path belongs to one
 // merchant's folder); every other field in this file is tenant-agnostic, so these cases pass the
@@ -348,5 +348,23 @@ describe('pickMerchantConfig — brand colour', () => {
   it('leaves the column alone when the body does not mention it', () => {
     expect(pickMerchantConfig({ timezone: 'Asia/Kuala_Lumpur' }, SHOP))
       .toEqual({ ok: true, patch: { timezone: 'Asia/Kuala_Lumpur' } })
+  })
+})
+
+// The merchant PATCH allowlist. `fulfil_date` joined it for the date edit; the SHAPE is all that
+// is judged here — whether the shop's clock allows the day is patchOrder's call, under the lock.
+describe('pickOrderFields — fulfil_date', () => {
+  it('passes a date string through trimmed', () => {
+    expect(pickOrderFields({ fulfil_date: ' 2026-07-25 ' })).toEqual({ fulfil_date: '2026-07-25' })
+  })
+
+  it('never clears the date — an order without a day is a legacy fact, not a choice', () => {
+    expect(pickOrderFields({ fulfil_date: null })).toEqual({})
+    expect(pickOrderFields({ fulfil_date: '' })).toEqual({})
+    expect(pickOrderFields({ fulfil_date: 42 })).toEqual({})
+  })
+
+  it('still refuses every column that is not on the allowlist', () => {
+    expect(pickOrderFields({ total: 0, merchant_id: 'x', fulfil_date: '2026-07-25' })).toEqual({ fulfil_date: '2026-07-25' })
   })
 })

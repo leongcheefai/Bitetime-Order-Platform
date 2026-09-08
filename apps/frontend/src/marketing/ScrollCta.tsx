@@ -46,7 +46,7 @@ const PIXELS_CONFIGURED = hasAnyPixel(PIXEL_IDS)
 /**
  * Is the advertising-consent banner on screen right now?
  *
- * It is `fixed inset-x-0 bottom-0 z-50`, so a card in the same corner would sit under it. Asked
+ * It is `fixed inset-x-0 bottom-0 z-sticky`, so a card in the same corner would sit under it. Asked
  * through the SAME decision function usePixels asks, rather than a second copy of the rule — this
  * has to be the banner's real answer, including the routes (/for/<slug>) where it never appears.
  *
@@ -149,7 +149,7 @@ export default function ScrollCta() {
         <div
           role="complementary"
           aria-label={t('Start your shop', '开始建店')}
-          // z-40 keeps it under the consent banner (z-50) and under every dialog; the banner is
+          // z-notif-panel (50) keeps it under the consent banner (z-sticky, 90) and under every dialog; the banner is
           // suppressed above anyway, so the two can never share the corner.
           // The entry fade is the app's own `.page-enter` keyframe rather than a JS animation, for the
           // reason at the top of motion.tsx: the resting style is the visible one, so an animation
@@ -159,17 +159,17 @@ export default function ScrollCta() {
           // viewport, so 100% is the same measurement without the failure src/layout.test.ts exists to
           // stop — an in-app browser that lays the page out off screen resolves `100vw` as 0.
           className={cn(
-            'page-enter fixed z-40 bottom-4 right-4 w-[360px] max-w-[calc(100%-2rem)]',
+            'page-enter fixed z-notif-panel bottom-4 right-4 w-[360px] max-w-[calc(100%-2rem)]',
             'max-[600px]:left-4 max-[600px]:right-4 max-[600px]:w-auto',
             'rounded-lg border border-border bg-card p-5 pr-10',
-            'shadow-[0_8px_28px_rgba(0,0,0,0.10)]',
+            'shadow-elev-2',
           )}
         >
           <button
             type="button"
             onClick={close}
             aria-label={t('Close', '关闭')}
-            className="absolute top-2.5 right-2.5 flex h-7 w-7 items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground [transition:color_0.15s,background_0.15s] hover:bg-brand-100 hover:text-primary"
+            className="absolute top-2.5 right-2.5 flex h-7 w-7 pointer-coarse:h-10 pointer-coarse:w-10 items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground [transition:color_0.15s,background_0.15s] hover:bg-brand-wash hover:text-primary"
           >
             <X className="h-4 w-4" aria-hidden="true" />
           </button>

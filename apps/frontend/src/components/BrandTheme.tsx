@@ -19,7 +19,7 @@ import { brandTheme } from '../brandTheme'
  * Setting the bridge here would look right and do nothing. (Checked against the built CSS, not
  * inferred.)
  *
- * The ramp is here in the first place because `bg-brand-100` is the app's pale wash, with forty-odd
+ * The ramp is here in the first place because `bg-brand-wash` is the app's pale wash, with forty-odd
  * call sites, twelve of them on branded surfaces. A shop with a green accent and pink washes reads
  * as a half-finished theme.
  *
@@ -39,6 +39,7 @@ export default function BrandTheme({ color, children }: {
     '--color-accent-hover': t.accentHover,
     '--color-accent-text': t.accentText,
     '--color-focus-ring': t.ring,
+    '--color-brand-wash': t.tint100,
     // tokens.css builds this at :root as `0 0 0 2px var(--color-focus-ring)`, already substituted
     // by the time it inherits — so the whole box-shadow is rebuilt, not just its colour.
     '--focus-ring': `0 0 0 2px ${t.ring}`,
@@ -54,6 +55,8 @@ export default function BrandTheme({ color, children }: {
     '--primary': t.accent,
     '--primary-foreground': t.accentFg,
     '--ring': t.accent,
+    // The dashboard rail's focus ring reads `--ring`, which :root has likewise already resolved.
+    '--sidebar-ring': t.accent,
   } as CSSProperties
   return <div data-brand="" style={style}>{children}</div>
 }

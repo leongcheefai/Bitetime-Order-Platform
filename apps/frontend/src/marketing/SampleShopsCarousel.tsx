@@ -42,7 +42,7 @@ export default function SampleShopsCarousel({ shops }: { shops: CapturedSampleSh
     <Carousel opts={{ align: 'start' }} className="max-w-[900px] mx-auto">
       <CarouselContent>
         {shops.map((shop) => (
-          <CarouselItem key={shop.id} className="basis-1/3">
+          <CarouselItem key={shop.id} className="basis-[82%] sm:basis-1/2 md:basis-1/3">
             <Link
               to={`/s/${shop.slug}`}
               className="group block overflow-hidden rounded-2xl border-[0.5px] border-border bg-card shadow-elev-3 no-underline [transition:transform_0.15s,border-color_0.15s] hover:-translate-y-0.5 hover:border-primary"
@@ -50,6 +50,8 @@ export default function SampleShopsCarousel({ shops }: { shops: CapturedSampleSh
               <img
                 src={sampleShopScreenshotUrl(shop.screenshotPath)}
                 alt={shop.name}
+                loading="lazy"
+                decoding="async"
                 className="block w-full aspect-[3/4] object-cover object-top"
               />
               <div className="flex flex-col items-stretch gap-3 p-4">

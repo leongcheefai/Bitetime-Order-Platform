@@ -32,6 +32,12 @@ export interface ShopCustomerGroup {
   latestWa: string | null
   /** Whether any order in this bucket was placed by a signed-in customer. */
   hasAccount: boolean
+  /**
+   * The account email behind this bucket's most recent SIGNED-IN order — null when none was.
+   * The one field here read from outside `orders` (`auth.users`), and the one global-profile
+   * fact a shop is allowed to see: see ADR 0026.
+   */
+  latestEmail: string | null
 }
 
 /** What the merchant wrote down. Absent for most customers — the row is created on first write. */
@@ -54,12 +60,32 @@ export interface ShopCustomer {
   lastOrderAt: string
   daysSinceLastOrder: number
   hasAccount: boolean
+  /**
+   * A member's account email; null for a guest. The Members list shows it so a shop can reach
+   * the people who chose to hold an account with it (ADR 0026). Taken from the customer's most
+   * recent signed-in order, so an account change follows the same rule a name change does.
+   */
+  email: string | null
   note: string | null
   tags: string[]
 }
 
+/**
+ * The stat row above the list (#269): the matched rows, summed.
+ *
+ * Scoped EXACTLY like `total` — after the segment, search and tag filter, before paging — so the
+ * header and the rows beneath it can never disagree. Booked, like the rows: cancelled orders are
+ * already out of `bookedOrders` and `lifetimeSpend`, and this adds no second counting rule.
+ */
+export interface ShopCustomerStats {
+  customers: number
+  bookedOrders: number
+  spend: number
+}
+
 export interface ShopCustomerPage {
   customers: ShopCustomer[]
+  stats: ShopCustomerStats
   /**
    * Every tag this shop has written, once each — what the drawer offers back so the merchant
    * does not have to remember which spelling they used (#150).
@@ -98,6 +124,24 @@ export const isShopCustomerSort = (v: unknown): v is ShopCustomerSort =>
 /** The free sort. Every other ordering is the Pro capability. */
 export const DEFAULT_SHOP_CUSTOMER_SORT: ShopCustomerSort = 'recent'
 
+/**
+ * Which slice of the shop's customers the list shows (#269).
+ *
+ * `members` is the shop customers with an account — see CONTEXT.md → Shop customer → Member.
+ * An enum rather than a `members` boolean so a third slice later (guests, say) is one more word
+ * here and not a second flag whose combination with the first has to be given a meaning.
+ * The frontend carries a twin in `apps/frontend/src/types.ts`; this side is authoritative.
+ */
+export type ShopCustomerSegment = 'all' | 'members'
+
+export const SHOP_CUSTOMER_SEGMENTS: readonly ShopCustomerSegment[] = ['all', 'members']
+
+/** Refuse a segment we do not offer; do not reinterpret it. The same rule as `isShopCustomerSort`. */
+export const isShopCustomerSegment = (v: unknown): v is ShopCustomerSegment =>
+  typeof v === 'string' && (SHOP_CUSTOMER_SEGMENTS as readonly string[]).includes(v)
+
+export const DEFAULT_SHOP_CUSTOMER_SEGMENT: ShopCustomerSegment = 'all'
+
 export const MAX_NOTE_LENGTH = 2000
 export const MAX_TAGS = 20
 export const MAX_TAG_LENGTH = 40
@@ -132,6 +176,8 @@ export function pickShopCustomerFields(
 export interface ShopCustomerOptions {
   now: Date
   sort?: ShopCustomerSort
+  /** Which slice to show. Absent is everyone. */
+  segment?: ShopCustomerSegment
   /** Name text or phone digits. Blank matches everyone. */
   search?: string
   /** One merchant-defined tag. Absent matches everyone. */
@@ -156,6 +202,9 @@ interface Acc {
   name: string | null
   wa: string | null
   hasAccount: boolean
+  email: string | null
+  /** When the bucket `email` came from was last ordered in — a guest bucket never moves it. */
+  emailAt: string | null
 }
 
 export function shopCustomers(
@@ -186,6 +235,8 @@ export function shopCustomers(
       name: null,
       wa: null,
       hasAccount: false,
+      email: null,
+      emailAt: null,
     }
 
     // The booked rule, borrowed rather than restated. A bucket IS its status, so one call
@@ -207,6 +258,13 @@ export function shopCustomers(
     }
 
     acc.hasAccount ||= g.hasAccount
+    // The email rides its own recency, not the name's: the most recent bucket is often a guest
+    // one (a member who checked out signed out last week), and that bucket must not blank the
+    // email the signed-in bucket before it supplied.
+    if (g.latestEmail !== null && (acc.emailAt === null || g.lastAt >= acc.emailAt)) {
+      acc.email = g.latestEmail
+      acc.emailAt = g.lastAt
+    }
     byKey.set(key, acc)
   }
 
@@ -228,6 +286,7 @@ export function shopCustomers(
       lastOrderAt: a.lastAt,
       daysSinceLastOrder: Math.floor((nowMs - Date.parse(a.lastAt)) / MS_PER_DAY),
       hasAccount: a.hasAccount,
+      email: a.email,
       // Absent for most customers — the row is written on the merchant's first note or tag,
       // never on their first order. Blank, not undefined: the wire shape stays the same
       // whether or not anyone has written anything.
@@ -236,7 +295,9 @@ export function shopCustomers(
     }
   })
 
-  const matched = customers.filter(c => matchesTag(c, opts.tag) && matchesSearch(c, opts.search))
+  const matched = customers.filter(c =>
+    matchesSegment(c, opts.segment) && matchesTag(c, opts.tag) && matchesSearch(c, opts.search),
+  )
   matched.sort(comparator(opts.sort))
 
   return {
@@ -247,9 +308,21 @@ export function shopCustomers(
     // Folded from `records`, NOT from `customers`: the same reason as above, plus records is
     // already the whole shop's rows in memory, so the vocabulary costs no second query.
     shopTags: shopTags(records),
+    stats: statsOf(matched),
     total: matched.length,
     unattributedOrders,
   }
+}
+
+/** In cents again, for the same reason the fold is: forty spends of 0.10 must not sum to 3.9999. */
+function statsOf(matched: ShopCustomer[]): ShopCustomerStats {
+  let bookedOrders = 0
+  let spendCents = 0
+  for (const c of matched) {
+    bookedOrders += c.bookedOrders
+    spendCents += cents(c.lifetimeSpend)
+  }
+  return { customers: matched.length, bookedOrders, spend: money(spendCents) }
 }
 
 /**
@@ -273,6 +346,11 @@ function shopTags(records: ShopCustomerRecord[]): string[] {
   return [...new Set(records.flatMap(r => r.tags))].sort(
     (a, b) => a.toLowerCase().localeCompare(b.toLowerCase()) || (a < b ? -1 : a > b ? 1 : 0),
   )
+}
+
+/** A member is a shop customer with an account; `all` and an absent segment match everyone. */
+function matchesSegment(c: ShopCustomer, segment: ShopCustomerSegment | undefined): boolean {
+  return segment === 'members' ? c.hasAccount : true
 }
 
 const digitsOf = (s: string | null) => (s ?? '').replace(/\D/g, '')

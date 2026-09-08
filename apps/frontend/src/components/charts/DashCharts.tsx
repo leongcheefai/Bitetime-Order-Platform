@@ -3,13 +3,11 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts'
 import type { ReactNode } from 'react'
-import { cn } from '@/lib/utils'
 
 /* Recharts takes colours as props, not classes, so these cannot ride the token
    indirection the rest of the app uses — they are literals by necessity and must be
-   updated by hand whenever tokens.css moves. Every value here mirrors a token:
-   brand-500/-400/-200, then the four status tones. */
-const CHART_COLORS = ['#7A1028', '#D4708A', '#EBCDD3', '#2563EB', '#059669', '#F59E0B', '#EF4444']
+   updated by hand whenever tokens.css moves. The series palette is in ./chartColors. */
+import { CHART_COLORS } from './chartColors'
 const OXBLOOD = '#7A1028'   // --brand-500
 const ACCENT_2 = '#D4708A'  // --brand-400
 const AXIS = '#71717A'      // --ink-500
@@ -24,37 +22,11 @@ const tooltipStyle = {
   color: '#18181B',                   // --ink-900
 } as const
 
-// ── KPI stat card ──────────────────────────────────────────────────────────
-export function StatCard({ label, value, delta, icon }: {
-  label: string; value: string; delta?: { pct: number; dir: 'up' | 'down' | 'flat' }; icon?: ReactNode
-}) {
-  return (
-    <div className="rounded-xl border-[0.5px] border-border bg-card px-5 py-4">
-      <div className="mb-1 inline-flex items-center text-[10px] font-medium uppercase tracking-[0.09em] text-muted-foreground">{icon && <span className="mr-1.5 inline-flex text-ink-400" aria-hidden="true">{icon}</span>}{label}</div>
-      <div className="flex flex-wrap items-baseline gap-2">
-        <span className="font-heading text-[22px] font-medium leading-[1.2] text-primary">{value}</span>
-        {delta && delta.dir !== 'flat' && (
-          <span className={cn('whitespace-nowrap text-[11px] font-semibold', delta.dir === 'up' ? 'text-success-fg' : 'text-danger')}>
-            {delta.dir === 'up' ? '▲' : '▼'} {Math.abs(delta.pct)}%
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
+// ── KPI stat card — lives in ./StatCard so it can be imported without Recharts.
+export { StatCard } from './StatCard'
 
-// ── Panel wrapper ────────────────────────────────────────────────────────────
-export function ChartPanel({ title, legend, children }: { title: string; legend?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="rounded-xl border-[0.5px] border-border bg-card px-5 py-4">
-      <div className="mb-[0.85rem] flex items-center justify-between gap-2">
-        <h3 className="font-heading text-sm font-medium text-primary">{title}</h3>
-        {legend}
-      </div>
-      {children}
-    </div>
-  )
-}
+// ── ChartPanel and BreakdownList live in ./Panels (no Recharts) and are re-exported here.
+export { ChartPanel, BreakdownList } from './Panels'
 
 // ── Revenue + orders bar chart (dual axis) ───────────────────────────────────
 export function RevenueBarChart({ data, revenueLabel, ordersLabel }: {
@@ -113,20 +85,3 @@ export function DonutCard({ data }: { data: { name: string; value: number }[] })
   )
 }
 
-// ── Breakdown list (label + bar + value) ─────────────────────────────────────
-export function BreakdownList({ rows }: { rows: { label: string; value: string; pct: number }[] }) {
-  if (rows.length === 0) return <p className="text-[13px] text-muted-foreground italic">—</p>
-  return (
-    <ul className="m-0 flex list-none flex-col gap-[10px] p-0">
-      {rows.map((r, i) => (
-        <li key={r.label} className="flex items-center gap-[10px] text-xs">
-          <span className="flex-[0_0_32%] overflow-hidden text-ellipsis whitespace-nowrap text-foreground">{r.label}</span>
-          <span className="h-2 flex-1 overflow-hidden rounded-xs bg-muted">
-            <span className="block h-full min-w-[3px] rounded-xs" style={{ width: `${r.pct}%`, background: CHART_COLORS[i % CHART_COLORS.length] }} />
-          </span>
-          <span className="w-18 shrink-0 whitespace-nowrap text-right font-semibold text-muted-foreground">{r.value}</span>
-        </li>
-      ))}
-    </ul>
-  )
-}

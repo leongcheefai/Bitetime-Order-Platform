@@ -250,7 +250,7 @@ function ConfirmAction({
             HTML. aria-describedby keeps it accessible. */}
         <DialogContent aria-describedby={descId}>
           <DialogHeader>
-            <DialogTitle className={severe ? 'text-danger flex items-center gap-2' : undefined}>
+            <DialogTitle className={severe ? 'text-danger-fg flex items-center gap-2' : undefined}>
               {severe && <AlertTriangle size={17} strokeWidth={2.25} className="shrink-0" aria-hidden />}
               {title}
             </DialogTitle>
@@ -279,7 +279,7 @@ function ConfirmAction({
               // deleting a row, and the confirm must read as the most dangerous thing on screen —
               // heavier than "Never mind", never lighter. Scoped to this button; the shared
               // variant is untouched.
-              className={severe ? 'bg-danger text-white border-danger hover:bg-danger/90 hover:border-danger' : undefined}
+              className={severe ? 'bg-danger-fg text-white border-danger-fg hover:bg-danger-fg/90 hover:border-danger-fg' : undefined}
               onClick={confirm} disabled={busy}
             >
               {busy ? t('Working…', '处理中…') : confirmLabel}

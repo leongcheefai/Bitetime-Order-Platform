@@ -11,7 +11,9 @@ import type { DateRange } from 'react-day-picker'
 import { useSession } from '../SessionContext'
 import { fetchMerchantStats, downloadRevenueReport } from '../store'
 import { SkeletonText } from '../components/Loaders'
-import { StatCard, ChartPanel, RevenueBarChart, DonutCard, BreakdownList } from '../components/charts/DashCharts'
+import { StatCard } from '../components/charts/StatCard'
+import { ChartPanel, BreakdownList } from '../components/charts/Panels'
+import { RevenueBarChart, DonutCard } from '../components/charts/lazy'
 import {
   granularityFor, parseCustomRange, todayInZone, DEFAULT_TIMEZONE, MAX_CUSTOM_SPAN_DAYS, REVENUE_RANGES,
   type CustomRangeError, type Granularity, type MerchantStats, type RevenueRange,
@@ -33,7 +35,7 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        'rounded-pill border-[0.5px] px-2.5 py-0.5 text-[11px] font-semibold transition-colors',
+        'rounded-pill border-[0.5px] px-2.5 py-0.5 pointer-coarse:min-h-9 pointer-coarse:px-3 text-[11px] font-semibold transition-colors',
         active
           ? 'border-primary bg-primary text-primary-foreground'
           : 'border-border bg-transparent text-muted-foreground hover:text-primary',
@@ -83,7 +85,7 @@ function DownloadReport({ selection, granularity }: { selection: RevenueSelectio
             disabled={busy}
             onClick={download}
             className={cn(
-              'rounded-pill p-1.5',
+              'rounded-pill p-1.5 pointer-coarse:p-3',
               'hover:border-primary hover:bg-transparent hover:text-primary',
               'disabled:cursor-default disabled:hover:border-border disabled:hover:text-muted-foreground',
             )}
@@ -157,7 +159,7 @@ function CustomRangePill({
             type="button"
             aria-pressed={active}
             className={cn(
-              'rounded-pill border-[0.5px] px-2.5 py-0.5 text-[11px] font-semibold transition-colors',
+              'rounded-pill border-[0.5px] px-2.5 py-0.5 pointer-coarse:min-h-9 pointer-coarse:px-3 text-[11px] font-semibold transition-colors',
               active
                 ? 'border-primary bg-primary text-primary-foreground'
                 : 'border-border bg-transparent text-muted-foreground hover:text-primary',
@@ -186,7 +188,7 @@ function CustomRangePill({
             disabled={{ after: todayDate }}
             aria-label={t('Revenue range', '营收时间范围')}
           />
-          <span className={cn('px-1 text-[12px]', problem ? 'text-destructive' : 'text-muted-foreground')}>
+          <span className={cn('px-1 text-[12px]', problem ? 'text-danger-fg' : 'text-muted-foreground')}>
             {problem
               ? message[problem]
               : parsed.ok

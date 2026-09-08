@@ -101,7 +101,7 @@ export default function CheckoutGate({ onGuest }: { onGuest: () => void }) {
 export function GuestStrip({ onSignIn }: { onSignIn: () => void }) {
   const { t } = useSession()
   return (
-    <div className="flex items-center justify-between gap-3 bg-brand-100 border border-border rounded-md px-[13px] py-2.5 mb-3">
+    <div className="flex items-center justify-between gap-3 bg-brand-wash border border-border rounded-md px-[13px] py-2.5 mb-3">
       <span className="text-[13px] text-muted-foreground leading-[1.4]">
         {t('Ordering as a guest.', '正在以访客身份下单。')}
       </span>

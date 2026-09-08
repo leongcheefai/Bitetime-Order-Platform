@@ -12,7 +12,7 @@
 //     and they must be in the PRERENDERED html, because a crawler that runs no JavaScript is the
 //     entire reason that build step exists.
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { ChevronDown } from 'lucide-react'
 import {
@@ -34,7 +34,7 @@ const navLink =
 
 // Account dropdown menu-item (Link or button)
 const menuItem =
-  'block w-full box-border text-left py-[9px] px-3 border-0 rounded-sm bg-transparent text-muted-foreground text-[13px] font-sans font-medium no-underline cursor-pointer [transition:all_0.15s] hover:bg-brand-100 hover:text-primary'
+  'block w-full box-border text-left py-[9px] px-3 border-0 rounded-sm bg-transparent text-muted-foreground text-[13px] font-sans font-medium no-underline cursor-pointer [transition:all_0.15s] hover:bg-brand-wash hover:text-primary'
 
 const footerLink = 'hover:text-primary underline underline-offset-4'
 
@@ -42,7 +42,7 @@ const footerLink = 'hover:text-primary underline underline-offset-4'
 // number is never shown — the link reads "WhatsApp" and only the href carries it.
 const SUPPORT_WHATSAPP = '6588425267'
 
-const footerColumnHeading = 'text-[11px] font-medium uppercase tracking-[0.09em] text-ink-700 mb-3'
+const footerColumnHeading = 'text-[11px] font-medium uppercase tracking-[0.09em] text-foreground-secondary mb-3'
 const footerColumnLink = 'block py-1 text-muted-foreground no-underline [transition:color_0.15s] hover:text-primary'
 
 function FooterColumn({ heading, children }: { heading: string; children: ReactNode }) {
@@ -57,6 +57,14 @@ function FooterColumn({ heading, children }: { heading: string; children: ReactN
 export function MarketingNav() {
   const { t, account, role, loading, merchantUnknown } = useSession()
   const [menuOpen, setMenuOpen] = useState(false)
+  // Escape closes the account menu. The click-catcher below dismisses it for a mouse; a keyboard
+  // user had no way out of a hand-rolled `role="menu"` but to Tab past every item.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [menuOpen])
 
   // Where the signed-in user's portal lives, by role. Customers have no portal — with one
   // exception: someone who is signed in and owns NO shop is where merchant signup leaves you
@@ -148,6 +156,10 @@ export function MarketingNav() {
               aria-haspopup="menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen(o => !o)}
+              // Capped and truncated: a long address in a `whitespace-nowrap` pill pushed the
+              // whole nav row past a 360px viewport, where body's overflow clip hid the end.
+              className="max-w-[9rem] truncate sm:max-w-[14rem]"
+              title={account.email}
             >
               {account.email}
             </Button>
@@ -155,11 +167,11 @@ export function MarketingNav() {
               <>
                 {/* Transparent click-catcher overlay */}
                 <div
-                  className="fixed inset-0 z-[var(--z-dropdown)]"
+                  className="fixed inset-0 z-dropdown"
                   onClick={() => setMenuOpen(false)}
                 />
                 <div
-                  className="absolute top-[calc(100%+8px)] right-0 z-[var(--z-modal-popover)] min-w-[160px] bg-card border-[0.5px] border-border rounded-lg shadow-elev-2 overflow-hidden p-1"
+                  className="absolute top-[calc(100%+8px)] right-0 z-modal-popover min-w-[160px] bg-card border-[0.5px] border-border rounded-lg shadow-elev-2 overflow-hidden p-1"
                   role="menu"
                 >
                   {portal && (

@@ -101,7 +101,7 @@ export default function OrderHistory() {
   }
 
   return (
-    <div className="form-wrap pt-8 pb-24">
+    <div role="main" className="form-wrap pt-8 pb-24">
       <div className="flex items-start justify-between gap-4 mb-7 max-[480px]:flex-col max-[480px]:gap-2">
         <div>
           <h1 className="font-heading text-[26px] font-medium text-primary tracking-[0.3px]">{merchant.name}</h1>
@@ -118,7 +118,7 @@ export default function OrderHistory() {
       {/* Signed in: identity, and the only sign-out in the customer app — this is the one
           signed-in customer surface there is, so there is nowhere else sensible to put it. */}
       {account && (
-        <div className="flex items-center justify-between gap-3 bg-brand-100 border border-border rounded-md px-[13px] py-2.5 mb-6">
+        <div className="flex items-center justify-between gap-3 bg-brand-wash border border-border rounded-md px-[13px] py-2.5 mb-6">
           <span className="text-[13px] text-muted-foreground leading-[1.4] truncate">
             {t('Signed in as', '已登录：')} <strong className="text-primary font-medium">{account.email}</strong>
           </span>
@@ -151,7 +151,7 @@ export default function OrderHistory() {
       {/* A failed read must never wear the empty state's clothes: "you haven't ordered here yet"
           is a lie to a customer whose history simply didn't load, and the one they'd believe. */}
       {failed && (
-        <div className="bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] text-[13px] text-danger leading-[1.5]">
+        <div role="alert" className="bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] text-[13px] text-danger-fg leading-[1.5]">
           {t(
             "Couldn't load your orders. Check your connection and try again.",
             '无法加载你的订单。请检查网络后重试。',
@@ -190,7 +190,7 @@ export default function OrderHistory() {
                   {/* Status and total sit on the row, unexpanded. "Where's my order?" is the single
                       most common reason this screen is opened — it must not cost a tap. The two
                       default up/down glyphs are hidden in favour of one chevron that rotates. */}
-                  <AccordionTrigger className="items-center gap-3 px-4 py-3 rounded-none border-0 font-normal cursor-pointer hover:no-underline hover:bg-brand-100/40 transition-colors [&_[data-slot=accordion-trigger-icon]]:hidden">
+                  <AccordionTrigger className="items-center gap-3 px-4 py-3 rounded-none border-0 font-normal cursor-pointer hover:no-underline hover:bg-brand-wash/40 transition-colors [&_[data-slot=accordion-trigger-icon]]:hidden">
                     <div className="flex flex-1 min-w-0 items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="font-mono text-[13px] text-foreground truncate">{o.order_number}</div>
@@ -214,7 +214,7 @@ export default function OrderHistory() {
                     </div>
                   </AccordionTrigger>
 
-                  <AccordionContent className="px-4 pb-4 pt-3 border-t border-border/60 bg-brand-100/30">
+                  <AccordionContent className="px-4 pb-4 pt-3 border-t border-border/60 bg-brand-wash/30">
                       {(o.items ?? []).map((item, n) => (
                         // Index (`n`) in the key, not just id: a split promo writes two lines
                         // sharing the same product id (base half + promo half), and an id-only
@@ -228,7 +228,7 @@ export default function OrderHistory() {
                               <span className="truncate">{itemName(item)} × {item.qty}</span>
                               {/* Missing `promo` (rows written before I-2) reads as false. */}
                               {item.promo && (
-                                <span className="shrink-0 px-1.5 py-0.5 rounded-pill bg-primary text-white text-[10px] leading-[14px] font-medium">
+                                <span className="shrink-0 px-1.5 py-0.5 rounded-pill bg-primary text-primary-foreground text-[10px] leading-[14px] font-medium">
                                   {t('Promo', '优惠')}
                                 </span>
                               )}
@@ -489,7 +489,7 @@ function Tracking({ order, t }: { order: Order; t: Translate }) {
             href={link}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-brand-100"
+            className="flex shrink-0 items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-[13px] font-medium text-primary transition-colors hover:bg-brand-wash"
           >
             {t('Track', '追踪')}
             <ExternalLink className="size-3.5" strokeWidth={2} />

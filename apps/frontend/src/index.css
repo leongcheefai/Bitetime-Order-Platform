@@ -117,8 +117,10 @@
    `inline` means utilities emit var(--color-*) and resolve against :root. ── */
 @theme inline {
   /* Status tones, named directly. `-100` is the chip tint, `-fg` its label, `-500` the
-     solid fill. `--color-danger` is the plain inline-error red and is the one status name
-     without a numeric suffix, because it reads as prose in `text-danger`. */
+     solid fill. `--color-danger` is the one status name without a numeric suffix, and it is a
+     FILL and BORDER colour: `border-danger`, `bg-danger`. It is NOT a text colour — as 13px
+     text `#EF4444` reaches 3.76:1 on white and 3.16:1 on cream, and tokens.test.ts pins it
+     below the text floor. Inline error copy is `text-danger-fg`. */
   --color-danger: var(--danger-500);
   --color-danger-fg: var(--danger-fg);
   --color-success-fg: var(--success-fg);
@@ -136,6 +138,10 @@
   --color-neutral-fg: var(--neutral-fg);
   --color-disabled-bg: var(--color-disabled-bg);
   --color-disabled-fg: var(--color-disabled-fg);
+  /* `text-foreground-secondary` and `bg-brand-wash` — the two semantic roles the audit found
+     spread across ninety primitive call sites. Named after the shadcn vocabulary they sit in. */
+  --color-foreground-secondary: var(--color-text-secondary);
+  --color-brand-wash: var(--color-brand-wash);
 
   /* Radii — brand scale (overrides Tailwind defaults) */
   --radius-xs: var(--radius-xs);
@@ -204,7 +210,7 @@
   --z-index-toast: var(--z-toast);
 }
 
-/* shadcn semantic tokens → brand. Chart + sidebar tokens included here (no brand counterpart). */
+/* shadcn semantic tokens → brand. Chart tokens included here (no brand counterpart). */
 :root {
   --background: var(--color-bg);
   --foreground: var(--color-text);
@@ -233,14 +239,19 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* The dashboard rail (components/ui/sidebar.tsx). Neutrals only, mirroring what the
+     hand-rolled shell drew before it: the muted ground, ink hover, the hairline border.
+     The ACTIVE row's brand wash is set at the call site, not here — `--sidebar-accent` is
+     both hover and active in stock shadcn, and hover must stay neutral. `--sidebar-ring`
+     reads the accent, so BrandTheme restates it (brandScope.test.ts enforces that). */
+  --sidebar: var(--color-bg-muted);
+  --sidebar-foreground: var(--color-text);
+  --sidebar-primary: var(--color-text);
+  --sidebar-primary-foreground: var(--color-bg-muted);
+  --sidebar-accent: var(--ink-200);
+  --sidebar-accent-foreground: var(--color-text);
+  --sidebar-border: var(--color-border);
+  --sidebar-ring: var(--ring);
 }
 
 /* Global reset lives in @layer base so Tailwind utilities (padding/margin etc.)
@@ -262,6 +273,32 @@
   [role='button']:not(:disabled):not([aria-disabled='true']) {
     cursor: pointer;
   }
+}
+
+/* ── Touch and Chinese, two rules the utilities cannot express per call site ────────────────────
+
+   iOS Safari zooms the viewport when a field under 16px takes focus, and then leaves the page
+   zoomed. The default Input and Textarea are 16px for exactly that reason, but the compact
+   variant, the menu-import rows, the assistant box and the order note all pass their own 13–14px
+   — eighteen sites, and a nineteenth is one `text-[13px]` away. Unlayered and pointer-gated: on a
+   phone every text control is 16px, whatever utility it carries; on a desktop the compact sizes
+   stand. Checkbox, radio, range and file inputs have no text to zoom on.
+
+   `uppercase` and letter-spacing are Latin devices. On a Chinese page a 10px tracked table header
+   is an unreadable smear, so the header tracks normally and gains two pixels there. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  textarea,
+  select,
+  [role="combobox"] {
+    font-size: 16px;
+  }
+}
+html[lang="zh"] :is(th, [data-slot="table-head"], .uppercase) {
+  letter-spacing: 0;
+}
+html[lang="zh"] :is(th, [data-slot="table-head"], .uppercase.text-\[10px\], .uppercase.text-\[11px\]) {
+  font-size: 12px;
 }
 
 /* Smooth in-page anchor scrolling (e.g. nav "Pricing" → #pricing). Disabled
@@ -296,7 +333,7 @@ html { scroll-behavior: smooth; }
   }
 }
 
-body { font-family: 'Poppins', 'Poppins Fallback', 'Noto Sans SC', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); min-height: 100vh; padding: 2rem 1rem 4rem; display: flex; flex-direction: column; align-items: center; scrollbar-gutter: stable; overflow-x: hidden; }
+body { font-family: 'Poppins', 'Poppins Fallback', 'Noto Sans SC', system-ui, sans-serif; background: var(--color-bg); color: var(--color-text); min-height: 100vh; min-height: 100dvh; padding: 2rem 1rem 4rem; padding-bottom: calc(4rem + var(--consent-banner-h, 0px)); display: flex; flex-direction: column; align-items: center; scrollbar-gutter: stable; overflow-x: hidden; }
 /* AA-passing placeholder (the browser default fails contrast on the page background).
    The FLOOR for raw inputs, which the Input/Textarea components then override a step lighter on
    their white surface.
@@ -509,13 +546,14 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
   --border: var(--color-border);
   --input: var(--color-border);
   --ring: var(--color-accent);
-  /* Chart + sidebar tokens have no brand counterpart; stock shadcn values retained. */
+  /* Chart tokens have no brand counterpart; stock shadcn values retained. */
   --chart-1: oklch(0.87 0 0); --chart-2: oklch(0.556 0 0); --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0); --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0); --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376); --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0); --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%); --sidebar-ring: oklch(0.556 0 0);
+  /* The rail, as at :root — semantic tokens, so whatever tokens.css remaps for dark carries. */
+  --sidebar: var(--color-bg-muted); --sidebar-foreground: var(--color-text);
+  --sidebar-primary: var(--color-text); --sidebar-primary-foreground: var(--color-bg-muted);
+  --sidebar-accent: var(--ink-200); --sidebar-accent-foreground: var(--color-text);
+  --sidebar-border: var(--color-border); --sidebar-ring: var(--ring);
 }
 
 /* The day pickers (#210 custom order dates, #234 revenue range) carry NO CSS here.
@@ -548,6 +586,7 @@ body:has(.mm-land) { padding: 0; align-items: stretch; }
 [data-brand] .text-primary,
 [data-brand] .hover\:text-primary:hover,
 [data-brand] .focus\:text-primary:focus,
-[data-brand] .before\:text-primary:before {
+[data-brand] .before\:text-primary:before,
+[data-brand] .data-active\:text-primary[data-active] {
   color: var(--color-accent-text);
 }

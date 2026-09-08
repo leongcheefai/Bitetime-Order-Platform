@@ -137,7 +137,7 @@ const columns: ColumnDef<Voucher>[] = [
                 <Button
                   variant="ghost"
                   size="none"
-                  className="size-9 p-0 rounded-pill cursor-pointer pointer-coarse:size-11 hover:bg-brand-100 hover:text-primary"
+                  className="size-9 p-0 rounded-pill cursor-pointer pointer-coarse:size-11 hover:bg-brand-wash hover:text-primary"
                   aria-label={t('Actions', '操作')}
                 />
               }
@@ -236,7 +236,7 @@ export default function VouchersManager() {
       {rows.length === 0 ? (
         <Empty className="border-[0.5px] border-dashed border-border bg-background/50">
           <EmptyHeader>
-            <EmptyMedia variant="icon" className="bg-brand-100 text-primary">
+            <EmptyMedia variant="icon" className="bg-brand-wash text-primary">
               <Ticket />
             </EmptyMedia>
             <EmptyTitle className="text-primary">{t('No vouchers yet', '还没有优惠券')}</EmptyTitle>

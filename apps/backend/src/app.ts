@@ -18,7 +18,7 @@ import { admin, getUserFromToken } from './supabase.js'
 import { requireUser, requireSuperadmin, requireMerchantOwns, requireOwnsChild, requireOwnMerchant, bearer, type AppEnv } from './mw.js'
 import { voucherPublicView, voucherMerchantView } from './voucherView.js'
 import { parseVoucherRules } from './voucherInput.js'
-import { redemptionCounts, myRedemptionCount, syncOrderRedemptionVoid, voucherRedemptions } from './voucherRedemptionsDb.js'
+import { redemptionCounts, myRedemptionCount, voucherRedemptions } from './voucherRedemptionsDb.js'
 import { stripe, priceFor, isValidCycle, isStripeError } from './stripe.js'
 import { upsertBilling, setMerchantStatus, billingFromSubscription, reconcileBillingCycle, lapseMerchant, reopenAfterPayment, LIVE_STATUSES } from './billing.js'
 import { canStartTrial, trialStartRefusal, buildTrialReminderEmail } from './billingLifecycle.js'
@@ -40,6 +40,7 @@ import { invoiceFont } from './invoiceFont.js'
 import { phoneKey } from './phone.js'
 import {
   shopCustomers, isShopCustomerSort, pickShopCustomerFields, DEFAULT_SHOP_CUSTOMER_SORT,
+  isShopCustomerSegment, DEFAULT_SHOP_CUSTOMER_SEGMENT,
 } from './shopCustomers.js'
 import { shopCustomerGroups, shopCustomerRecords, upsertShopCustomer } from './shopCustomersDb.js'
 import { statsOrders, distinctCustomerCount, orderStatusCounts } from './ordersDb.js'
@@ -62,7 +63,9 @@ import { fetchBasePricing, createPricingCache, type PricingPayload } from './pri
 import { estimateFor } from './fx.js'
 import { listReferredShops, listEarnedRewards, referralCodeIsShareable } from './referrals.js'
 import { processReferralReward } from './referralRewardGrant.js'
-import { placeOrder, OrderError, orderMerchantId, setOrderPaymentProof, setOrderMerchantPaymentProof } from './orders.js'
+import type { OrderEvent } from '@bitetime/shared'
+import { listOrderEvents } from './orderEventsDb.js'
+import { placeOrder, patchOrder, OrderError, orderMerchantId, setOrderPaymentProof, setOrderMerchantPaymentProof } from './orders.js'
 import { insertFeedback, listFeedback, updateFeedbackStatus, updateFeedbackGithubIssue, updateFeedbackImages } from './feedback.js'
 import {
   findDueTrials, claimSend, releaseSend,
@@ -596,12 +599,17 @@ app.get('/api/merchants/:id/customers', requireMerchantOwns, async (c) => {
 
   const sort = q.get('sort') ?? DEFAULT_SHOP_CUSTOMER_SORT
   if (!isShopCustomerSort(sort)) return c.json({ error: 'invalid_sort' }, 400)
+  // Same refusal for the segment (#269): `members` is the sidebar's Members child, and anything
+  // else is a 400 rather than a list quietly answering a different question.
+  const segment = q.get('segment') ?? DEFAULT_SHOP_CUSTOMER_SEGMENT
+  if (!isShopCustomerSegment(segment)) return c.json({ error: 'invalid_segment' }, 400)
   const tag = q.get('tag') ?? undefined
 
   const [groups, records] = await Promise.all([shopCustomerGroups(m.id), shopCustomerRecords(m.id)])
   return c.json(shopCustomers(groups, records, {
     now: new Date(),
     sort,
+    segment,
     tag,
     search: q.get('search') ?? undefined,
     page: Number(q.get('page')) || undefined,
@@ -1494,28 +1502,50 @@ app.patch('/api/merchants/:id/orders/:orderId', requireMerchantOwns, requireOwns
   }
 
   if (Object.keys(patch).length === 0) return c.json({ error: 'No updatable fields' }, 400)
-  const { data, error } = await admin.from('orders').update(patch).eq('id', orderId).select().single()
-  if (error) return c.json({ error: 'Update failed' }, 500)
 
-  // Cancelling RELEASES the voucher redemption the order spent, and un-cancelling takes it back
-  // (ADR 0023). Driven off the status the order now HAS, not off the change — so a repeat is a
-  // no-op and a void that failed is repaired by the next patch, without this handler having to
-  // read what the status was.
-  //
-  // Deliberately NOT in one transaction with the update above: doing that means rewriting this
-  // whole patch (note, courier, awb, and the row shape the dashboard patches itself from) as raw
-  // SQL to close a failure that already errs the safe way — the order is cancelled and the use
-  // stays spent, which is exactly the behaviour before this existed. Logged, not swallowed: a
-  // merchant would otherwise never learn the slot did not come back.
-  if ('status' in patch) {
-    try {
-      await syncOrderRedemptionVoid(orderId, patch.status === 'cancelled')
-    } catch (err) {
-      console.error('Releasing the voucher redemption failed for order', orderId, err instanceof Error ? err.message : String(err))
-    }
+  // One transaction: the patch, the order log, and the voucher void of ADR 0023 (ADR 0025). This
+  // used to be a supabase-js update with the void trailing it best-effort; the log needed a
+  // transaction, and the void came in with it. `pickOrderFields` is still the only guard on
+  // which columns the body can name — patchOrder spreads its keys into the statement.
+  let events: OrderEvent[]
+  try {
+    const result = await patchOrder(orderId, patch, c.get('user').id)
+    if (!result) return c.json({ error: 'not_found' }, 404)
+    // The same refusal as the pre-check above, judged on the locked row (ADR 0024): the
+    // pre-check answers the stale-drawer case fast, this one is the boundary. A refused DATE
+    // carries intake's own `fulfil_date_unavailable` — the shop is not taking that day, by its
+    // own Fulfilment settings — at the 409 that code already carries on `REFUSAL_STATUS`.
+    if ('refused' in result) return c.json({ error: result.refused }, 409)
+    events = result.events
+  } catch (err) {
+    console.error('Order patch failed for order', orderId, err instanceof Error ? err.message : String(err))
+    return c.json({ error: 'Update failed' }, 500)
   }
-  return c.json(data)
+
+  // The row is re-read over PostgREST, not returned by the statement above: the dashboard
+  // patches its own list row from this body, and the driver's row shape differs (numeric as
+  // string, timestamptz as Date). Same bytes as before the rewrite, plus the events it recorded.
+  const { data, error } = await admin.from('orders').select().eq('id', orderId).single()
+  if (error) return c.json({ error: 'Update failed' }, 500)
+  return c.json({ ...data, events })
 })
+
+// The order log (#268, ADR 0025), oldest first. Same ownership chain as the PATCH above:
+// requireOwnsChild is what proves :orderId belongs to :id. A shop reads its own orders' logs and
+// nothing else; the customer has no route to this at all.
+app.get(
+  '/api/merchants/:id/orders/:orderId/events',
+  requireMerchantOwns,
+  requireOwnsChild('orders', 'orderId'),
+  async (c) => {
+    try {
+      return c.json({ events: await listOrderEvents(c.req.param('orderId')) })
+    } catch (err) {
+      console.error('Order log read failed:', err instanceof Error ? err.message : String(err))
+      return c.json({ error: 'lookup_failed' }, 500)
+    }
+  },
+)
 
 // The image itself, for the merchant dashboard. Same ownership chain as the PATCH above — see
 // its own comment for why requireOwnsChild is what actually proves :orderId belongs to :id, not
@@ -1568,7 +1598,9 @@ app.post(
     // Returns the two fields the write moved — the path, and a status that may have left
     // pending_payment. The sheet patches its own list row from them rather than refetching, the
     // same shape every other order write on this route file hands back.
-    const row = await setOrderMerchantPaymentProof(orderId, path)
+    // The events this write recorded ride along (ADR 0025), so the sheet appends them to the
+    // log it is showing without a second request.
+    const row = await setOrderMerchantPaymentProof(orderId, path, c.get('user').id)
     return c.json({ ok: true, ...row })
   },
 )
@@ -3359,9 +3391,13 @@ app.post('/api/orders/:orderId/payment-proof', async (c) => {
 
   // Returns the two fields the write moved — the path, and a status that may have left
   // pending_payment. Order history patches its own row from them, so a customer uploading from
-  // there sees the timeline move without a reload. The merchant twin returns the same shape.
+  // there sees the timeline move without a reload. The merchant twin returns the same shape
+  // PLUS the order events it recorded; the customer does not see the log, so they are dropped
+  // here rather than handed to a browser that has no use for them.
   const row = await setOrderPaymentProof(orderId, path)
-  return c.json({ ok: true, ...row })
+  if (!row) return c.json({ error: 'not_found' }, 404)
+  const { events: _events, ...saved } = row
+  return c.json({ ok: true, ...saved })
 })
 
 // The two outbound adapters, held in a mutable object so tests can capture what

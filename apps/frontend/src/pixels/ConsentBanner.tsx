@@ -6,6 +6,7 @@
 // without knowing why it is deliberate. Making Accept the filled primary was tried and reverted
 // for exactly that reason — a decline that is visibly the lesser button is not a free choice.
 
+import { useLayoutEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useSession } from '../SessionContext'
 import { Button } from '../components/ui/button'
@@ -29,11 +30,28 @@ export default function ConsentBanner({
   message: string
 }) {
   const { t } = useSession()
+  // The banner is fixed to the bottom edge, so on its own it sits on top of whatever the page
+  // ends with — on a storefront, the Place Order button. It reports its height as a custom
+  // property the body's bottom padding reads (index.css), so the page ends ABOVE it, and clears
+  // the property on unmount so dismissing it gives the space back. Measured, not guessed: the
+  // row stacks on a phone and the message is the shop's own wording, so the height varies.
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const root = document.documentElement
+    const apply = () => root.style.setProperty('--consent-banner-h', `${el.offsetHeight}px`)
+    apply()
+    const ro = new ResizeObserver(apply)
+    ro.observe(el)
+    return () => { ro.disconnect(); root.style.removeProperty('--consent-banner-h') }
+  }, [])
   return (
     <div
+      ref={ref}
       role="region"
       aria-label={t('Advertising cookies', '广告 Cookie')}
-      className="fixed inset-x-0 bottom-0 z-50 border-t-[0.5px] border-border bg-card px-4 py-3 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]"
+      className="fixed inset-x-0 bottom-0 z-sticky border-t-[0.5px] border-border bg-card px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
     >
       <div className="mx-auto flex max-w-[720px] flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-[13px] leading-[1.6] text-muted-foreground">

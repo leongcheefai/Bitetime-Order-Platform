@@ -91,6 +91,9 @@ export default function OrderReviewCard({
             onMouseEnter={() => setHover(n)}
             onMouseLeave={() => setHover(0)}
             onClick={() => setRating(n)}
+            // 22px glyph, 38px target: padded, with the padding pulled back into the gap so the
+            // five stars sit where they did.
+            className="p-2 -m-1 rounded-md focus-visible:outline-2 focus-visible:outline-primary"
           >
             <Star size={22} strokeWidth={1.75} className={cls} />
           </button>
@@ -155,7 +158,7 @@ export default function OrderReviewCard({
                  `留言不能超过 ${ORDER_REVIEW_COMMENT_MAX_LENGTH} 个字`)}
             </p>
           )}
-          {error && <p className="text-[13px] text-danger-fg">{error}</p>}
+          {error && <p role="alert" className="text-[13px] text-danger-fg">{error}</p>}
           <Button
             type="button"
             onClick={() => void send()}

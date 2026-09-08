@@ -118,7 +118,7 @@ export default function MenuCategoriesDialog({
 
   return (
     <Dialog open={open} onOpenChange={o => { if (!saving) onOpenChange(o) }}>
-      <DialogContent className="max-w-[560px]">
+      <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>{t('Menu categories', '菜单分类')}</DialogTitle>
         </DialogHeader>
@@ -205,7 +205,7 @@ export default function MenuCategoriesDialog({
           {t('Add category', '添加分类')}
         </Button>
 
-        {msg && <p className="text-[12px] text-destructive mt-3">{msg}</p>}
+        {msg && <p role="alert" className="text-[12px] text-danger-fg mt-3">{msg}</p>}
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>

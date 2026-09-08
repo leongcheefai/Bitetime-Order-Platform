@@ -72,13 +72,13 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="form-wrap pt-12 pb-24">
+    <div role="main" className="form-wrap pt-12 pb-24">
       <h1 className="font-heading text-[22px] font-medium text-primary mb-1">
         {t('Set a new password', '设置新密码')}
       </h1>
 
       {done ? (
-        <p role="status" className="text-[13px] text-primary bg-danger-100 border border-danger-100 rounded-md px-[13px] py-[10px] mt-4 leading-[1.5]">
+        <p role="status" className="text-[13px] text-primary bg-brand-wash border border-border rounded-md px-[13px] py-[10px] mt-4 leading-[1.5]">
           {t(
             "Password updated. You're signed in — taking you back…",
             '密码已更新。你已登录——正在返回…',
@@ -90,7 +90,7 @@ export default function ResetPasswordPage() {
         // No session means the link was never valid, has already been used, or has expired. Say
         // which and offer the only useful next step — asking for a fresh one.
         <>
-          <p role="alert" className="text-[13px] text-danger bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mt-4 leading-[1.5]">
+          <p role="alert" className="text-[13px] text-danger-fg bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mt-4 leading-[1.5]">
             {t(
               'This link has expired or has already been used. Request a new one from the shop you were ordering from.',
               '此链接已过期或已被使用。请在你下单的店铺重新申请。',
@@ -116,7 +116,7 @@ export default function ResetPasswordPage() {
           </p>
 
           {error && (
-            <div role="alert" className="text-[13px] text-danger bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
+            <div role="alert" className="text-[13px] text-danger-fg bg-danger-100 border border-danger-500 rounded-md px-[13px] py-[10px] mb-[10px] leading-[1.5]">
               {error}
             </div>
           )}

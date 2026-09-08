@@ -8,7 +8,7 @@ import { MerchantProvider, useMerchant } from './MerchantContext'
 import BrandTheme from './components/BrandTheme'
 import RequireRole from './RequireRole'
 import { useCanonical } from './canonical'
-import { useDocumentMeta } from './documentMeta'
+import { useDocumentMeta, useDynamicDocumentTitle } from './documentMeta'
 import { usePixels } from './pixels/usePixels'
 import { ShopPixelsProvider } from './pixels/ShopPixels'
 import { useAnalytics } from './analytics/useAnalytics'
@@ -68,6 +68,9 @@ function RouteFallback() {
 function StorefrontShell() {
   const { merchant, loading, notFound } = useMerchant()
   const { t } = useSession()
+  // The tab is the SHOP's, not the platform's — "the shop is the hero" — so the name stands
+  // alone, with no brand suffix. Null until the row lands, which leaves the served title alone.
+  useDynamicDocumentTitle(merchant?.name ?? null)
 
   if (loading) return (
     <div className="w-full min-h-[50vh] flex items-center justify-center">

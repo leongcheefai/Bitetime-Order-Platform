@@ -28,6 +28,7 @@ interface GroupRow {
   latest_name: string | null
   latest_wa: string | null
   has_account: boolean
+  latest_email: string | null
 }
 
 /**
@@ -37,22 +38,32 @@ interface GroupRow {
  * MOST RECENT order in the bucket rather than an arbitrary one — a diner who corrects their name
  * should be listed under the correction. `count(*)::int` because postgres.js returns `bigint` as
  * a string, and a string order count silently concatenates when summed.
+ *
+ * `latest_email` is the one read outside `orders`: a left join to `auth.users` on `user_id`, the
+ * column intake fills only from a verified JWT. The `filter` keeps the aggregate to signed-in
+ * orders, so a guest order placed later cannot shadow the email with a null. Like
+ * `deviceLimitDb.ts`, this reads the `auth` schema and adds nothing to it — a data statement
+ * that survives a Supabase upgrade the way any other row does. Shop-scoped by the `merchant_id`
+ * predicate, which on this RLS-exempt connection is the whole tenancy guard.
  */
 export async function shopCustomerGroups(merchantId: string): Promise<ShopCustomerGroup[]> {
   const rows = await sql<GroupRow[]>`
     select
-      customer_phone_key                                        as phone_key,
-      status,
-      count(*)::int                                             as orders,
-      sum(total)                                                as total,
-      min(created_at)                                           as first_at,
-      max(created_at)                                           as last_at,
-      (array_agg(customer_name order by created_at desc))[1]    as latest_name,
-      (array_agg(customer_wa   order by created_at desc))[1]    as latest_wa,
-      bool_or(user_id is not null)                              as has_account
-    from orders
-    where merchant_id = ${merchantId}
-    group by customer_phone_key, status
+      o.customer_phone_key                                          as phone_key,
+      o.status,
+      count(*)::int                                                 as orders,
+      sum(o.total)                                                  as total,
+      min(o.created_at)                                             as first_at,
+      max(o.created_at)                                             as last_at,
+      (array_agg(o.customer_name order by o.created_at desc))[1]    as latest_name,
+      (array_agg(o.customer_wa   order by o.created_at desc))[1]    as latest_wa,
+      bool_or(o.user_id is not null)                                as has_account,
+      (array_agg(u.email order by o.created_at desc)
+         filter (where o.user_id is not null))[1]                   as latest_email
+    from orders o
+    left join auth.users u on u.id = o.user_id
+    where o.merchant_id = ${merchantId}
+    group by o.customer_phone_key, o.status
   `
   return rows.map(r => ({
     phoneKey: r.phone_key,
@@ -64,6 +75,7 @@ export async function shopCustomerGroups(merchantId: string): Promise<ShopCustom
     latestName: r.latest_name,
     latestWa: r.latest_wa,
     hasAccount: r.has_account,
+    latestEmail: r.latest_email,
   }))
 }
 

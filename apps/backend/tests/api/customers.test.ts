@@ -40,10 +40,12 @@ interface CustomerRow {
   note: string | null
   tags: string[]
   hasAccount: boolean
+  email: string | null
 }
 interface CustomerPage {
   customers: CustomerRow[]
   shopTags: string[]
+  stats: { customers: number; bookedOrders: number; spend: number }
   total: number
   unattributedOrders: number
 }
@@ -325,6 +327,19 @@ describe('shop customers', () => {
     expect(customer?.hasAccount).toBe(true)
   })
 
+  it("serves a member's account email, and none for a guest", async () => {
+    const signedIn = await makeUser('cust-mail@example.com', 'password123')
+    const { data } = await signedIn.auth.getSession()
+    await seedOrder(proId, { customer_phone_key: '44444444', customer_wa: '60144444444', user_id: data.session!.user.id })
+    await seedOrder(proId, { customer_phone_key: '55555555', customer_wa: '60155555555' })
+
+    const byKey = new Map(
+      (await pageOf(await get(`/api/merchants/${proId}/customers`, proToken))).customers.map(c => [c.phoneKey, c]),
+    )
+    expect(byKey.get('44444444')?.email).toBe('cust-mail@example.com')
+    expect(byKey.get('55555555')?.email).toBeNull()
+  })
+
   // ── The row cap this endpoint exists to escape ─────────────────────────────
 
   // Deliberately just OVER the cap rather than comfortably past it. This suite runs alongside
@@ -403,5 +418,50 @@ describe('shop customers', () => {
     const page = await pageOf(await get(`/api/merchants/${proId}/customers?page=1&pageSize=2`, proToken))
     expect(page.customers).toHaveLength(2)
     expect(page.total).toBe(5)
+  })
+
+  // ── Segments and the stat row (#269) ───────────────────────────────────────
+
+  // Two guests and one member, the member with a guest order of their own under the same phone.
+  async function seedMix() {
+    const diner = await makeUser('cust-member@example.com', 'password123')
+    const { data } = await diner.auth.getSession()
+    await seedOrder(proId, { customer_phone_key: '11111111', customer_wa: '60111111111', user_id: data.session!.user.id, total: 10 })
+    await seedOrder(proId, { customer_phone_key: '11111111', customer_wa: '60111111111', total: 20 })
+    await seedOrder(proId, { customer_phone_key: '22222222', customer_wa: '60122222222', total: 5 })
+    await seedOrder(proId, { customer_phone_key: '33333333', customer_wa: '60133333333', total: 7 })
+  }
+
+  it('narrows to members, and counts the member’s guest orders as theirs', async () => {
+    await seedMix()
+    const page = await pageOf(await get(`/api/merchants/${proId}/customers?segment=members`, proToken))
+    expect(page.customers.map(c => c.phoneKey)).toEqual(['11111111'])
+    expect(page.customers[0]?.bookedOrders).toBe(2)
+    expect(page.customers[0]?.email).toBe('cust-member@example.com')
+    expect(page.stats).toEqual({ customers: 1, bookedOrders: 2, spend: 30 })
+  })
+
+  it('shows everyone for the all segment, with the stats to match', async () => {
+    await seedMix()
+    const page = await pageOf(await get(`/api/merchants/${proId}/customers?segment=all`, proToken))
+    expect(page.total).toBe(3)
+    expect(page.stats).toEqual({ customers: 3, bookedOrders: 4, spend: 42 })
+  })
+
+  it('refuses a segment it does not offer rather than quietly showing another one', async () => {
+    const res = await get(`/api/merchants/${proId}/customers?segment=guests`, proToken)
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'invalid_segment' })
+  })
+
+  it('reports stats that equal the rows summed across every page', async () => {
+    await seedMix()
+    const p1 = await pageOf(await get(`/api/merchants/${proId}/customers?page=1&pageSize=2`, proToken))
+    const p2 = await pageOf(await get(`/api/merchants/${proId}/customers?page=2&pageSize=2`, proToken))
+    const rows = [...p1.customers, ...p2.customers]
+    expect(rows).toHaveLength(3)
+    expect(p1.stats).toEqual(p2.stats)
+    expect(p1.stats.bookedOrders).toBe(rows.reduce((n, c) => n + c.bookedOrders, 0))
+    expect(p1.stats.spend).toBe(rows.reduce((n, c) => n + c.lifetimeSpend, 0))
   })
 })

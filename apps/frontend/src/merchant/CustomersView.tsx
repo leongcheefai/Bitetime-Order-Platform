@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Plus, UserCheck, X } from 'lucide-react'
+import { Plus, ReceiptText, UserCheck, Users, Wallet, X } from 'lucide-react'
 import { toast } from 'sonner'
-import type { Order, ShopCustomer, ShopCustomerSort } from '../types'
+import type { Order, ShopCustomer, ShopCustomerSegment, ShopCustomerSort, ShopCustomerStats } from '../types'
 import { useSession } from '../SessionContext'
 import { fetchShopCustomers, fetchShopCustomerOrders, saveShopCustomer } from '../store'
 import { SkeletonText } from '../components/Loaders'
+import { StatCard } from '../components/charts/StatCard'
 import { formatMoney } from '../currency'
 import { fmtDate } from '../merchantDate'
 import { StatusBadge } from '../orderStatus'
@@ -26,10 +27,10 @@ const PANEL = 'bg-card border-[0.5px] border-border rounded-2xl p-5 mb-8 w-full 
 const TH = 'text-[10px] font-semibold uppercase tracking-[0.08em] text-primary px-[14px] py-[10px] border-b-[0.5px] border-border text-left whitespace-nowrap'
 
 // Table data cell (base) — pixel-match of .mm-customers-table td + hover
-const TD = 'px-[14px] py-[12px] border-b border-muted text-foreground align-middle group-hover:bg-brand-100'
+const TD = 'px-[14px] py-[12px] border-b border-muted text-foreground align-middle group-hover:bg-brand-wash'
 
 // Count cell — pixel-match of .mm-customers-count overrides
-const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-semibold text-center align-middle group-hover:bg-brand-100'
+const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-semibold text-center align-middle group-hover:bg-brand-wash'
 
 /**
  * One tag chip, on `Badge` rather than hand-rolled — the filter row's, the table row's and the
@@ -44,7 +45,7 @@ const TD_COUNT = 'px-[14px] py-[12px] border-b border-muted text-primary font-se
  * Hand-rolled, these were 12px regular with a resting border, which is a fourth chip style on a
  * screen that already had three.
  */
-const TAG_CHIP = 'px-[10px] border-transparent bg-brand-100 text-brand-700'
+const TAG_CHIP = 'px-[10px] border-transparent bg-brand-wash text-brand-700'
 
 // `button.tsx`'s focus treatment, borrowed for the raw buttons `Badge` cannot cover — the two
 // nested inside the drawer's chip. A control a keyboard reaches needs this app's ring, not the
@@ -66,13 +67,18 @@ const PAGE_SIZE = 50
  *
  * Sorting, the tag filter and writing a note or tags were the paid half of this screen until the
  * tier went (#222); they are ordinary controls now.
+ *
+ * `segment` is the sidebar's choice (#269): the Customers group's two children, All customers
+ * and Members, are this one screen asked two questions. The list, its controls, the drawer and
+ * the stat row are identical on both; only the predicate the backend applies differs.
  */
-export default function CustomersView() {
+export default function CustomersView({ segment }: { segment: ShopCustomerSegment }) {
   const { t, merchant } = useSession()
   const merchantId = merchant!.id
 
   const [customers, setCustomers] = useState<ShopCustomer[] | null>(null)
   const [shopTags, setShopTags] = useState<string[]>([])
+  const [stats, setStats] = useState<ShopCustomerStats | null>(null)
   const [total, setTotal] = useState(0)
   const [unattributed, setUnattributed] = useState(0)
   const [failed, setFailed] = useState(false)
@@ -88,6 +94,7 @@ export default function CustomersView() {
   const load = useCallback(async () => {
     const r = await fetchShopCustomers(merchantId, {
       sort,
+      segment,
       tag: tag ?? undefined,
       search,
       page,
@@ -97,9 +104,17 @@ export default function CustomersView() {
     setFailed(false)
     setCustomers(r.data.customers)
     setShopTags(r.data.shopTags)
+    setStats(r.data.stats ?? null)
     setTotal(r.data.total)
     setUnattributed(r.data.unattributedOrders)
-  }, [merchantId, sort, tag, search, page])
+  }, [merchantId, sort, segment, tag, search, page])
+
+  // A segment switch is a narrowing too, but it arrives from the sidebar rather than a handler
+  // here, so the page-1 reset for it cannot live in `narrow` below. Adjusted during render, the
+  // way React asks for state derived from a prop change, rather than in an effect one paint
+  // late: page 3 of everyone is nothing on page 3 of members, which reads as "no members".
+  const [seenSegment, setSeenSegment] = useState(segment)
+  if (segment !== seenSegment) { setSeenSegment(segment); setPage(1) }
 
   // Debounced so typing a name is one request per pause, not one per keystroke.
   useEffect(() => {
@@ -140,10 +155,13 @@ export default function CustomersView() {
 
   return (
     <>
+      {stats && <StatRow stats={stats} segment={segment} />}
+
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Input
           value={search}
           onChange={e => narrow(setSearch)(e.target.value)}
+          aria-label={t('Search customers', '搜索顾客')}
           placeholder={t('Search by name or WhatsApp…', '按姓名或 WhatsApp 搜索…')}
           className="max-w-sm bg-background border-border text-[13px]"
         />
@@ -165,7 +183,7 @@ export default function CustomersView() {
           <p>
             {narrowed
               ? t('No customers match that.', '没有符合条件的顾客。')
-              : t('No customers yet.', '暂无顾客。')}
+              : t(...SEGMENT_COPY[segment].empty)}
           </p>
         </div>
       ) : (
@@ -179,6 +197,7 @@ export default function CustomersView() {
                 <tr>
                   <th className={TH}>{t('Name', '姓名')}</th>
                   <th className={TH}>{t('WhatsApp', 'WhatsApp')}</th>
+                  {segment === 'members' && <th className={TH}>{t('Email', '邮箱')}</th>}
                   <th className={TH}>{t('Orders', '订单数')}</th>
                   <th className={TH}>{t('Spent', '消费额')}</th>
                   <th className={TH}>{t('Last Order', '最近订单')}</th>
@@ -191,7 +210,15 @@ export default function CustomersView() {
                   <tr
                     key={c.phoneKey}
                     onClick={() => setSelected(c)}
-                    className="group cursor-pointer [&:last-child>td]:border-b-0"
+                    // The row is the only way to open a customer, so it is reachable and
+                    // operable from the keyboard — the same shape ui/data-table.tsx gives its
+                    // clickable rows. Space is claimed too, or it scrolls the page instead.
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(c) }
+                    }}
+                    className="group cursor-pointer [&:last-child>td]:border-b-0 focus-visible:outline-2 focus-visible:outline-primary focus-visible:-outline-offset-2"
                   >
                     <td className={TD}>
                       <span className="inline-flex items-center gap-1.5">
@@ -200,9 +227,15 @@ export default function CustomersView() {
                       </span>
                     </td>
                     <td className={TD}>{c.wa ? <WaLink wa={c.wa} stopClick /> : '—'}</td>
+                    {/* Members only (ADR 0026): on the All list a column that is a dash for
+                        most rows says "guests have no email", which the account mark already
+                        says, and costs every row the width. */}
+                    {segment === 'members' && (
+                      <td className={`${TD} max-w-[180px] truncate`} title={c.email ?? undefined}>{c.email ?? '—'}</td>
+                    )}
                     <td className={TD_COUNT}>{c.bookedOrders}</td>
-                    <td className={`${TD} tabular-nums`}>{formatMoney(c.lifetimeSpend, merchant?.currency)}</td>
-                    <td className={TD}>
+                    <td className={`${TD} tabular-nums whitespace-nowrap`}>{formatMoney(c.lifetimeSpend, merchant?.currency)}</td>
+                    <td className={`${TD} whitespace-nowrap`}>
                       <span className="flex flex-col">
                         <span>{fmtDate(c.lastOrderAt)}</span>
                         <span className="text-[11px] text-muted-foreground">{agoLabel(c.daysSinceLastOrder, t)}</span>
@@ -222,6 +255,7 @@ export default function CustomersView() {
         page={page}
         pageCount={pageCount}
         unattributed={unattributed}
+        segment={segment}
         onPage={setPage}
       />
 
@@ -365,6 +399,58 @@ function TagFilterRow({
   )
 }
 
+const STAT_ICON = { size: 15, strokeWidth: 1.75 }
+
+/**
+ * The three numbers above the list (#269), on the Overview's own `StatCard`.
+ *
+ * They are the rows summed — scoped by the backend exactly as `total` is, after the segment,
+ * search and tag filter and before paging — so what the header says and what the table shows
+ * can never disagree. Which is also why the search narrows them: one scope per page, and the
+ * unfiltered figure is one cleared search away. No share-of-trade percentage, deliberately —
+ * it needs the OTHER segment's figure on this one, and a merchant compares by clicking.
+ */
+function StatRow({ stats, segment }: { stats: ShopCustomerStats; segment: ShopCustomerSegment }) {
+  const { t, merchant } = useSession()
+  const copy = SEGMENT_COPY[segment]
+  return (
+    <div className="mb-4 grid grid-cols-3 gap-[10px] max-[520px]:grid-cols-1">
+      <StatCard label={t(...copy.customers)} value={String(stats.customers)} icon={<Users {...STAT_ICON} />} />
+      <StatCard label={t(...copy.bookedOrders)} value={String(stats.bookedOrders)} icon={<ReceiptText {...STAT_ICON} />} />
+      <StatCard label={t(...copy.spend)} value={formatMoney(stats.spend, merchant?.currency)} icon={<Wallet {...STAT_ICON} />} />
+    </div>
+  )
+}
+
+/**
+ * Every word that changes with the segment, in one place. "Booked", spelled out, because the
+ * Overview's KPI card says "Total orders" and counts cancelled ones; this figure does not, and
+ * two numbers on one dashboard must not wear one word for two meanings (CONTEXT.md → Shop
+ * customer, the `bookedOrders` rule).
+ */
+const SEGMENT_COPY: Record<ShopCustomerSegment, {
+  customers: [string, string]
+  bookedOrders: [string, string]
+  spend: [string, string]
+  count: (n: number) => [string, string]
+  empty: [string, string]
+}> = {
+  all: {
+    customers: ['Customers', '顾客'],
+    bookedOrders: ['Booked orders', '有效订单'],
+    spend: ['Spent', '消费额'],
+    count: n => [`${n} customer${n === 1 ? '' : 's'}`, `${n} 位顾客`],
+    empty: ['No customers yet.', '暂无顾客。'],
+  },
+  members: {
+    customers: ['Members', '会员'],
+    bookedOrders: ['Booked orders from members', '会员有效订单'],
+    spend: ['Spent by members', '会员消费'],
+    count: n => [`${n} member${n === 1 ? '' : 's'}`, `${n} 位会员`],
+    empty: ['No members yet — a member is a customer who ordered while signed in.', '暂无会员 —— 会员是登录后下单的顾客。'],
+  },
+}
+
 /**
  * The count, the pager, and the one line that keeps the numbers honest.
  *
@@ -372,13 +458,13 @@ function TagFilterRow({
  * their order list finds fewer orders here and nothing saying why.
  */
 function ListFooter({
-  total, page, pageCount, unattributed, onPage,
-}: { total: number; page: number; pageCount: number; unattributed: number; onPage: (p: number) => void }) {
+  total, page, pageCount, unattributed, segment, onPage,
+}: { total: number; page: number; pageCount: number; unattributed: number; segment: ShopCustomerSegment; onPage: (p: number) => void }) {
   const { t } = useSession()
   return (
     <div className="mb-8 flex flex-wrap items-center justify-between gap-3">
       <div className="text-[12px] text-muted-foreground">
-        <p>{t(`${total} customer${total === 1 ? '' : 's'}`, `${total} 位顾客`)}</p>
+        <p>{t(...SEGMENT_COPY[segment].count(total))}</p>
         {unattributed > 0 && (
           <p className="mt-1">
             {t(
@@ -423,7 +509,7 @@ function CustomerDrawer({
 }) {
   return (
     <Sheet open={customer !== null} onOpenChange={open => { if (!open) onClose() }}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent side="right" className="data-[side=right]:w-full data-[side=right]:sm:max-w-md overflow-y-auto">
         {/* Keyed, so switching customers REMOUNTS this: the order list and the note draft
             reset because they are born fresh, not because an effect remembered to clear them. */}
         {customer && (
@@ -477,6 +563,16 @@ function DrawerContents({
                   {customer.hasAccount && <AccountMark />}
                 </SheetTitle>
                 {customer.wa && <span className="text-[13px]"><WaLink wa={customer.wa} /></span>}
+                {/* A member's account email (ADR 0026) — a mailto so it does the one thing an
+                    address on a contact card is for. Absent for a guest, who has none. */}
+                {customer.email && (
+                  <a
+                    href={`mailto:${customer.email}`}
+                    className="text-[13px] text-foreground underline-offset-2 hover:underline break-all"
+                  >
+                    {customer.email}
+                  </a>
+                )}
                 <span className="text-[12px] text-muted-foreground">
                   {t(
                     `${customer.bookedOrders} order${customer.bookedOrders === 1 ? '' : 's'} · ${formatMoney(customer.lifetimeSpend, merchant?.currency)} · avg ${formatMoney(customer.avgOrder, merchant?.currency)}`,
@@ -508,7 +604,7 @@ function DrawerContents({
                       key={o.id}
                       type="button"
                       onClick={() => setSelectedOrder(o)}
-                      className="flex flex-col gap-1 w-full text-left rounded-lg border border-border bg-background px-3 py-2.5 hover:bg-brand-100 transition-colors"
+                      className="flex flex-col gap-1 w-full text-left rounded-lg border border-border bg-background px-3 py-2.5 hover:bg-brand-wash transition-colors"
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-heading text-[14px] font-medium text-primary">{o.order_number || '—'}</span>
@@ -590,7 +686,7 @@ function NotesPanel({
                 type="button"
                 aria-label={t(`Remove tag ${tag}`, `移除标签 ${tag}`)}
                 onClick={() => save({ note: customer.note, tags: customer.tags.filter(x => x !== tag) })}
-                className={`cursor-pointer rounded-pill opacity-60 hover:opacity-100 ${FOCUS_RING}`}
+                className={`cursor-pointer rounded-pill p-0.5 -m-0.5 pointer-coarse:p-2 pointer-coarse:-m-1.5 opacity-60 hover:opacity-100 ${FOCUS_RING}`}
               >
                 <X size={11} />
               </button>
@@ -605,6 +701,7 @@ function NotesPanel({
             e.preventDefault()
             addTag(tagDraft.trim())
           }}
+          aria-label={t('Add a tag', '添加标签')}
           placeholder={t('Add a tag, press Enter…', '添加标签，按回车…')}
           className="bg-background border-border text-[13px]"
         />
@@ -635,6 +732,7 @@ function NotesPanel({
           value={note}
           onChange={e => setNote(e.target.value)}
           rows={3}
+          aria-label={t('Private note', '私密备注')}
           placeholder={t('Private note — only your shop sees this…', '私密备注，仅本店可见…')}
           className="bg-background border-border text-[13px]"
         />

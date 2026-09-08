@@ -142,7 +142,7 @@ export default function OnboardingChecklist({ section, onNavigate }: { section: 
       <>
         <Card className="mb-5">
           <CardHeader>
-            <CardTitle>{t('🎉 Your shop is ready!', '🎉 您的店铺已就绪！')}</CardTitle>
+            <CardTitle>{t('Your shop is ready', '您的店铺已就绪')}</CardTitle>
             <CardDescription>
               {t('Copy your order link and start accepting orders.', '复制您的下单链接，开始接单。')}
             </CardDescription>
@@ -172,7 +172,7 @@ export default function OnboardingChecklist({ section, onNavigate }: { section: 
     <>
       <Card className="mb-5">
         <CardHeader>
-          <CardTitle>{t('🎉 Welcome to TinyOrder', '🎉 欢迎使用 TinyOrder')}</CardTitle>
+          <CardTitle>{t('Set up your shop', '设置您的店铺')}</CardTitle>
           <CardDescription>
             {t(
               `You’re only ${remaining} step${remaining === 1 ? '' : 's'} away from accepting your first order.`,

@@ -48,6 +48,8 @@ const columns: ColumnDef<any>[] = [
         <img
           src={productImageUrl(p.image_urls[0])}
           alt=""
+          loading="lazy"
+          decoding="async"
           className="size-11 shrink-0 object-cover rounded-lg border-[0.5px] border-border"
         />
       ) : (
@@ -128,7 +130,7 @@ const columns: ColumnDef<any>[] = [
                 <Button
                   variant="ghost"
                   size="none"
-                  className="size-9 p-0 rounded-pill cursor-pointer pointer-coarse:size-11 hover:bg-brand-100 hover:text-primary"
+                  className="size-9 p-0 rounded-pill cursor-pointer pointer-coarse:size-11 hover:bg-brand-wash hover:text-primary"
                   aria-label={t('Actions', '操作')}
                 />
               }
@@ -337,7 +339,7 @@ export default function ProductsManager() {
       {rows.length === 0 ? (
         <Empty className="border-[0.5px] border-dashed border-border bg-background/50">
           <EmptyHeader>
-            <EmptyMedia variant="icon" className="bg-brand-100 text-primary">
+            <EmptyMedia variant="icon" className="bg-brand-wash text-primary">
               <Package />
             </EmptyMedia>
             <EmptyTitle className="text-primary">{t('No products yet', '还没有产品')}</EmptyTitle>

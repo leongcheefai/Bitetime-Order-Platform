@@ -231,13 +231,44 @@ export interface ShopCustomer {
   lastOrderAt: string
   daysSinceLastOrder: number
   hasAccount: boolean
+  /**
+   * A member's account email; null for a guest. Optional on THIS side only, like `stats`
+   * below: a browser on this code may face a backend that predates the field, and an absent
+   * email draws as none rather than crashing the row. Shown on the Members list (ADR 0026).
+   */
+  email?: string | null
   /** What this merchant wrote. Shop-private, and blank for most customers. */
   note: string | null
   tags: string[]
 }
 
+/**
+ * Which slice of the shop's customers the list shows (#269) — the sidebar's two Customers
+ * children. A **member** is a shop customer with an account: see CONTEXT.md → Shop customer.
+ * Twin of the backend's `ShopCustomerSegment` (`apps/backend/src/shopCustomers.ts`), like
+ * `ShopCustomerSort` above it: the backend is authoritative and refuses anything else.
+ */
+export type ShopCustomerSegment = 'all' | 'members'
+
+/**
+ * The stat row above the list: the matched rows, summed. Scoped exactly like `total`. Twin of
+ * the backend's `ShopCustomerStats`, the wire shape it computes.
+ */
+export interface ShopCustomerStats {
+  customers: number
+  bookedOrders: number
+  spend: number
+}
+
 export interface ShopCustomerPage {
   customers: ShopCustomer[]
+  /**
+   * Optional on THIS side only: the two halves deploy independently, and a browser running this
+   * code can be talking to a backend that has never heard of the field (the same reason
+   * `fetchShopCustomers` guards `shopTags`). Absent, the row is not drawn — there is no honest
+   * number to fill it with from one page of rows.
+   */
+  stats?: ShopCustomerStats
   /**
    * Every tag this shop has ever written, once each — what the drawer suggests from (#150).
    * Neither filtered nor paged: it is the vocabulary the tag filter chooses from.

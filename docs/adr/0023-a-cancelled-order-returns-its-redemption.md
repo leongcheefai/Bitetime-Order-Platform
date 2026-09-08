@@ -2,7 +2,10 @@
 
 Date: 2026-09-02
 Status: Accepted. Reverses the *A cancellation returns nothing* consequence of
-[ADR 0019](0019-voucher-redemptions-are-rows-not-a-list.md).
+[ADR 0019](0019-voucher-redemptions-are-rows-not-a-list.md). Its *not in a transaction* decision
+below is reversed by [ADR 0025](0025-an-order-event-commits-with-its-action.md): the void now runs
+inside the order patch's transaction, and a `where voided_at is null` predicate replaced the
+`coalesce` — same first-timestamp guarantee, and it also reports whether a row actually moved.
 
 ## Context
 
@@ -40,11 +43,11 @@ worse failure — and the merchant already sets the cap.
 has and never reads the previous one, so a repeat is a no-op, `coalesce(voided_at, now())` keeps
 the first release's timestamp, and a void that failed is repaired by the next patch of that order.
 
-**The void is not in a transaction with the order update.** The order patch goes through the REST
-client and also carries `note`, `courier` and `awb`; rewriting all of it as raw SQL to gain
-atomicity would buy nothing here, because the failure already errs the safe way — the order is
-cancelled and the use stays spent, which is exactly the behaviour this ADR replaces. The failure is
-logged, never swallowed silently.
+**The void is not in a transaction with the order update.** *(Reversed by ADR 0025 — see Status.)*
+The order patch goes through the REST client and also carries `note`, `courier` and `awb`;
+rewriting all of it as raw SQL to gain atomicity would buy nothing here, because the failure
+already errs the safe way — the order is cancelled and the use stays spent, which is exactly the
+behaviour this ADR replaces. The failure is logged, never swallowed silently.
 
 ## Rejected
 

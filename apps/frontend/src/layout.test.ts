@@ -51,11 +51,13 @@ describe('page width', () => {
   // it. A percentage of a real in-flow ancestor cannot fail that way. `vh`/`dvh` are unaffected —
   // a zero-height min-height is harmless — so only the inline axis is banned.
   //
-  // The exceptions are the two `position: fixed` overlays, and they are exceptions for a reason
-  // rather than by exhaustion: a fixed box's containing block IS the viewport, so it has no
-  // in-flow ancestor to take a percentage of, and a `vw` cap is what gives it its margin from
-  // the screen edge. Add to this list only for another fixed or absolutely-positioned overlay.
-  const FIXED_OVERLAYS = ['components/DashboardShell.tsx', 'merchant/MenuImportDialog.tsx']
+  // The exception is a `position: fixed` overlay, and it is an exception for a reason rather
+  // than by exhaustion: a fixed box's containing block IS the viewport, so it has no in-flow
+  // ancestor to take a percentage of, and a `vw` cap is what gives it its margin from the
+  // screen edge. Add to this list only for another fixed or absolutely-positioned overlay.
+  // (The dashboard rail used to be here for its mobile drawer's `82vw` cap; on shadcn's
+  // Sidebar the sheet is sized in rem, so it no longer needs the exemption.)
+  const FIXED_OVERLAYS = ['merchant/MenuImportDialog.tsx']
 
   it('derives no in-flow width from a viewport unit', () => {
     const offenders = sourceFiles(src)

@@ -11,6 +11,12 @@ export function fmtDateTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString('en-MY', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+// The clock alone, to the minute — the order log's lines, under their day heading.
+export function fmtTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  return new Date(iso).toLocaleTimeString('en-MY', { timeStyle: 'short' })
+}
+
 // A day, no time — the customers table and the order-history lines.
 export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return '—'

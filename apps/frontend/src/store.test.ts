@@ -1335,7 +1335,9 @@ describe('setOrderTracking', () => {
 describe('fetchShopCustomers', () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  const page = { customers: [], shopTags: [], total: 0, unattributedOrders: 0 }
+  const page = {
+    customers: [], shopTags: [], stats: { customers: 0, bookedOrders: 0, spend: 0 }, total: 0, unattributedOrders: 0,
+  }
 
   function stubFetch() {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => page })
@@ -1352,15 +1354,15 @@ describe('fetchShopCustomers', () => {
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/api\/merchants\/m1\/customers$/)
   })
 
-  it('carries sort, tag, search and paging as query params', async () => {
+  it('carries sort, segment, tag, search and paging as query params', async () => {
     __mocks.getSession.mockResolvedValueOnce({ data: { session: { access_token: 'tok' } } })
     const fetchMock = stubFetch()
 
-    await fetchShopCustomers('m1', { sort: 'spend', tag: 'vip', search: 'ali', page: 2, pageSize: 25 })
+    await fetchShopCustomers('m1', { sort: 'spend', segment: 'members', tag: 'vip', search: 'ali', page: 2, pageSize: 25 })
 
     const url = new URL(fetchMock.mock.calls[0][0] as string, 'http://x')
     expect(Object.fromEntries(url.searchParams)).toEqual({
-      sort: 'spend', tag: 'vip', search: 'ali', page: '2', pageSize: '25',
+      sort: 'spend', segment: 'members', tag: 'vip', search: 'ali', page: '2', pageSize: '25',
     })
   })
 

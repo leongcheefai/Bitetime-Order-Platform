@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
  * Base: bg-card, border-border, rounded-2xl, p-5 (1.25rem).
  * Screens pass className to override for variants:
  *   - rose border:   "border-border"
- *   - oxblood tint:  "bg-brand-100 border-border"
+ *   - oxblood tint:  "bg-brand-wash border-border"
  *   (Auth cards used to override to "rounded-pill". That token was 20px and read as a soft
  *    panel; it is now 9999px and would render the whole card as a circle. They use the base
  *    radius. `rounded-pill` is for chips and small controls only.)

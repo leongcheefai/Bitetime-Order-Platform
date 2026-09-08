@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import type { User } from '@supabase/auth-js'
 import { onAuthChange, fetchProfileByUserId, lookupMyMerchant, lookupMerchantBySlug, getCurrentUser } from './store'
@@ -81,11 +81,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [])
   const stopImpersonating = useCallback(() => setImpersonatedMerchant(null), [])
 
-  const t = (en: string, zh?: string) => (lang === 'zh' ? (zh ?? en) : en)
-  const refreshProfile = () => loadProfile(account ?? null)
+  // Stable identities, and the value memoised over them: this provider sits above every
+  // screen, and a fresh `value` object per render re-rendered every `useSession()` consumer
+  // on any state change — while a fresh `t` closure defeated every `memo()` it was passed to
+  // (the landing hero's animated preview re-rendered on each tick for exactly that reason).
+  const t = useCallback((en: string, zh?: string) => (lang === 'zh' ? (zh ?? en) : en), [lang])
+  const refreshProfile = useCallback(() => loadProfile(account ?? null), [loadProfile, account])
   // Resolve the user freshly rather than closing over `account`, which is stale
   // immediately after signup/login (the just-signed-in user isn't in this render yet).
-  const refreshMerchant = async () => {
+  const refreshMerchant = useCallback(async () => {
     // While impersonating, refresh the viewed shop — never clobber it with own merchant, and
     // never blank it on a could-not-ask (a dropped packet keeps the current shop).
     if (impersonatedMerchant) {
@@ -95,9 +99,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     }
     const user = await getCurrentUser()
     await loadOwnMerchant(user?.id)
-  }
+  }, [impersonatedMerchant, loadOwnMerchant])
 
-  const value: SessionValue = { account, profile, role, merchant, ownMerchant, merchantUnknown, impersonating: !!impersonatedMerchant, impersonate, stopImpersonating, loading: account === undefined || !profileLoaded || !merchantLoaded, lang, setLang, t, refreshProfile, refreshMerchant }
+  const loading = account === undefined || !profileLoaded || !merchantLoaded
+  const impersonating = !!impersonatedMerchant
+  const value: SessionValue = useMemo(
+    () => ({ account, profile, role, merchant, ownMerchant, merchantUnknown, impersonating, impersonate, stopImpersonating, loading, lang, setLang, t, refreshProfile, refreshMerchant }),
+    [account, profile, role, merchant, ownMerchant, merchantUnknown, impersonating, impersonate, stopImpersonating, loading, lang, t, refreshProfile, refreshMerchant],
+  )
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>
 }
 

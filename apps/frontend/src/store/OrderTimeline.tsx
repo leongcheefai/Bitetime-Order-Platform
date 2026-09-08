@@ -45,7 +45,7 @@ export default function OrderTimeline({
     return (
       <div className="flex items-center gap-2.5 rounded-lg border border-danger-500 bg-danger-100 px-3 py-2.5 mt-3">
         <Ban className="size-4 shrink-0 text-danger" strokeWidth={1.75} />
-        <span className="text-[13px] font-medium text-danger">{t('Order cancelled', '订单已取消')}</span>
+        <span className="text-[13px] font-medium text-danger-fg">{t('Order cancelled', '订单已取消')}</span>
       </div>
     )
   }
@@ -94,7 +94,7 @@ export default function OrderTimeline({
                 'relative z-[1] flex size-7 items-center justify-center rounded-pill transition-colors',
                 reached
                   ? 'bg-primary text-primary-foreground'
-                  : 'border-[0.5px] border-border bg-card text-ink-400',
+                  : 'border-[0.5px] border-border bg-card text-muted-foreground',
                 // The live step gets a soft halo so the eye lands on it first.
                 current && 'ring-4 ring-primary/15',
               )}
