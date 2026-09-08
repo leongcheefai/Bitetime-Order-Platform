@@ -4,8 +4,8 @@
 // (service_role), which BYPASSES guard_merchant_status, so if the handler ever spread a
 // raw client body into .insert() a caller could self-activate their own shop or plant it
 // under someone else's owner_id. See CLAUDE.md → Backend, Global Constraint 1.
-import { describe, it, expect, beforeEach } from 'vitest'
-import { app } from '../../src/app.js'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { app, platformNotifyDeps } from '../../src/app.js'
 import { SHOP_DESCRIPTION_MAX } from '@bitetime/shared'
 import { makeUser, seedMerchant, serviceClient, resetMerchant } from '../rls/helpers.js'
 
@@ -98,6 +98,43 @@ describe('POST /api/merchants', () => {
   it('401 without a token', async () => {
     const res = await post('/api/merchants', {})
     expect(res.status).toBe(401)
+  })
+
+  // The superadmin's own Telegram alert. Every shop row produces one, including the shop Stripe
+  // refused — which is the case that matters, because a `pending` shop sells nothing and nobody
+  // learns of it unless someone opens /admin. The send is fire-and-forget, so the assertion
+  // waits for it rather than assuming the response ordered it.
+  it('tells the platform Telegram chat about the new shop', async () => {
+    await resetMerchant('alert-cafe')
+    const client = await makeUser('create-alert@example.com', 'password123')
+    const { token } = await tokenOf(client)
+
+    const sent: Array<[string, string, string]> = []
+    const telegram = platformNotifyDeps.telegram
+    const config = platformNotifyDeps.config
+    platformNotifyDeps.telegram = async (t, chatId, text) => { sent.push([t, chatId, text]) }
+    platformNotifyDeps.config = { token: 'platform-tok', chatId: '-100999' }
+
+    try {
+      const res = await post('/api/merchants', { name: 'Alert Cafe', businessNature: 'bakery' }, token)
+      expect(res.status).toBe(200)
+      const m = (await res.json()) as MerchantRow
+
+      await vi.waitFor(() => expect(sent).toHaveLength(1))
+      const [usedToken, usedChat, text] = sent[0]
+      expect(usedToken).toBe('platform-tok')
+      expect(usedChat).toBe('-100999')
+      expect(text).toContain('Alert Cafe')
+      expect(text).toContain('alert-cafe')
+      expect(text).toContain('create-alert@example.com')
+      // Stripe is stubbed in this config and can never authenticate, so the shop is parked.
+      expect(text).toContain('pending')
+
+      await serviceClient().from('merchants').delete().eq('id', m.id)
+    } finally {
+      platformNotifyDeps.telegram = telegram
+      platformNotifyDeps.config = config
+    }
   })
 
   // Signup provisions the trial itself — no approval in the path. This suite is network-free and
