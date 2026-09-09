@@ -76,10 +76,20 @@ describe('an active shop', () => {
     expect(ld.makesOffer).toHaveLength(20)
     expect(ld.makesOffer[0]).toEqual({
       '@type': 'Offer',
+      name: 'Item 0',
       price: 1,
       priceCurrency: 'MYR',
-      itemOffered: { '@type': 'Product', name: 'Item 0' },
+      availability: 'https://schema.org/InStock',
     })
+  })
+
+  // Google reads every Product node it finds and demands offers/review/aggregateRating on it.
+  // This module holds a name and a price per item and nothing else, so it names no Product at all.
+  it('names no Product node in the JSON-LD', () => {
+    const res = { ...shop(), products: [{ name: 'Item 0', price: 1 }] } as StorefrontResolution
+    const doc = buildStorefrontDocument(SHELL, req(), res)
+    const m = doc.body.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)
+    expect(m![1]).not.toContain('Product')
   })
 
   it('escapes merchant text in head markup', () => {
