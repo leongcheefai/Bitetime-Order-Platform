@@ -144,11 +144,20 @@ function jsonLd(
   description: string,
 ) {
   const currency = shop.currency || 'MYR'
+  // The item name rides on the Offer, and there is deliberately no `itemOffered: {'@type':
+  // 'Product'}` node. Google validates every Product it finds against the Product rich result,
+  // which demands one of offers/review/aggregateRating on the Product ITSELF — a bare name is an
+  // invalid item ("Either offers, review, or aggregateRating should be specified", first seen
+  // 2026-09-07). Nesting a second Offer inside each Product would clear the error and then earn a
+  // warning per item for the fields this module does not hold: a StorefrontProduct is a name and a
+  // price, with no image and no description, so no menu item here can ever win a product snippet.
+  // An Offer carrying `name` says the same true thing and claims nothing it cannot support.
   const offers = products.slice(0, OFFER_CAP).map((p) => ({
     '@type': 'Offer',
+    name: p.name,
     price: p.price,
     priceCurrency: currency,
-    itemOffered: { '@type': 'Product', name: p.name },
+    availability: 'https://schema.org/InStock',
   }))
   return {
     '@context': 'https://schema.org',
