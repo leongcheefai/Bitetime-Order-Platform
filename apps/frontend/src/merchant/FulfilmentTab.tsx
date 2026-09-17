@@ -7,7 +7,7 @@ import CustomDatesCalendar from './CustomDatesCalendar'
 import {
   fulfilmentConfig, customDateBounds, pruneCustomDates, validateCustomDates,
   DEFAULT_TIMEZONE, FULFILMENT_HORIZON_DAYS,
-  SLOT_MINUTES, slotsBetween, validateSlotHours,
+  SLOT_MINUTES, slotsBetween, validateSlotHours, minutesToTime,
   type FulfilmentMode, type CustomDatesError, type SlotHoursError, type SlotMinutes,
 } from '@bitetime/shared'
 import { Button } from '../components/ui/button'
@@ -54,6 +54,29 @@ const NOTICE_OPTIONS: { value: number; en: string; zh: string }[] = [
   { value: 240, en: '4 hours', zh: '4 小时' },
   { value: 1440, en: '1 day', zh: '1 天' },
 ]
+
+/**
+ * Every half hour of the day, `00:00` … `23:30`, for the opening-hours selects. A list rather than
+ * a native `<input type="time">`: the merchant picks and never types, so a cleared field or a
+ * `9:00` can never reach the row, and the AM/PM segments of the native control are gone. The
+ * half-hour step matches the smallest slot length.
+ */
+const HALF_HOURS: string[] = Array.from({ length: 48 }, (_, i) => minutesToTime(i * 30))
+
+function TimeSelect({ id, value, disabled, label, onChange }: {
+  id: string; value: string; disabled: boolean; label: string; onChange: (v: string) => void
+}) {
+  return (
+    <Select value={value} onValueChange={v => { if (v) onChange(v) }} disabled={disabled}>
+      <SelectTrigger id={id} className="w-full" aria-label={label}>
+        <span className="tabular-nums">{value}</span>
+      </SelectTrigger>
+      <SelectContent>
+        {HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  )
+}
 
 const rowsFromHours = (hours: ({ open: string; close: string } | null)[]): HoursRow[] =>
   hours.map(h => (h ? { open: h.open, close: h.close, closed: false } : { ...DEFAULT_ROW }))
@@ -406,13 +429,11 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
                       />
                       {t(d.en, d.zh)}
                     </label>
-                    <Input type="time" step={1800} value={row.open} disabled={row.closed} variant="compact"
-                      aria-label={t(`${d.en} opens`, `${d.zh}开门`)}
-                      onChange={e => setRow({ open: e.target.value })} />
+                    <TimeSelect id={`ff-open-${d.value}`} value={row.open} disabled={row.closed}
+                      label={t(`${d.en} opens`, `${d.zh}开门`)} onChange={open => setRow({ open })} />
                     <span className="text-muted-foreground">–</span>
-                    <Input type="time" step={1800} value={row.close} disabled={row.closed} variant="compact"
-                      aria-label={t(`${d.en} closes`, `${d.zh}关门`)}
-                      onChange={e => setRow({ close: e.target.value })} />
+                    <TimeSelect id={`ff-close-${d.value}`} value={row.close} disabled={row.closed}
+                      label={t(`${d.en} closes`, `${d.zh}关门`)} onChange={close => setRow({ close })} />
                   </div>
                 )
               })}
