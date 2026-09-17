@@ -5,7 +5,7 @@ import type { Lang, Translate } from '../types'
 import { useSession } from '../SessionContext'
 import { fetchMerchantOrders, fetchOrderStatusCounts, type OrderListQuery } from '../store'
 import { formatMoney } from '../currency'
-import { formatCalendarDate } from '../orderDate'
+import { formatCalendarDate, formatSlotRange } from '../orderDate'
 import { fmtDateTime } from '../merchantDate'
 import { SkeletonText } from '../components/Loaders'
 import { DataTable, SortableHeader } from '@/components/ui/data-table'
@@ -52,9 +52,14 @@ const columns: ColumnDef<any>[] = [
     cell: ({ row, table }) => {
       const meta = table.options.meta as OrderTableMeta
       return (
-        <span className="whitespace-nowrap">
+        <div className="whitespace-nowrap">
           {row.original.fulfil_date ? formatCalendarDate(row.original.fulfil_date, meta.lang) : '—'}
-        </span>
+          {row.original.fulfil_time_from && (
+            <div className="text-[12px] text-muted-foreground tabular-nums">
+              {formatSlotRange(row.original.fulfil_time_from, row.original.fulfil_time_to)}
+            </div>
+          )}
+        </div>
       )
     },
   },

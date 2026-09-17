@@ -88,7 +88,7 @@ import {
   updateReleaseStatus, updateReleaseHumanization,
   listPublishedReleases, getPublishedReleaseByTag,
 } from './releasesDb.js'
-import { canIssueInvoice, validateOrderReview, isCart, isBusinessNature, isCurrencyCode, DEFAULT_CURRENCY, validateOptionGroups, optionGroupsFromRow, validateFeedback, isFeedbackStatus, validateFeedbackImages, validateTrialFeedback, shopDistance, routedKm, distanceFee, REFUSAL_STATUS, QUOTE_REFUSAL_STATUS, DEFAULT_TIMEZONE, isTimezone, computeMerchantStats, ordersInWindow, windowTotals, todayInZone, granularityFor, fulfilmentConfig, validateCustomDates, MAX_CUSTOM_DATES, pendingShopFromBody, pendingShopMetadata, menuCategoriesFromRow } from '@bitetime/shared'
+import { canIssueInvoice, validateOrderReview, isCart, isBusinessNature, isCurrencyCode, DEFAULT_CURRENCY, validateOptionGroups, optionGroupsFromRow, validateFeedback, isFeedbackStatus, validateFeedbackImages, validateTrialFeedback, shopDistance, routedKm, distanceFee, REFUSAL_STATUS, QUOTE_REFUSAL_STATUS, DEFAULT_TIMEZONE, isTimezone, computeMerchantStats, ordersInWindow, windowTotals, todayInZone, granularityFor, fulfilmentConfig, validateCustomDates, validateSlotHours, MAX_CUSTOM_DATES, pendingShopFromBody, pendingShopMetadata, menuCategoriesFromRow } from '@bitetime/shared'
 import type { CartLine, Granularity } from '@bitetime/shared'
 import { buildRevenueWorkbook, reportFilename, type ReportWindow } from './report.js'
 import { resolveRevenueRange, type ResolvedRevenueRange } from './revenueWindow.js'
@@ -383,6 +383,10 @@ app.patch('/api/merchants/:id', requireMerchantOwns, async (c) => {
     const storedConfig = (stored.config ?? null) as Record<string, unknown> | null
     if (submitted.fulfilment !== undefined) {
       const fulfilment = fulfilmentConfig(submitted)
+      // The RAW hours (#282), for the reason `too_many` counts the raw allowlist: the reader
+      // turns a `close <= open` day into a closed one, and a merchant who typed it must be told.
+      const badHours = validateSlotHours((submitted.fulfilment as Record<string, unknown>)?.hours, fulfilment)
+      if (badHours) return c.json({ error: badHours }, 400)
       if (fulfilment.mode === 'custom') {
         // Counted on the RAW array, before `fulfilmentConfig` caps it: validating the truncated
         // list could never report `too_many`, so a 200-date body saved 91 of them silently —
@@ -3328,6 +3332,9 @@ app.post('/api/orders', async (c) => {
   // date is `placeOrder`'s call, because the window is the shop's rule and not HTTP's — the
   // same split as `mode` (allowlisted here) versus the delivery region (refused there).
   const fulfilDate = typeof b.fulfilDate === 'string' ? b.fulfilDate : null
+  // Same split as the date: the SHAPE here, the rule in `placeOrder` (#282).
+  const fulfilTimeFrom = typeof b.fulfilTimeFrom === 'string' ? b.fulfilTimeFrom : null
+  const fulfilTimeTo = typeof b.fulfilTimeTo === 'string' ? b.fulfilTimeTo : null
 
   if (
     typeof b.merchantId !== 'string' || !b.merchantId ||
@@ -3361,6 +3368,8 @@ app.post('/api/orders', async (c) => {
       quotedTotal,
       voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
       fulfilDate,
+      fulfilTimeFrom,
+      fulfilTimeTo,
       // Lifted off the ADDRESS, not a sibling body field: it is a property of where the parcel
       // goes, and keeping the two together is what stops an address and a place id from
       // disagreeing. The distance itself is never read from the body — see placeOrder.

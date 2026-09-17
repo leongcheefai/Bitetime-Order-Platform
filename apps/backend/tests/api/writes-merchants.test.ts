@@ -785,6 +785,17 @@ describe('PATCH /api/merchants/:id (custom order dates)', () => {
     expect(f.custom_dates).toEqual([iso(7)])
   })
 
+  it('keeps the stored hours when the body carries no fulfilment bag', async () => {
+    const hours = Array.from({ length: 7 }, () => ({ open: '10:00', close: '12:00' }))
+    await setStored({ mode: 'rolling', slots_enabled: true, hours, slot_minutes: 30 })
+    const res = await patch(`/api/merchants/${merchantId}`, { config: { something_else: 1 } }, ownerToken)
+    expect(res.status).toBe(200)
+    const f = ((await res.json()) as any).config.fulfilment
+    expect(f.slots_enabled).toBe(true)
+    expect(f.slot_minutes).toBe(30)
+    expect(f.hours).toEqual(hours)
+  })
+
   it('leaves a shop with no stored fulfilment alone rather than inventing one', async () => {
     await serviceClient().from('merchants').update({ config: {} }).eq('id', merchantId)
     const res = await patch(`/api/merchants/${merchantId}`, { config: { something_else: 1 } }, ownerToken)
@@ -800,6 +811,31 @@ describe('PATCH /api/merchants/:id (custom order dates)', () => {
     const res = await save({ mode: 'custom', custom_dates: many })
     expect(res.status).toBe(400)
     expect(((await res.json()) as any).error).toBe('too_many')
+  })
+
+  // Time slots (#282): the hours are judged RAW, because the reader would hide the mistake.
+  it('refuses hours whose close is not after open', async () => {
+    const res = await save({ slots_enabled: true, hours: [null, { open: '14:00', close: '10:00' }] })
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as any).error).toBe('close_before_open')
+  })
+
+  it('refuses turning slots on with no open day', async () => {
+    const res = await save({ slots_enabled: true, hours: [null, null, null, null, null, null, null] })
+    expect(res.status).toBe(400)
+    expect(((await res.json()) as any).error).toBe('no_open_day')
+  })
+
+  it('saves slot settings normalised, and does not judge hours while slots are off', async () => {
+    const ok = await save({ slots_enabled: false, hours: [{ open: '14:00', close: '10:00' }] })
+    expect(ok.status).toBe(200)
+    const res = await save({ slots_enabled: true, hours: Array(7).fill({ open: '10:00', close: '12:00' }), slot_minutes: 30, slot_notice_minutes: 90 })
+    expect(res.status).toBe(200)
+    const f = ((await res.json()) as any).config.fulfilment
+    expect(f.slots_enabled).toBe(true)
+    expect(f.slot_minutes).toBe(30)
+    expect(f.slot_notice_minutes).toBe(90)
+    expect(f.hours).toHaveLength(7)
   })
 
   it('normalises the fulfilment key without disturbing the rest of the config bag', async () => {

@@ -4,7 +4,7 @@
  *
  * Shared for the reason `refusal.ts` is: the backend writes a kind, the drawer renders a
  * sentence for it, and the two must agree. Adding a kind means three places — this list, the
- * CHECK constraint on `order_events.kind` (last moved in `20260904150000_order_events_fulfil_date.sql`), and the drawer's sentence table, whose
+ * CHECK constraint on `order_events.kind` (last moved in `20260917120100_order_events_fulfil_time.sql`), and the drawer's sentence table, whose
  * exhaustiveness test fails until the new kind has words.
  *
  * WHAT IS NOT HERE: the sentence. `t(en, zh)` is the browser's, and the merchant's own actions
@@ -27,6 +27,8 @@ export const ORDER_EVENT_KINDS = [
   'awb_changed',
   /** `detail.from` → `detail.to`, `YYYY-MM-DD`. `from` is null for an order placed before #91. */
   'fulfil_date_changed',
+  /** `detail.from` → `detail.to`, each `'HH:MM-HH:MM'` or null (#282). A slot shop can move one but never clear it. */
+  'fulfil_time_changed',
   /** A cancellation returned the voucher use this order spent (ADR 0023). `detail.code`. */
   'voucher_released',
   /** Un-cancelling took the voucher use back (ADR 0023). `detail.code`. */

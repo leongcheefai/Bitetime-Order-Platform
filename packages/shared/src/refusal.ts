@@ -77,6 +77,10 @@ export type OrderRefusal =
   | 'fulfil_date_unavailable'
   /** No date on an order that needs one. */
   | 'fulfil_date_required'
+  /** The chosen slot is outside the shop's hours, off the grid, or too close to now. Also: one end without the other (#282). */
+  | 'fulfil_time_unavailable'
+  /** No slot on an order at a shop that asks for one. */
+  | 'fulfil_time_required'
   /**
    * A distance-priced shop was handed a delivery with no destination place id. The same rule as
    * `delivery_state_required` one policy over: an unresolvable destination is REFUSED, never
@@ -150,6 +154,8 @@ export const REFUSAL_STATUS: Record<OrderRefusal, 400 | 404 | 409 | 500> = {
   delivery_state_required: 409,
   fulfil_date_unavailable: 409,
   fulfil_date_required: 409,
+  fulfil_time_unavailable: 409,
+  fulfil_time_required: 409,
   delivery_place_required: 409,
   delivery_out_of_range: 409,
   method_not_offered: 409,

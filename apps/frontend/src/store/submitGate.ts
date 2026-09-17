@@ -1,4 +1,4 @@
-import type { FulfilmentMethod } from '@bitetime/shared'
+import type { FulfilmentMethod, Slot } from '@bitetime/shared'
 
 /**
  * Whether this order may be placed — the decision the Place Order button is disabled by and
@@ -28,6 +28,10 @@ export interface SubmitGateInput {
   readonly quoted: boolean
   /** The chosen date, still one the shop offers. `null` once it stops being offered. */
   readonly chosenDate: string | null
+  /** The shop asks for a time slot (#282). */
+  readonly slotRequired: boolean
+  /** The chosen slot, still one the shop offers on the chosen date. `null` once it stops being offered. */
+  readonly chosenSlot: Slot | null
   /** The shop offers no fulfilment method at all. Unconstructible past the DB CHECK; refused anyway. */
   readonly noMethods: boolean
   /** A submission is already in flight. */
@@ -75,6 +79,7 @@ export function submitGate(input: SubmitGateInput): SubmitGate {
     !input.busy &&
     deliveryReady &&
     input.chosenDate !== null &&
+    (!input.slotRequired || input.chosenSlot !== null) &&
     !input.noMethods
 
   return { deliveryReady, canSubmit }

@@ -12,7 +12,7 @@ import { useDeliveryQuote } from './useDeliveryQuote'
 import { submitGate } from './submitGate'
 import { pruneCart, pruneMessage, nextCart, repairCart, plainQty, cartRefusalMessage } from './cartRules'
 import type { CartTarget } from './cartRules'
-import { canIssueInvoice, priceOrder, voucherError, shopRates, shopTax, shopDistance, shopMethods, firstOfferedMethod, FULFILMENT_METHODS, productFromRow, optionGroupsFromRow, menuCategoriesFromRow, cartLineKey, promoState, selectableDates, fulfilmentConfig, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import { canIssueInvoice, priceOrder, voucherError, shopRates, shopTax, shopDistance, shopMethods, firstOfferedMethod, FULFILMENT_METHODS, productFromRow, optionGroupsFromRow, menuCategoriesFromRow, cartLineKey, promoState, selectableDates, selectableSlots, fulfilmentConfig, DEFAULT_TIMEZONE, type Slot } from '@bitetime/shared'
 import type { FulfilmentMethod, CartLine, PickSnapshot } from '@bitetime/shared'
 import { prefillFromProfile, savedDetailsFromOrder, carriesAddress } from '../savedDetails'
 import { fulfilmentLabel, feeLineLabel } from '../fulfilmentLabel'
@@ -37,6 +37,7 @@ import { OptionPicker } from './OptionPicker'
 import { ItemSelections } from '../ItemSelections'
 import CheckoutGate, { GuestStrip } from './CheckoutGate'
 import FulfilDatePicker from './FulfilDatePicker'
+import FulfilSlotPicker from './FulfilSlotPicker'
 import AddressAutocomplete from './AddressAutocomplete'
 import MoneyLine from './MoneyLine'
 import PaymentProofUpload from './PaymentProofUpload'
@@ -44,7 +45,7 @@ import PaymentInstructions from './PaymentInstructions'
 import OrderReviewCard from './OrderReviewCard'
 import { checkoutStep, readGuestChoice, rememberGuestChoice } from '../checkoutGate'
 import { cn } from '@/lib/utils'
-import { formatCalendarDate } from '../orderDate'
+import { formatCalendarDate, formatSlotRange } from '../orderDate'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -100,6 +101,8 @@ interface SuccessState {
    * dateless order be submitted, so a placed order always has one.
    */
   fulfilDate: string | null
+  /** The slot they asked for (#282), echoed back. `null` at a shop with slots off. */
+  fulfilSlot: Slot | null
   /**
    * The status intake assigned, READ BACK rather than re-derived here.
    *
@@ -144,6 +147,7 @@ export default function Storefront() {
   // The product whose questions the customer is answering, or null. See `OptionPicker`.
   const [picking, setPicking] = useState<Product | null>(null)
   const [fulfilDate, setFulfilDate] = useState<string | null>(null)
+  const [fulfilSlot, setFulfilSlot] = useState<Slot | null>(null)
 
   // Prefill is DERIVED, never copied into state by an effect. `null` means "the customer hasn't
   // touched this field", so a profile that arrives a beat after the page fills the form — while a
@@ -424,12 +428,28 @@ export default function Storefront() {
   // from a fresh render. So a checkout left open past midnight CAN still submit a stale date;
   // what closes that case is the backend's refusal plus the `setFulfilDate(null)` recovery in
   // handleSubmit's catch branch (see `fulfil_date_unavailable` below), not this list by itself.
-  const fulfilDates = useMemo(
-    () => selectableDates(fulfilmentConfig(merchant.config), merchant.timezone ?? DEFAULT_TIMEZONE, now),
-    [merchant.config, merchant.timezone, now],
-  )
+  const fulfilCfg = useMemo(() => fulfilmentConfig(merchant.config), [merchant.config])
+  const shopTz = merchant.timezone ?? DEFAULT_TIMEZONE
+  const fulfilDates = useMemo(() => selectableDates(fulfilCfg, shopTz, now), [fulfilCfg, shopTz, now])
   // A date the shop stopped offering while the page sat open is not a selection any more.
   const chosenDate = fulfilDate && fulfilDates.includes(fulfilDate) ? fulfilDate : null
+  // The slots of the chosen date (#282), and the same guard for the slot: one that passed
+  // `now + notice` while the customer typed leaves the summary before the backend refuses it.
+  const fulfilSlots = useMemo(
+    () => (chosenDate ? selectableSlots(chosenDate, fulfilCfg, shopTz, now) : []),
+    [chosenDate, fulfilCfg, shopTz, now],
+  )
+  const chosenSlot = fulfilSlot && fulfilSlots.some(s => s.from === fulfilSlot.from && s.to === fulfilSlot.to) ? fulfilSlot : null
+
+  // Nothing else re-renders this page as time passes, and today's 15:00 slot must not sit on
+  // screen at 15:10. One tick a minute while slots are on; `now` is read fresh on every render,
+  // so the tick's only job is to cause one. The backend still decides.
+  const [, setMinuteTick] = useState(0)
+  useEffect(() => {
+    if (!fulfilCfg.slots_enabled) return
+    const id = setInterval(() => setMinuteTick(n => n + 1), 60_000)
+    return () => clearInterval(id)
+  }, [fulfilCfg.slots_enabled])
 
   // The menu, mapped once for the pricing rule: the rows arrive snake_cased from PostgREST and
   // `priceOrder` reads `promoPrice`. Unmapped, every promo silently prices at the base price here
@@ -522,7 +542,7 @@ export default function Storefront() {
     name, wa, mode, address,
     distanceUsable: distance.usable,
     quoted: quote !== null,
-    chosenDate, noMethods, busy,
+    chosenDate, slotRequired: fulfilCfg.slots_enabled, chosenSlot, noMethods, busy,
   })
 
   /**
@@ -719,6 +739,8 @@ export default function Storefront() {
         requote()
       } else if (action === 'clear_date') {
         setFulfilDate(null)
+      } else if (action === 'clear_slot') {
+        setFulfilSlot(null)
       } else if (action === 'repair_selections') {
         // AFTER `refresh_sources`, which is why the plan returns an ORDERED list and this loop
         // walks it rather than choosing for itself: against the stale menu this would keep the
@@ -833,6 +855,7 @@ export default function Storefront() {
         quotedTotal: total,
         voucherCode: appliedVoucher?.code ?? null,
         fulfilDate: chosenDate,
+        fulfilSlot: chosenSlot,
       })
       if (!result.ok) {
         // Which refusal this is, what the customer is told, and what we do about it are all one
@@ -876,6 +899,7 @@ export default function Storefront() {
         // only be present or this was never a distance order at all.
         feeKm: quote ? quote.km : null,
         fulfilDate: chosenDate,
+        fulfilSlot: chosenSlot,
         status: result.data.status,
       })
       toast.success(t('Order placed!', '订单已提交！'))
@@ -955,6 +979,12 @@ export default function Storefront() {
               <p className="text-[15px] text-primary mb-5 tracking-[0.5px]">
                 {t('For', '取货日期')}:<br />
                 <strong className="text-[16px]">{formatCalendarDate(success.fulfilDate, lang)}</strong>
+                {success.fulfilSlot && (
+                  <>
+                    <br />
+                    <strong className="text-[16px] tabular-nums">{formatSlotRange(success.fulfilSlot.from, success.fulfilSlot.to)}</strong>
+                  </>
+                )}
               </p>
             )}
 
@@ -1494,15 +1524,22 @@ export default function Storefront() {
           {/* When */}
           <div className="mb-7">
             <div className="text-[11px] font-medium text-primary uppercase tracking-[0.09em] mb-3">
-              {t('Date', '日期')} *
+              {fulfilCfg.slots_enabled ? t('Date and time', '日期与时段') : t('Date', '日期')} *
             </div>
             <FulfilDatePicker
               available={fulfilDates}
               value={chosenDate}
-              onChange={setFulfilDate}
+              // A new day has new slots: the old slot is not a choice on it.
+              onChange={d => { setFulfilDate(d); setFulfilSlot(null) }}
               t={t}
               lang={lang}
             />
+            {fulfilCfg.slots_enabled && chosenDate && (
+              <div className="mt-4">
+                <div className="text-[12px] text-muted-foreground mb-2">{t('Time slot', '时段')}</div>
+                <FulfilSlotPicker slots={fulfilSlots} value={chosenSlot} onChange={setFulfilSlot} t={t} />
+              </div>
+            )}
           </div>
 
           <hr className="border-0 border-t border-border my-6" />

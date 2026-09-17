@@ -1,9 +1,10 @@
 import type postgres from 'postgres'
-import { priceOrder, validateSelections, voucherFromRow, voucherExpired, voucherBelowMinimum, shopRates, shopTax, shopDistance, shopMethods, offersMethod, routedKm, isDistancePriced, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import { priceOrder, validateSelections, voucherFromRow, voucherExpired, voucherBelowMinimum, shopRates, shopTax, shopDistance, shopMethods, offersMethod, routedKm, isDistancePriced, productFromRow, promoClaims, fulfilmentConfig, isDateSelectable, isSlotSelectable, DEFAULT_TIMEZONE } from '@bitetime/shared'
 import type { CartLine, PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax, ShopDistance, ShopMethods, OrderRefusal, OrderEvent } from '@bitetime/shared'
 import { sql, withTransaction } from './db.js'
 import { recordOrderEvents, SYSTEM_ACTOR, type OrderActor } from './orderEventsDb.js'
 import { orderPatchEvents, type OrderPatch, type OrderPatchBefore } from './orderEvents.js'
+import { judgeSlotPatch } from './orderSlotPatch.js'
 import { syncOrderRedemptionVoid } from './voucherRedemptionsDb.js'
 import { phoneKey } from './phone.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
@@ -69,6 +70,13 @@ export interface PlaceOrderInput {
    * it runs in the customer's browser, and a body is a body.
    */
   fulfilDate: string | null
+  /**
+   * The slot the customer asked for (#282), `HH:MM` both ends, on the SHOP's clock. Judged
+   * against the shop's hours the way `fulfilDate` is judged against its window. Both null when
+   * the customer sent none; at a shop with slots off, both are IGNORED and the row stores nulls.
+   */
+  fulfilTimeFrom: string | null
+  fulfilTimeTo: string | null
   /**
    * The destination's stable place identifier, lifted off the address the customer submitted.
    *
@@ -182,6 +190,26 @@ export async function placeOrder(
     if (!isDateSelectable(input.fulfilDate, merchant.fulfilment, merchant.timezone, now)) {
       throw new OrderError('fulfil_date_unavailable')
     }
+
+    // The slot (#282), judged by the same rule the picker was built from, and BEFORE the counter
+    // moves for the same reason as the date. Two codes again: "you sent no slot" and "that slot
+    // is not open" want different things of the customer. A shop with slots OFF ignores whatever
+    // the body says — a customer who loaded the page before the merchant flipped the switch must
+    // not be refused for it — and the row stores nulls.
+    const slotsOn = merchant.fulfilment.slots_enabled
+    if (slotsOn) {
+      if (input.fulfilTimeFrom == null && input.fulfilTimeTo == null) {
+        throw new OrderError('fulfil_time_required')
+      }
+      if (
+        input.fulfilTimeFrom == null || input.fulfilTimeTo == null ||
+        !isSlotSelectable(input.fulfilDate, { from: input.fulfilTimeFrom, to: input.fulfilTimeTo }, merchant.fulfilment, merchant.timezone, now)
+      ) {
+        throw new OrderError('fulfil_time_unavailable')
+      }
+    }
+    const fulfilTimeFrom = slotsOn ? input.fulfilTimeFrom : null
+    const fulfilTimeTo = slotsOn ? input.fulfilTimeTo : null
 
     const day = orderDay(now)
 
@@ -300,7 +328,7 @@ export async function placeOrder(
     const [{ id, status }] = await tx<{ id: string; status: string }[]>`
       insert into orders (
         merchant_id, user_id, customer_name, customer_wa, customer_phone_key, mode, address,
-        shipping_fee, items, total, currency, discount, tax, tax_rate, voucher_code, fulfil_date, order_number, status,
+        shipping_fee, items, total, currency, discount, tax, tax_rate, voucher_code, fulfil_date, fulfil_time_from, fulfil_time_to, order_number, status,
         delivery_distance_km, delivery_base_fee, delivery_rate_per_km
       ) values (
         ${input.merchantId},
@@ -328,6 +356,8 @@ export async function placeOrder(
         -- the browser used to make.
         ${discount ? (input.voucherCode ?? null) : null},
         ${input.fulfilDate},
+        ${fulfilTimeFrom},
+        ${fulfilTimeTo},
         ${orderNumber},
         -- Born pending_payment when the shop takes manual payment (has bank/QR/note to show the
         -- customer) — #182. Otherwise 'new', unchanged. Never taken from the caller, same reason
@@ -468,7 +498,7 @@ export function setOrderMerchantPaymentProof(orderId: string, path: string, merc
  * statement.
  */
 /** Why a merchant patch was not applied. Each is a wire code the drawer has words for. */
-export type PatchRefusal = 'order_completed' | 'fulfil_date_unavailable'
+export type PatchRefusal = 'order_completed' | 'fulfil_date_unavailable' | 'fulfil_time_unavailable'
 
 export async function patchOrder(
   orderId: string,
@@ -482,7 +512,10 @@ export async function patchOrder(
     // otherwise hand a `date` column back as a JS Date, and the event's `from` must be the same
     // `YYYY-MM-DD` string the `to` is.
     const [before] = await tx<(OrderPatchBefore & { merchant_id: string; voucher_code: string | null; timezone: string | null; config: unknown })[]>`
-      select o.status, o.note, o.courier, o.awb, o.fulfil_date::text, o.merchant_id, o.voucher_code, m.timezone, m.config
+      select o.status, o.note, o.courier, o.awb, o.fulfil_date::text,
+             -- HH:MM, the shape the patch, the rule and the log all use; the driver would hand back HH:MM:SS.
+             to_char(o.fulfil_time_from, 'HH24:MI') as fulfil_time_from, to_char(o.fulfil_time_to, 'HH24:MI') as fulfil_time_to,
+             o.merchant_id, o.voucher_code, m.timezone, m.config
       from orders o join merchants m on m.id = o.merchant_id
       where o.id = ${orderId} for update of o
     `
@@ -490,6 +523,12 @@ export async function patchOrder(
     const completed = (before.status ?? 'new') === 'completed'
     if (patch.status !== undefined && completed && patch.status !== 'completed') {
       return { refused: 'order_completed' as const }
+    }
+    // A completed order's slot is as final as its date (ADR 0024). Only a slot that DIFFERS is refused.
+    if (patch.fulfil_time_from !== undefined && completed) {
+      const same = (patch.fulfil_time_from ?? null) === before.fulfil_time_from
+        && (patch.fulfil_time_to ?? null) === before.fulfil_time_to
+      if (!same) return { refused: 'order_completed' as const }
     }
     if (patch.fulfil_date !== undefined) {
       // A completed order's date is as final as its status (ADR 0024): the goods have been
@@ -506,6 +545,13 @@ export async function patchOrder(
       const open = isDateSelectable(patch.fulfil_date, fulfilmentConfig(before.config), before.timezone ?? DEFAULT_TIMEZONE, new Date())
       if (!open) return { refused: 'fulfil_date_unavailable' as const }
     }
+
+    // The slot (#282), judged against the date the row WILL hold — a moved date carries its slot
+    // along. Pure, so every branch is unit-tested; this line only asks.
+    const slotRefusal = judgeSlotPatch(
+      before, patch, fulfilmentConfig(before.config), before.timezone ?? DEFAULT_TIMEZONE, new Date(),
+    )
+    if (slotRefusal) return { refused: slotRefusal }
 
     await tx`update orders set ${tx(patch as Record<string, string | null>)} where id = ${orderId}`
 

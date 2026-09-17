@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { formatOrderDate, formatOrderDateTime, formatCalendarDate } from './orderDate'
+import { formatOrderDate, formatOrderDateTime, formatCalendarDate, formatSlotRange } from './orderDate'
 
 describe('formatOrderDate', () => {
   const iso = '2026-07-11T09:12:00Z'
@@ -89,5 +89,16 @@ describe('formatCalendarDate', () => {
     expect(formatCalendarDate(null, 'en')).toBe('')
     expect(formatCalendarDate(undefined, 'en')).toBe('')
     expect(formatCalendarDate('not-a-date', 'en')).toBe('')
+  })
+})
+
+describe('formatSlotRange', () => {
+  it('prints HH:MM – HH:MM from DB or wire values', () => {
+    expect(formatSlotRange('14:00:00', '15:00:00')).toBe('14:00 – 15:00')
+    expect(formatSlotRange('14:00', '15:00')).toBe('14:00 – 15:00')
+  })
+  it('is empty for a legacy order', () => {
+    expect(formatSlotRange(null, null)).toBe('')
+    expect(formatSlotRange('14:00', undefined)).toBe('')
   })
 })

@@ -326,5 +326,18 @@ export function pickOrderFields(body: any): Record<string, unknown> {
   if (body?.courier !== undefined) out.courier = body.courier || null
   if (body?.awb !== undefined) out.awb = String(body.awb ?? '').trim() || null
   if (typeof body?.fulfil_date === 'string' && body.fulfil_date.trim()) out.fulfil_date = body.fulfil_date.trim()
+  // The slot travels as a PAIR (#282). Two non-empty strings write both; two nulls clear both
+  // (which only a shop with slots off may do — patchOrder's call); anything else — one end, an
+  // empty string — is dropped whole, so the row can never hold half a slot. Whether the pair is
+  // an open slot on the shop's hours is patchOrder's call, judged under the row lock.
+  const tf = body?.fulfil_time_from
+  const tt = body?.fulfil_time_to
+  if (typeof tf === 'string' && tf.trim() && typeof tt === 'string' && tt.trim()) {
+    out.fulfil_time_from = tf.trim()
+    out.fulfil_time_to = tt.trim()
+  } else if (tf === null && tt === null) {
+    out.fulfil_time_from = null
+    out.fulfil_time_to = null
+  }
   return out
 }

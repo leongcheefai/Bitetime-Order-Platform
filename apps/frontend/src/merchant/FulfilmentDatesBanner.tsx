@@ -26,7 +26,7 @@ export default function FulfilmentDatesBanner({ onGoToFulfilment }: { onGoToFulf
 
   // Red for a shop that is already dark, amber for one that is about to be. The distinction is
   // the whole point of warning early rather than only reporting the outage.
-  const urgent = state.kind === 'empty' || state.kind === 'review'
+  const urgent = state.kind === 'empty' || state.kind === 'review' || state.kind === 'no_slots'
 
   // Rendered in UTC because the date string IS a calendar date, not an instant — reading it in
   // the browser's zone is how "20 Aug" becomes "19 Aug" for a merchant travelling west.
@@ -39,6 +39,9 @@ export default function FulfilmentDatesBanner({ onGoToFulfilment }: { onGoToFulf
     state.kind === 'review'
       ? t('Your shop is paused. Confirm your order dates to start taking orders again.',
            '店铺已暂停接单。请确认可选日期后重新开放。')
+      : state.kind === 'no_slots'
+        ? t('Your shop is not taking orders — time slots are on, but no open day holds a slot. Check your opening hours.',
+             '店铺目前无法接单：已开启时段，但没有任何营业日能容纳一个时段。请检查营业时间。')
       : state.kind === 'empty'
         ? t('Your shop is not taking orders — every date you picked has passed. Add more dates.',
              '店铺目前无法接单：所选日期均已过期，请添加新的日期。')

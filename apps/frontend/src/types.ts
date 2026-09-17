@@ -188,6 +188,9 @@ export interface Order {
   created_at?: string
   /** `YYYY-MM-DD`. Null on orders placed before fulfilment dates shipped. */
   fulfil_date?: string | null
+  /** `HH:MM:SS` from PostgREST. Both null on an order placed with no slot (#282). */
+  fulfil_time_from?: string | null
+  fulfil_time_to?: string | null
   /** Routed km this order was charged for. Null for region-priced orders and everything before #101. */
   delivery_distance_km?: number | null
   /** Storage path in the private `payment-proof` bucket, or null/absent. Never render this

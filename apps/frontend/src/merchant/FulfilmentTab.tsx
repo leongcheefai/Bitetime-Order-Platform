@@ -7,13 +7,16 @@ import CustomDatesCalendar from './CustomDatesCalendar'
 import {
   fulfilmentConfig, customDateBounds, pruneCustomDates, validateCustomDates,
   DEFAULT_TIMEZONE, FULFILMENT_HORIZON_DAYS,
-  type FulfilmentMode, type CustomDatesError,
+  SLOT_MINUTES, slotsBetween, validateSlotHours, minutesToTime,
+  type FulfilmentMode, type CustomDatesError, type SlotHoursError, type SlotMinutes,
 } from '@bitetime/shared'
 import { Button } from '../components/ui/button'
+import { Checkbox } from '../components/ui/checkbox'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { RadioGroup, RadioGroupItem } from '../components/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger } from '../components/ui/select'
+import { Switch } from '../components/ui/switch'
 
 const CARD = 'bg-card border-[0.5px] border-border rounded-2xl p-5 mb-8 w-full box-border max-sm:p-4 max-sm:mb-6'
 const HEADING = 'font-heading text-[15px] font-medium text-primary mb-4 flex items-center gap-2'
@@ -33,6 +36,51 @@ const WEEKDAYS: { value: number; en: string; zh: string }[] = [
   { value: 6, en: 'Sat', zh: '周六' },
 ]
 
+/**
+ * One weekday's row of the hours editor (#282). `open`/`close` are kept for a CLOSED day too, so
+ * ticking it back open restores what the merchant typed rather than a default.
+ */
+interface HoursRow { open: string; close: string; closed: boolean }
+
+const DEFAULT_ROW: HoursRow = { open: '09:00', close: '18:00', closed: true }
+
+const NOTICE_OPTIONS: { value: number; en: string; zh: string }[] = [
+  { value: 0, en: 'No notice', zh: '无需提前' },
+  { value: 30, en: '30 minutes', zh: '30 分钟' },
+  { value: 60, en: '1 hour', zh: '1 小时' },
+  { value: 90, en: '1.5 hours', zh: '1.5 小时' },
+  { value: 120, en: '2 hours', zh: '2 小时' },
+  { value: 180, en: '3 hours', zh: '3 小时' },
+  { value: 240, en: '4 hours', zh: '4 小时' },
+  { value: 1440, en: '1 day', zh: '1 天' },
+]
+
+/**
+ * Every half hour of the day, `00:00` … `23:30`, for the opening-hours selects. A list rather than
+ * a native `<input type="time">`: the merchant picks and never types, so a cleared field or a
+ * `9:00` can never reach the row, and the AM/PM segments of the native control are gone. The
+ * half-hour step matches the smallest slot length.
+ */
+const HALF_HOURS: string[] = Array.from({ length: 48 }, (_, i) => minutesToTime(i * 30))
+
+function TimeSelect({ id, value, disabled, label, onChange }: {
+  id: string; value: string; disabled: boolean; label: string; onChange: (v: string) => void
+}) {
+  return (
+    <Select value={value} onValueChange={v => { if (v) onChange(v) }} disabled={disabled}>
+      <SelectTrigger id={id} className="w-full" aria-label={label}>
+        <span className="tabular-nums">{value}</span>
+      </SelectTrigger>
+      <SelectContent>
+        {HALF_HOURS.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+      </SelectContent>
+    </Select>
+  )
+}
+
+const rowsFromHours = (hours: ({ open: string; close: string } | null)[]): HoursRow[] =>
+  hours.map(h => (h ? { open: h.open, close: h.close, closed: false } : { ...DEFAULT_ROW }))
+
 interface TabProps { onDirtyChange: (dirty: boolean) => void }
 
 export default function FulfilmentTab({ onDirtyChange }: TabProps) {
@@ -50,6 +98,10 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
       closed: cfg.closed_weekdays,
       dates: cfg.custom_dates,
       timezone: merchant!.timezone ?? DEFAULT_TIMEZONE,
+      slotsEnabled: cfg.slots_enabled,
+      hours: rowsFromHours(cfg.hours),
+      slotMinutes: String(cfg.slot_minutes),
+      notice: String(cfg.slot_notice_minutes),
     }
   }
   const [initialFields] = useState(initial)
@@ -71,12 +123,33 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
       a.window === b.window &&
       a.timezone === b.timezone &&
       a.closed.join(',') === b.closed.join(',') &&
-      a.dates.join(',') === b.dates.join(','),
+      a.dates.join(',') === b.dates.join(',') &&
+      a.slotsEnabled === b.slotsEnabled &&
+      a.slotMinutes === b.slotMinutes &&
+      a.notice === b.notice &&
+      a.hours.map(h => `${h.closed}${h.open}${h.close}`).join(',') === b.hours.map(h => `${h.closed}${h.open}${h.close}`).join(','),
     onDirtyChange,
   )
 
   const custom = fields.mode === 'custom'
-  const allClosed = !custom && fields.closed.length === 7
+  // With slots ON the weekday rule is the hours editor, and `validateSlotHours` (`no_open_day`)
+  // is what refuses a shop with every day unticked; this guard is the slots-OFF twin.
+  const allClosed = !custom && !fields.slotsEnabled && fields.closed.length === 7
+
+  /**
+   * One weekday control at a time (#282). With slots on, the hours editor's checkboxes ARE the
+   * closed days, and the "Closed days" card is hidden rather than shown beside them saying
+   * something else. Flipping the switch carries the rule across so no day reopens by surprise:
+   * on, the hours rows start from the closed days; off, the closed days are read back off the
+   * rows. On save, `closed_weekdays` is written from whichever control was live, so the row
+   * holds one truth and a shop that turns slots off later keeps the days it closed.
+   */
+  function setSlotsEnabled(on: boolean) {
+    setFields(f => on
+      ? { ...f, slotsEnabled: true, hours: f.hours.map((h, i) => (f.closed.includes(i) ? { ...h, closed: true } : h)) }
+      : { ...f, slotsEnabled: false, closed: f.hours.flatMap((h, i) => (h.closed ? [i] : [])) })
+  }
+  const closedFromHours = (hours: HoursRow[]) => hours.flatMap((h, i) => (h.closed ? [i] : []))
   // The browser's own clock rather than the server-corrected one the storefront uses: this is a
   // settings form, where being a second out cannot cost an order, and the backend re-judges the
   // horizon against the shop's timezone anyway.
@@ -88,6 +161,13 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
     past_date: t('One of those dates has already passed.', '其中有日期已过期。'),
     beyond_horizon: t(`You can only take orders up to ${FULFILMENT_HORIZON_DAYS} days ahead.`,
                       `最多只能接受 ${FULFILMENT_HORIZON_DAYS} 天内的订单。`),
+  })[code]
+
+  const hoursErrorMessage = (code: SlotHoursError): string => ({
+    invalid_time: t('Every open day needs an opening and a closing time.', '每个营业日都需要填写开门和关门时间。'),
+    close_before_open: t('A closing time must be after its opening time.', '关门时间必须晚于开门时间。'),
+    no_open_day: t('Open at least one day for long enough to fit one slot, or customers cannot order at all.',
+                   '请至少有一天的营业时间能容纳一个时段，否则顾客无法下单。'),
   })[code]
 
   function toggleDay(d: number) {
@@ -115,6 +195,17 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
       const bad = validateCustomDates(dates, fields.timezone, new Date())
       if (bad) { toast.error(dateErrorMessage(bad)); return }
     }
+    // The slot settings (#282). Judged on the RAW hours, because the reader turns a `close <= open`
+    // day into a closed one and the merchant who typed it must be told.
+    const rawHours = fields.hours.map(h => (h.closed ? null : { open: h.open, close: h.close }))
+    const slotBag = {
+      slots_enabled: fields.slotsEnabled,
+      hours: rawHours,
+      slot_minutes: Number(fields.slotMinutes),
+      slot_notice_minutes: Number(fields.notice),
+    }
+    const badHours = validateSlotHours(rawHours, fulfilmentConfig({ fulfilment: slotBag }))
+    if (badHours) { toast.error(hoursErrorMessage(badHours)); return }
     setBusy(true)
     try {
       // fulfilmentConfig is what READS this bag on both sides of the wire, so it is what WRITES
@@ -124,8 +215,10 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
           mode: fields.mode,
           lead_days: Number(fields.lead),
           window_days: Number(fields.window),
-          closed_weekdays: fields.closed,
+          // Whichever weekday control was live — see `setSlotsEnabled`.
+          closed_weekdays: fields.slotsEnabled ? closedFromHours(fields.hours) : fields.closed,
           custom_dates: dates,
+          ...slotBag,
           // Saving IS the confirmation. The alert above the fields is what makes it deliberate.
           // Requiring an EDIT was rejected: change-then-revert is undetectable, and it would
           // force a merchant whose window was already right to make it wrong first (ADR 0015).
@@ -147,6 +240,10 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
         closed: fulfilment.closed_weekdays,
         dates: fulfilment.custom_dates,
         timezone: fields.timezone,
+        slotsEnabled: fulfilment.slots_enabled,
+        hours: rowsFromHours(fulfilment.hours),
+        slotMinutes: String(fulfilment.slot_minutes),
+        notice: String(fulfilment.slot_notice_minutes),
       }
       setFields(applied)
       commit(applied)
@@ -253,8 +350,10 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
       </div>
 
       {/* Greyed rather than hidden in custom mode: these settings are dormant, not gone, and they
-          come back exactly as they were the moment the merchant returns to a rolling window. */}
-      <div className={CARD}>
+          come back exactly as they were the moment the merchant returns to a rolling window.
+          HIDDEN with slots on, though — there the hours editor below is the weekday control, and
+          two controls for one fact is how one of them comes to lie (see `setSlotsEnabled`). */}
+      {!fields.slotsEnabled && <div className={CARD}>
         <h3 className={HEADING}>{t('Closed days', '休息日')}</h3>
         {/* Live in BOTH modes, and deliberately not disabled in custom.
             Greying these out took the documented disabled treatment (one grey for every control),
@@ -294,6 +393,101 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
               ? t('Every day is marked closed — customers would have no date to pick.', '所有日期都标记为休息，顾客将无日期可选。')
               : t('Days you take no orders. Customers cannot pick these.', '不接单的日子，顾客无法选择。')}
         </p>
+      </div>}
+
+      {/* Time slots (#282). A window inside the date, from hours the merchant sets here. */}
+      <div className={CARD}>
+        <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+          <h3 className={HEADING + ' mb-0'}>{t('Time slots', '时段')}</h3>
+          <label className="flex items-center gap-2 text-[13px] text-foreground cursor-pointer">
+            <Switch
+              checked={fields.slotsEnabled}
+              onCheckedChange={v => setSlotsEnabled(v === true)}
+              aria-label={t('Let customers pick a time slot', '让顾客选择时段')}
+            />
+            {t('Let customers pick a time slot', '让顾客选择时段')}
+          </label>
+        </div>
+
+        {/* Visible but disabled while off — the merchant sees what turning it on gives them, the
+            way the express fee fields stay legible while express is off. */}
+        <fieldset disabled={!fields.slotsEnabled} className="flex flex-col gap-5 disabled:opacity-60">
+          <div>
+            <Label className="mb-2 block">{t('Opening hours', '营业时间')}</Label>
+            <div className="flex flex-col gap-2">
+              {WEEKDAYS.map(d => {
+                const row = fields.hours[d.value]
+                const setRow = (patch: Partial<HoursRow>) =>
+                  setFields(f => ({ ...f, hours: f.hours.map((h, i) => (i === d.value ? { ...h, ...patch } : h)) }))
+                return (
+                  <div key={d.value} className="grid grid-cols-[76px_1fr_auto_1fr] items-center gap-2">
+                    <label className="flex items-center gap-2 text-[14px]">
+                      <Checkbox
+                        checked={!row.closed}
+                        onCheckedChange={v => setRow({ closed: v !== true })}
+                        aria-label={t(`Open on ${d.en}`, `${d.zh}营业`)}
+                      />
+                      {t(d.en, d.zh)}
+                    </label>
+                    <TimeSelect id={`ff-open-${d.value}`} value={row.open} disabled={row.closed}
+                      label={t(`${d.en} opens`, `${d.zh}开门`)} onChange={open => setRow({ open })} />
+                    <span className="text-muted-foreground">–</span>
+                    <TimeSelect id={`ff-close-${d.value}`} value={row.close} disabled={row.closed}
+                      label={t(`${d.en} closes`, `${d.zh}关门`)} onChange={close => setRow({ close })} />
+                  </div>
+                )
+              })}
+            </div>
+            <p className="text-[12px] text-muted-foreground mt-2 leading-[1.5]">
+              {t('An unticked day is a closed day. Customers cannot pick it.', '未勾选的日子即为休息日，顾客无法选择。')}
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="ff-slot-minutes">{t('Slot length', '时段长度')}</Label>
+              <Select value={fields.slotMinutes} onValueChange={v => setFields(f => ({ ...f, slotMinutes: v ?? f.slotMinutes }))}>
+                <SelectTrigger id="ff-slot-minutes" className="w-full" aria-label={t('Slot length', '时段长度')}>
+                  <span>{t(`${fields.slotMinutes} minutes`, `${fields.slotMinutes} 分钟`)}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {SLOT_MINUTES.map(m => <SelectItem key={m} value={String(m)}>{t(`${m} minutes`, `${m} 分钟`)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-[6px]">
+              <Label htmlFor="ff-notice">{t('Customers must order at least', '顾客最少需提前')}</Label>
+              <Select value={fields.notice} onValueChange={v => setFields(f => ({ ...f, notice: v ?? f.notice }))}>
+                <SelectTrigger id="ff-notice" className="w-full" aria-label={t('Notice', '提前时间')}>
+                  <span>{(() => { const o = NOTICE_OPTIONS.find(o => String(o.value) === fields.notice); return o ? t(o.en, o.zh) : fields.notice })()}</span>
+                </SelectTrigger>
+                <SelectContent>
+                  {NOTICE_OPTIONS.map(o => <SelectItem key={o.value} value={String(o.value)}>{t(o.en, o.zh)}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-[12px] text-muted-foreground mt-1 leading-[1.5]">
+                {t('before the slot starts. Counted on your shop’s clock.', '于时段开始前下单。以店铺时区计算。')}
+              </p>
+            </div>
+          </div>
+
+          {/* What the storefront will offer, from the form's own values, before the save. */}
+          <div className="text-[12px] text-muted-foreground leading-[1.6]">
+            {WEEKDAYS.map(d => {
+              const row = fields.hours[d.value]
+              if (row.closed) return null
+              const slots = slotsBetween({ open: row.open, close: row.close }, Number(fields.slotMinutes) as SlotMinutes)
+              return (
+                <div key={d.value} className={slots.length === 0 ? 'text-warning-fg' : ''}>
+                  <span className="font-medium text-foreground">{t(d.en, d.zh)}:</span>{' '}
+                  {slots.length === 0
+                    ? t('0 slots — the hours are shorter than one slot', '0 个时段：营业时间短于一个时段')
+                    : `${slots.slice(0, 4).map(s => `${s.from} – ${s.to}`).join(', ')}${slots.length > 4 ? ', …' : ''} (${t(`${slots.length} slots`, `${slots.length} 个时段`)})`}
+                </div>
+              )
+            })}
+          </div>
+        </fieldset>
       </div>
 
       <div className={CARD}>
