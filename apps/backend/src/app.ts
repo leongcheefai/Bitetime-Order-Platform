@@ -3328,6 +3328,9 @@ app.post('/api/orders', async (c) => {
   // date is `placeOrder`'s call, because the window is the shop's rule and not HTTP's — the
   // same split as `mode` (allowlisted here) versus the delivery region (refused there).
   const fulfilDate = typeof b.fulfilDate === 'string' ? b.fulfilDate : null
+  // Same split as the date: the SHAPE here, the rule in `placeOrder` (#282).
+  const fulfilTimeFrom = typeof b.fulfilTimeFrom === 'string' ? b.fulfilTimeFrom : null
+  const fulfilTimeTo = typeof b.fulfilTimeTo === 'string' ? b.fulfilTimeTo : null
 
   if (
     typeof b.merchantId !== 'string' || !b.merchantId ||
@@ -3361,6 +3364,8 @@ app.post('/api/orders', async (c) => {
       quotedTotal,
       voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
       fulfilDate,
+      fulfilTimeFrom,
+      fulfilTimeTo,
       // Lifted off the ADDRESS, not a sibling body field: it is a property of where the parcel
       // goes, and keeping the two together is what stops an address and a place id from
       // disagreeing. The distance itself is never read from the body — see placeOrder.
