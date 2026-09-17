@@ -124,6 +124,7 @@ export default function FulfilmentTab({ onDirtyChange }: TabProps) {
   })[code]
 
   const hoursErrorMessage = (code: SlotHoursError): string => ({
+    invalid_time: t('Every open day needs an opening and a closing time.', '每个营业日都需要填写开门和关门时间。'),
     close_before_open: t('A closing time must be after its opening time.', '关门时间必须晚于开门时间。'),
     no_open_day: t('Open at least one day for long enough to fit one slot, or customers cannot order at all.',
                    '请至少有一天的营业时间能容纳一个时段，否则顾客无法下单。'),

@@ -58,14 +58,15 @@ export interface FulfilmentConfig {
   slot_notice_minutes: number
 }
 
-/**
- * What a shop that has never opened the Fulfilment tab offers: today through two weeks out,
- * closed on no day. Every existing merchant reads as this, so the feature works on day one
- * without a single merchant touching their settings.
- */
+/** The hours a shop starts from when it opens the Time slots card: 09:00–18:00 every day. Dormant until `slots_enabled`. */
 export const DEFAULT_HOURS: readonly (DayHours | null)[] =
   Array.from({ length: 7 }, () => ({ open: '09:00', close: '18:00' }))
 
+/**
+ * What a shop that has never opened the Fulfilment tab offers: today through two weeks out,
+ * closed on no day, no time slots. Every existing merchant reads as this, so the feature works
+ * on day one without a single merchant touching their settings.
+ */
 export const DEFAULT_FULFILMENT: FulfilmentConfig = {
   mode: 'rolling',
   lead_days: 0,
@@ -431,7 +432,7 @@ export function isSlotSelectable(date: string, slot: Slot, cfg: FulfilmentConfig
   return start !== null && start >= earliestStart(cfg, tz, now)
 }
 
-export type SlotHoursError = 'close_before_open' | 'no_open_day'
+export type SlotHoursError = 'invalid_time' | 'close_before_open' | 'no_open_day'
 
 /**
  * Why these hours cannot be saved, or null.
@@ -448,7 +449,10 @@ export function validateSlotHours(rawHours: unknown, cfg: FulfilmentConfig): Slo
       if (typeof day !== 'object' || day === null) continue
       const open = timeToMinutes((day as Record<string, unknown>).open)
       const close = timeToMinutes((day as Record<string, unknown>).close)
-      if (open !== null && close !== null && close <= open) return 'close_before_open'
+      // An open day whose time is not a time — an emptied `<input type="time">`, most often. The
+      // reader would close the day and say nothing; the merchant ticked it open and must be told.
+      if (open === null || close === null) return 'invalid_time'
+      if (close <= open) return 'close_before_open'
     }
   }
   const anyOpen = cfg.hours.some(h => h !== null && slotsBetween(h, cfg.slot_minutes).length > 0)
@@ -509,7 +513,6 @@ export function fulfilmentWarning(cfg: FulfilmentConfig, tz: string, now: Date):
   // The slot twin of the dry allowlist: the dates are there, and none can be completed.
   if (cfg.slots_enabled && byDate.length > 0 && open.length === 0) return { kind: 'no_slots' }
   if (cfg.mode !== 'custom') return { kind: 'none' }
-  if (open.length === 0) return { kind: 'empty' }
   const today = dayMs(todayInZone(tz, now))
   const last = open[open.length - 1]
   const lastMs = dayMs(last)

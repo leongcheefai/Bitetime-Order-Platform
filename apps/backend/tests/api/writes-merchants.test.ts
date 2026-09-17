@@ -785,6 +785,17 @@ describe('PATCH /api/merchants/:id (custom order dates)', () => {
     expect(f.custom_dates).toEqual([iso(7)])
   })
 
+  it('keeps the stored hours when the body carries no fulfilment bag', async () => {
+    const hours = Array.from({ length: 7 }, () => ({ open: '10:00', close: '12:00' }))
+    await setStored({ mode: 'rolling', slots_enabled: true, hours, slot_minutes: 30 })
+    const res = await patch(`/api/merchants/${merchantId}`, { config: { something_else: 1 } }, ownerToken)
+    expect(res.status).toBe(200)
+    const f = ((await res.json()) as any).config.fulfilment
+    expect(f.slots_enabled).toBe(true)
+    expect(f.slot_minutes).toBe(30)
+    expect(f.hours).toEqual(hours)
+  })
+
   it('leaves a shop with no stored fulfilment alone rather than inventing one', async () => {
     await serviceClient().from('merchants').update({ config: {} }).eq('id', merchantId)
     const res = await patch(`/api/merchants/${merchantId}`, { config: { something_else: 1 } }, ownerToken)

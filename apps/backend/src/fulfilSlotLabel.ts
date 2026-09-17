@@ -4,6 +4,9 @@
  * Postgres hands `time` back as `HH:MM:SS`; the merchant reads `HH:MM`. One function so the
  * Telegram message, both emails and nothing else agree on the shape. Null for a legacy order
  * and for any half pair — the CHECK constraint forbids one, but a reader never trusts a row.
+ *
+ * `apps/frontend/src/orderDate.ts`'s `formatSlotRange` is its browser twin, kept separate on
+ * purpose: this is a format, not a rule, and CLAUDE.md keeps `@bitetime/shared` for rules.
  */
 export function fulfilSlotLabel(from: unknown, to: unknown): string | null {
   if (typeof from !== 'string' || typeof to !== 'string' || !from || !to) return null

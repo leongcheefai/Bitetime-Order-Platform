@@ -69,6 +69,7 @@ export function formatOrderDateTime(iso: string | null | undefined, lang: Lang):
  *
  * Language-neutral on purpose: a 24-hour clock reads the same in both. Slices to `HH:MM`
  * because PostgREST hands `time` back as `HH:MM:SS` while the wire and the rule use `HH:MM`.
+ * `apps/backend/src/fulfilSlotLabel.ts` is its server twin — a format, not a shared rule.
  */
 export function formatSlotRange(from: string | null | undefined, to: string | null | undefined): string {
   if (!from || !to) return ''

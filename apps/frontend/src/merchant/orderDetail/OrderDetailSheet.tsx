@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fulfilmentConfig, type OrderEvent, type Slot } from '@bitetime/shared'
+import { fulfilmentConfig, selectableSlots, DEFAULT_TIMEZONE, type OrderEvent, type Slot } from '@bitetime/shared'
 import { useSession } from '../../SessionContext'
 import { setOrderStatus, setOrderNote, setOrderTracking, setOrderFulfilment, fetchOrderEvents } from '../../store'
 import { toast } from 'sonner'
@@ -121,15 +121,29 @@ export default function OrderDetailSheet({
   // backend refusing a day or window the shop's own Fulfilment settings do not offer. The pickers
   // already hide those, so a refusal reaches a merchant only when the settings moved under an
   // open drawer, or the time went by while it was open — and it says where the settings are.
-  const slotsOn = fulfilmentConfig(merchant?.config).slots_enabled
+  const fulfilCfg = fulfilmentConfig(merchant?.config)
+  const slotsOn = fulfilCfg.slots_enabled
+  const shopTz = merchant?.timezone ?? DEFAULT_TIMEZONE
+  // The slot as the ROW holds it, `HH:MM-HH:MM` or `''`, against the draft's own key. The slot is
+  // sent only when the two DIFFER: a date move that leaves the slot alone must carry no slot keys,
+  // so the backend keeps the row's slot and judges it on the new day (or, for an order that never
+  // had one, leaves it without one). Sending the draft on every save was how a legacy order at a
+  // slot shop could never move its date — two nulls read as "clear", which a slot shop refuses.
+  const orderSlotKey = order?.fulfil_time_from && order?.fulfil_time_to
+    ? `${order.fulfil_time_from.slice(0, 5)}-${order.fulfil_time_to.slice(0, 5)}` : ''
+  const slotKey = slotDraft ? `${slotDraft.from}-${slotDraft.to}` : ''
+  const slotDirty = slotKey !== orderSlotKey
+  // A slot shop's order that HAD a slot and now has none in the draft: the merchant moved the
+  // date to a day where the old slot is not open, and must pick a new one before saving. The
+  // save button waits for that rather than posting a clear the backend would refuse.
+  const slotMissing = slotsOn && orderSlotKey !== '' && slotDraft === null
+
   function handleDateSave() {
-    if (!order || !dateDraft) return
+    if (!order || !dateDraft || slotMissing) return
     setSavingDate(true)
     setOrderFulfilment(order.id, {
       fulfilDate: dateDraft,
-      // Sent only when the shop asks for one, or when the merchant is clearing a leftover slot
-      // on a shop that has since turned slots off.
-      ...(slotsOn || (slotDraft === null && order.fulfil_time_from) ? { fulfilSlot: slotDraft } : {}),
+      ...(slotDirty ? { fulfilSlot: slotDraft } : {}),
     }, merchant!.id).then(r => {
       if (r.ok) {
         applyWrite(r.data)
@@ -150,10 +164,7 @@ export default function OrderDetailSheet({
   const noteDirty = order != null && noteDraft.trim() !== (order.note ?? '')
   const trackDirty = order != null &&
     (courierDraft !== (order.courier ?? '') || awbDraft.trim() !== (order.awb ?? ''))
-  const orderSlotKey = order?.fulfil_time_from && order?.fulfil_time_to
-    ? `${order.fulfil_time_from.slice(0, 5)}-${order.fulfil_time_to.slice(0, 5)}` : ''
-  const slotKey = slotDraft ? `${slotDraft.from}-${slotDraft.to}` : ''
-  const dateDirty = order != null && dateDraft !== '' && (dateDraft !== (order.fulfil_date ?? '') || slotKey !== orderSlotKey)
+  const dateDirty = order != null && dateDraft !== '' && !slotMissing && (dateDraft !== (order.fulfil_date ?? '') || slotDirty)
 
   return (
     <Sheet open={order !== null} onOpenChange={open => { if (!open) { onClose(); setDrawerFor(undefined) } }}>
@@ -187,9 +198,16 @@ export default function OrderDetailSheet({
               <CustomerCard
                 order={order}
                 fulfilDate={dateDraft}
-                // A new day has new slots at a slot shop: the old slot is not a choice on it. At a
-                // shop with slots off the leftover slot stays — it is the merchant's to clear.
-                onFulfilDate={iso => { setDateDraft(iso); if (slotsOn) setSlotDraft(null) }}
+                // The slot rides along to the new day when that day offers it — the same rule the
+                // backend applies to a patch with no slot — and is cleared when it does not, so the
+                // select asks for a new one. At a shop with slots off the leftover slot stays; it
+                // is the merchant's to clear.
+                onFulfilDate={iso => {
+                  setDateDraft(iso)
+                  if (slotsOn && slotDraft && !selectableSlots(iso, fulfilCfg, shopTz, new Date()).some(s => s.from === slotDraft.from && s.to === slotDraft.to)) {
+                    setSlotDraft(null)
+                  }
+                }}
                 fulfilSlot={slotDraft}
                 onFulfilSlot={setSlotDraft}
                 onSaveDate={handleDateSave}

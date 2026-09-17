@@ -517,6 +517,12 @@ describe('validateSlotHours', () => {
     expect(validateSlotHours([{ open: '10:00', close: '10:00' }], SLOTS)).toBe('close_before_open')
   })
 
+  it('names invalid_time for an open day whose time is not HH:MM — an emptied input', () => {
+    const raw = [{ open: '', close: '18:00' }]
+    expect(validateSlotHours(raw, fulfilmentConfig({ fulfilment: { slots_enabled: true, hours: raw } }))).toBe('invalid_time')
+    expect(validateSlotHours([{ open: '09:00', close: 'noon' }], SLOTS)).toBe('invalid_time')
+  })
+
   it('names no_open_day when no weekday holds one full slot', () => {
     const cfg = { ...SLOTS, hours: [null, null, null, null, null, null, null] }
     expect(validateSlotHours(cfg.hours, cfg)).toBe('no_open_day')
