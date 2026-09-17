@@ -1,11 +1,12 @@
 import { Copy } from 'lucide-react'
-import { fulfilmentConfig, selectableDates, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import { fulfilmentConfig, selectableDates, selectableSlots, DEFAULT_TIMEZONE, type Slot } from '@bitetime/shared'
 import { useSession } from '../../SessionContext'
 import { formatAddress } from '../../address'
-import { formatCalendarDate } from '../../orderDate'
+import { formatCalendarDate, formatSlotRange } from '../../orderDate'
 import { fulfilmentLabel } from '../../fulfilmentLabel'
 import WaLink from '../WaLink'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/ui/select'
 import DateField from '../DateField'
 import DrawerCard, { Field, FIELD_GRID, LBL, CardSaveButton } from './DrawerCard'
 import { copyText } from './copyText'
@@ -22,6 +23,8 @@ export default function CustomerCard({
   order,
   fulfilDate,
   onFulfilDate,
+  fulfilSlot,
+  onFulfilSlot,
   onSaveDate,
   savingDate,
   dateDirty,
@@ -31,6 +34,9 @@ export default function CustomerCard({
   /** The date draft, `YYYY-MM-DD`. */
   fulfilDate: string
   onFulfilDate: (iso: string) => void
+  /** The slot draft (#282), `HH:MM` both ends; null for none. */
+  fulfilSlot: Slot | null
+  onFulfilSlot: (slot: Slot | null) => void
   onSaveDate: () => void
   savingDate: boolean
   dateDirty: boolean
@@ -46,7 +52,14 @@ export default function CustomerCard({
   // save refuses. Computed once per render, not per day: the calendar asks about every cell.
   const tz = merchant?.timezone ?? DEFAULT_TIMEZONE
   const dateEditable = !readOnly && (order.status || 'new') !== 'completed'
-  const open = dateEditable ? new Set(selectableDates(fulfilmentConfig(merchant?.config), tz, new Date())) : null
+  const cfg = fulfilmentConfig(merchant?.config)
+  const open = dateEditable ? new Set(selectableDates(cfg, tz, new Date())) : null
+  // The slot select (#282), built from the same list the storefront draws for that day, so no
+  // window it offers is one the save refuses. At a shop with slots off a leftover slot is shown
+  // read-only with a Clear — the hours are dormant, so nothing new can be offered.
+  const slotsOn = cfg.slots_enabled
+  const slots = dateEditable && slotsOn && fulfilDate ? selectableSlots(fulfilDate, cfg, tz, new Date()) : []
+  const slotKey = (s: Slot) => `${s.from}-${s.to}`
 
 
   return (
@@ -54,7 +67,7 @@ export default function CustomerCard({
       title={t('Customer & delivery', '顾客与配送')}
       footer={dateEditable ? (
         <CardSaveButton
-          label={t('Save date', '保存日期')}
+          label={slotsOn ? t('Save date & time', '保存日期与时段') : t('Save date', '保存日期')}
           savingLabel={t('Saving…', '保存中…')}
           saving={savingDate}
           dirty={dateDirty}
@@ -82,6 +95,7 @@ export default function CustomerCard({
             <>
               {' · '}
               {order.fulfil_date ? formatCalendarDate(order.fulfil_date, lang) : '—'}
+              {order.fulfil_time_from ? ` · ${formatSlotRange(order.fulfil_time_from, order.fulfil_time_to)}` : ''}
             </>
           )}
         </Field>
@@ -100,6 +114,35 @@ export default function CustomerCard({
               placeholder={t('Pick a date', '选择日期')}
             />
           </div>
+        )}
+
+        {dateEditable && slotsOn && (
+          <div className="flex flex-col gap-1 min-w-0">
+            <label className={LBL} htmlFor={`fulfil-slot-${order.id}`}>{t('Time slot', '时段')}</label>
+            <Select
+              value={fulfilSlot ? slotKey(fulfilSlot) : ''}
+              onValueChange={v => onFulfilSlot(slots.find(s => slotKey(s) === v) ?? null)}
+              disabled={!fulfilDate || slots.length === 0}
+            >
+              <SelectTrigger id={`fulfil-slot-${order.id}`} className="w-full" aria-label={t('Time slot', '时段')}>
+                <span className="tabular-nums">
+                  {fulfilSlot ? formatSlotRange(fulfilSlot.from, fulfilSlot.to)
+                    : slots.length === 0 ? t('No slots on this day', '该日无可选时段') : t('Pick a time slot', '选择时段')}
+                </span>
+              </SelectTrigger>
+              <SelectContent>
+                {slots.map(s => <SelectItem key={slotKey(s)} value={slotKey(s)}>{formatSlotRange(s.from, s.to)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {dateEditable && !slotsOn && order.fulfil_time_from && (
+          <Field label={t('Time slot', '时段')}>
+            <span className="tabular-nums">{formatSlotRange(order.fulfil_time_from, order.fulfil_time_to)}</span>
+            <Button type="button" variant="ghost" size="sm" className="ml-2" onClick={() => onFulfilSlot(null)} disabled={fulfilSlot === null}>
+              {t('Clear', '清除')}
+            </Button>
+          </Field>
         )}
 
         {order.region && (

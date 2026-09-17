@@ -1,7 +1,7 @@
 import { Copy } from 'lucide-react'
 import { useSession } from '../../SessionContext'
 import { fmtDateTime } from '../../merchantDate'
-import { formatCalendarDate } from '../../orderDate'
+import { formatCalendarDate, formatSlotRange } from '../../orderDate'
 import { StatusBadge } from '../../orderStatus'
 import { fulfilmentLabel } from '../../fulfilmentLabel'
 import { copyText } from './copyText'
@@ -58,6 +58,7 @@ export default function OrderHeader({ order }: { order: any }) {
         <span>
           {t('For', '取货日期')}{' '}
           {order.fulfil_date ? formatCalendarDate(order.fulfil_date, lang) : '—'}
+          {order.fulfil_time_from ? ` · ${formatSlotRange(order.fulfil_time_from, order.fulfil_time_to)}` : ''}
         </span>
       </div>
     </SheetHeader>
