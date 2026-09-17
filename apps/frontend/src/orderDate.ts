@@ -63,3 +63,14 @@ export function formatOrderDateTime(iso: string | null | undefined, lang: Lang):
     minute: '2-digit',
   })
 }
+
+/**
+ * The slot an order is for, `14:00 – 15:00`, or `''` when it has none (#282).
+ *
+ * Language-neutral on purpose: a 24-hour clock reads the same in both. Slices to `HH:MM`
+ * because PostgREST hands `time` back as `HH:MM:SS` while the wire and the rule use `HH:MM`.
+ */
+export function formatSlotRange(from: string | null | undefined, to: string | null | undefined): string {
+  if (!from || !to) return ''
+  return `${from.slice(0, 5)} – ${to.slice(0, 5)}`
+}

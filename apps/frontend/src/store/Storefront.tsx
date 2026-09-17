@@ -522,7 +522,7 @@ export default function Storefront() {
     name, wa, mode, address,
     distanceUsable: distance.usable,
     quoted: quote !== null,
-    chosenDate, noMethods, busy,
+    chosenDate, slotRequired: false, chosenSlot: null, noMethods, busy,
   })
 
   /**
@@ -833,6 +833,7 @@ export default function Storefront() {
         quotedTotal: total,
         voucherCode: appliedVoucher?.code ?? null,
         fulfilDate: chosenDate,
+        fulfilSlot: null,
       })
       if (!result.ok) {
         // Which refusal this is, what the customer is told, and what we do about it are all one

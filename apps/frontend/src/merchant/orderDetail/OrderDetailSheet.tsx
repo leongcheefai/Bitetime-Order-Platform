@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { OrderEvent } from '@bitetime/shared'
 import { useSession } from '../../SessionContext'
-import { setOrderStatus, setOrderNote, setOrderTracking, setOrderFulfilDate, fetchOrderEvents } from '../../store'
+import { setOrderStatus, setOrderNote, setOrderTracking, setOrderFulfilment, fetchOrderEvents } from '../../store'
 import { toast } from 'sonner'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import OrderHeader from './OrderHeader'
@@ -120,7 +120,7 @@ export default function OrderDetailSheet({
   function handleDateSave() {
     if (!order || !dateDraft) return
     setSavingDate(true)
-    setOrderFulfilDate(order.id, dateDraft, merchant!.id).then(r => {
+    setOrderFulfilment(order.id, { fulfilDate: dateDraft }, merchant!.id).then(r => {
       if (r.ok) {
         applyWrite(r.data)
         toast.success(t('Date saved', '日期已保存'))
