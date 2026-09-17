@@ -4,6 +4,7 @@ import {
   todayInZone, isDateSelectable, selectableDates,
   FULFILMENT_HORIZON_DAYS, MAX_CUSTOM_DATES, DATES_ENDING_SOON_DAYS,
   customDateBounds, pruneCustomDates, validateCustomDates, fulfilmentWarning,
+  timeToMinutes, minutesToTime,
   type FulfilmentConfig,
 } from './fulfilment.js'
 
@@ -292,5 +293,78 @@ describe('isTimezone', () => {
     expect(isTimezone('')).toBe(false)
     expect(isTimezone(null)).toBe(false)
     expect(isTimezone(7)).toBe(false)
+  })
+})
+
+describe('fulfilmentConfig — time slots', () => {
+  it('reads a shop that predates slots as slots off, with default hours', () => {
+    const cfg = fulfilmentConfig({ fulfilment: { mode: 'rolling' } })
+    expect(cfg.slots_enabled).toBe(false)
+    expect(cfg.slot_minutes).toBe(60)
+    expect(cfg.slot_notice_minutes).toBe(0)
+    expect(cfg.hours).toEqual(Array.from({ length: 7 }, () => ({ open: '09:00', close: '18:00' })))
+  })
+
+  it('reads slots_enabled as a real boolean only', () => {
+    expect(fulfilmentConfig({ fulfilment: { slots_enabled: true } }).slots_enabled).toBe(true)
+    expect(fulfilmentConfig({ fulfilment: { slots_enabled: 'true' } }).slots_enabled).toBe(false)
+    expect(fulfilmentConfig({ fulfilment: { slots_enabled: 1 } }).slots_enabled).toBe(false)
+  })
+
+  it('reads hours per weekday and turns a junk day into closed without touching the others', () => {
+    const hours = [
+      null,
+      { open: '10:00', close: '14:00' },
+      { open: '14:00', close: '10:00' },   // close before open
+      { open: '9:00', close: '18:00' },    // not HH:MM
+      'lunch',
+      { open: '08:30', close: '08:30' },   // zero length
+      { open: '00:00', close: '23:30' },
+    ]
+    expect(fulfilmentConfig({ fulfilment: { hours } }).hours).toEqual([
+      null,
+      { open: '10:00', close: '14:00' },
+      null,
+      null,
+      null,
+      null,
+      { open: '00:00', close: '23:30' },
+    ])
+  })
+
+  it('reads a short hours array as closed on the days it does not name', () => {
+    const cfg = fulfilmentConfig({ fulfilment: { hours: [{ open: '10:00', close: '12:00' }] } })
+    expect(cfg.hours[0]).toEqual({ open: '10:00', close: '12:00' })
+    expect(cfg.hours[1]).toBeNull()
+    expect(cfg.hours).toHaveLength(7)
+  })
+
+  it('reads slot_minutes from the closed set only', () => {
+    expect(fulfilmentConfig({ fulfilment: { slot_minutes: 30 } }).slot_minutes).toBe(30)
+    expect(fulfilmentConfig({ fulfilment: { slot_minutes: 120 } }).slot_minutes).toBe(120)
+    expect(fulfilmentConfig({ fulfilment: { slot_minutes: 45 } }).slot_minutes).toBe(60)
+    expect(fulfilmentConfig({ fulfilment: { slot_minutes: '60' } }).slot_minutes).toBe(60)
+  })
+
+  it('clamps slot_notice_minutes to 0..1440', () => {
+    expect(fulfilmentConfig({ fulfilment: { slot_notice_minutes: -5 } }).slot_notice_minutes).toBe(0)
+    expect(fulfilmentConfig({ fulfilment: { slot_notice_minutes: 90.7 } }).slot_notice_minutes).toBe(90)
+    expect(fulfilmentConfig({ fulfilment: { slot_notice_minutes: 99_999 } }).slot_notice_minutes).toBe(1440)
+  })
+})
+
+describe('timeToMinutes / minutesToTime', () => {
+  it('round-trips HH:MM', () => {
+    expect(timeToMinutes('00:00')).toBe(0)
+    expect(timeToMinutes('09:30')).toBe(570)
+    expect(timeToMinutes('23:59')).toBe(1439)
+    expect(minutesToTime(570)).toBe('09:30')
+    expect(minutesToTime(0)).toBe('00:00')
+  })
+
+  it('refuses anything that is not a 24-hour HH:MM', () => {
+    for (const v of ['24:00', '9:30', '09:60', '0930', '', null, 930, undefined]) {
+      expect(timeToMinutes(v), String(v)).toBeNull()
+    }
   })
 })

@@ -7,6 +7,19 @@
 /** Which rule decides the dates a shop offers. Closed set — see CONTEXT.md → Fulfilment date. */
 export type FulfilmentMode = 'rolling' | 'custom'
 
+/** The slot lengths a shop may pick. Closed set — the form offers exactly these. */
+export type SlotMinutes = 30 | 60 | 120
+export const SLOT_MINUTES: readonly SlotMinutes[] = [30, 60, 120]
+
+/** The longest notice a shop may ask for: one day. Beyond that, `lead_days` is the tool. */
+export const SLOT_NOTICE_MAX = 1440
+
+/** One weekday's opening hours, `HH:MM` 24-hour, shop-local. `close` is after `open`. */
+export interface DayHours { open: string; close: string }
+
+/** One window a customer may pick, `HH:MM` both ends, `to` = `from` + `slot_minutes`. */
+export interface Slot { from: string; to: string }
+
 /** Per-merchant shape, stored under `merchants.config -> 'fulfilment'`. */
 export interface FulfilmentConfig {
   /** `rolling` computes a moving range; `custom` offers an explicit allowlist and nothing else. */
@@ -31,6 +44,18 @@ export interface FulfilmentConfig {
    * Confirm control can still clear it.
    */
   needs_review: boolean
+  /**
+   * The customer picks a TIME SLOT after the date (#282). Off for every shop until its owner turns
+   * it on, so the day this shipped changed nothing for anyone. While off, `hours`, `slot_minutes`
+   * and `slot_notice_minutes` are dormant — kept in the row like an unused mode's settings.
+   */
+  slots_enabled: boolean
+  /** Opening hours per weekday, index 0 = Sunday … 6 = Saturday. `null` = closed that day. */
+  hours: (DayHours | null)[]
+  /** How long one slot is. */
+  slot_minutes: SlotMinutes
+  /** A slot must START at least this many minutes after now, on the shop's clock. */
+  slot_notice_minutes: number
 }
 
 /**
@@ -38,6 +63,9 @@ export interface FulfilmentConfig {
  * closed on no day. Every existing merchant reads as this, so the feature works on day one
  * without a single merchant touching their settings.
  */
+export const DEFAULT_HOURS: readonly (DayHours | null)[] =
+  Array.from({ length: 7 }, () => ({ open: '09:00', close: '18:00' }))
+
 export const DEFAULT_FULFILMENT: FulfilmentConfig = {
   mode: 'rolling',
   lead_days: 0,
@@ -45,6 +73,10 @@ export const DEFAULT_FULFILMENT: FulfilmentConfig = {
   closed_weekdays: [],
   custom_dates: [],
   needs_review: false,
+  slots_enabled: false,
+  hours: DEFAULT_HOURS.map(h => (h ? { ...h } : null)),
+  slot_minutes: 60,
+  slot_notice_minutes: 0,
 }
 
 export const DEFAULT_TIMEZONE = 'Asia/Kuala_Lumpur'
@@ -80,6 +112,40 @@ function clampInt(v: unknown, lo: number, hi: number, fallback: number): number 
   return Math.min(hi, Math.max(lo, Math.trunc(v)))
 }
 
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+/** `HH:MM` (24-hour) as minutes since midnight, or null for anything else. */
+export function timeToMinutes(v: unknown): number | null {
+  if (typeof v !== 'string') return null
+  const m = TIME_RE.exec(v)
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+
+export function minutesToTime(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+}
+
+/** One weekday's hours off the raw bag. Anything that is not a real, non-empty range reads as closed. */
+function dayHours(raw: unknown): DayHours | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const r = raw as Record<string, unknown>
+  const open = timeToMinutes(r.open)
+  const close = timeToMinutes(r.close)
+  if (open === null || close === null || close <= open) return null
+  return { open: r.open as string, close: r.close as string }
+}
+
+/**
+ * Seven days of hours off the raw bag. A MISSING key reads as the default week: the merchant
+ * never opened the card. A PRESENT array reads day by day, and a day the array does not name is
+ * closed — the merchant sent a list, and a day they did not send is a day they did not open.
+ */
+function hoursFromRaw(raw: unknown): (DayHours | null)[] {
+  if (raw === undefined) return DEFAULT_HOURS.map(h => (h ? { ...h } : null))
+  const src = Array.isArray(raw) ? raw : []
+  return Array.from({ length: 7 }, (_, i) => dayHours(src[i]))
+}
+
 /**
  * Read a merchant's fulfilment rules off the raw `config` jsonb.
  *
@@ -112,6 +178,12 @@ export function fulfilmentConfig(raw: unknown): FulfilmentConfig {
       dates.filter((d): d is string => typeof d === 'string' && dayMs(d) !== null),
     )].sort().slice(0, MAX_CUSTOM_DATES),
     needs_review: f.needs_review === true,
+    slots_enabled: f.slots_enabled === true,
+    hours: hoursFromRaw(f.hours),
+    slot_minutes: (SLOT_MINUTES as readonly number[]).includes(f.slot_minutes as number)
+      ? (f.slot_minutes as SlotMinutes)
+      : DEFAULT_FULFILMENT.slot_minutes,
+    slot_notice_minutes: clampInt(f.slot_notice_minutes, 0, SLOT_NOTICE_MAX, DEFAULT_FULFILMENT.slot_notice_minutes),
   }
 }
 

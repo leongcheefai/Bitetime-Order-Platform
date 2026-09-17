@@ -46,10 +46,15 @@ export {
   isDateSelectable, selectableDates,
   customDateBounds, pruneCustomDates, validateCustomDates,
   fulfilmentWarning,
-  DEFAULT_FULFILMENT, DEFAULT_TIMEZONE,
+  timeToMinutes, minutesToTime,
+  DEFAULT_FULFILMENT, DEFAULT_TIMEZONE, DEFAULT_HOURS,
   FULFILMENT_HORIZON_DAYS, MAX_CUSTOM_DATES, DATES_ENDING_SOON_DAYS,
+  SLOT_MINUTES, SLOT_NOTICE_MAX,
 } from './fulfilment.js'
-export type { FulfilmentConfig, FulfilmentMode, CustomDatesError, FulfilmentWarning } from './fulfilment.js'
+export type {
+  FulfilmentConfig, FulfilmentMode, CustomDatesError, FulfilmentWarning,
+  SlotMinutes, DayHours, Slot,
+} from './fulfilment.js'
 export { REFUSAL_STATUS, ORDER_REFUSALS, QUOTE_REFUSAL_STATUS, QUOTE_REFUSALS } from './refusal.js'
 export type { OrderRefusal, QuoteRefusal } from './refusal.js'
 export {
