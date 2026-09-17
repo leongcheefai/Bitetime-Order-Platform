@@ -16,6 +16,9 @@ export interface OrderPatchBefore {
   awb: string | null
   /** `YYYY-MM-DD`, null for an order placed before #91. */
   fulfil_date: string | null
+  /** `HH:MM`, both null for an order placed with no slot (#282). */
+  fulfil_time_from: string | null
+  fulfil_time_to: string | null
 }
 
 /** A merchant PATCH after `pickOrderFields` — only the keys present are being written. */
@@ -25,6 +28,14 @@ export interface OrderPatch {
   courier?: string | null
   awb?: string | null
   fulfil_date?: string
+  /** Always together: two `HH:MM` strings, or two nulls (clearing, slots-off shops only). */
+  fulfil_time_from?: string | null
+  fulfil_time_to?: string | null
+}
+
+/** `'HH:MM-HH:MM'` or null — the label the log stores, so a slot is one string in `detail`. */
+export function slotLabel(from: string | null | undefined, to: string | null | undefined): string | null {
+  return from && to ? `${from}-${to}` : null
 }
 
 /**
@@ -53,6 +64,11 @@ export function orderPatchEvents(before: OrderPatchBefore, patch: OrderPatch): O
   }
   if (patch.fulfil_date !== undefined && patch.fulfil_date !== (before.fulfil_date ?? null)) {
     out.push({ kind: 'fulfil_date_changed', detail: { from: before.fulfil_date ?? null, to: patch.fulfil_date } })
+  }
+  if (patch.fulfil_time_from !== undefined) {
+    const from = slotLabel(before.fulfil_time_from, before.fulfil_time_to)
+    const to = slotLabel(patch.fulfil_time_from, patch.fulfil_time_to)
+    if (from !== to) out.push({ kind: 'fulfil_time_changed', detail: { from, to } })
   }
   return out
 }

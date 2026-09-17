@@ -4,6 +4,7 @@ import type { CartLine, PricedProduct, PricedVoucher, FulfilmentConfig, ShopTax,
 import { sql, withTransaction } from './db.js'
 import { recordOrderEvents, SYSTEM_ACTOR, type OrderActor } from './orderEventsDb.js'
 import { orderPatchEvents, type OrderPatch, type OrderPatchBefore } from './orderEvents.js'
+import { judgeSlotPatch } from './orderSlotPatch.js'
 import { syncOrderRedemptionVoid } from './voucherRedemptionsDb.js'
 import { phoneKey } from './phone.js'
 import { COUNTER_START, formatOrderNumber, orderDay } from './orderNumber.js'
@@ -497,7 +498,7 @@ export function setOrderMerchantPaymentProof(orderId: string, path: string, merc
  * statement.
  */
 /** Why a merchant patch was not applied. Each is a wire code the drawer has words for. */
-export type PatchRefusal = 'order_completed' | 'fulfil_date_unavailable'
+export type PatchRefusal = 'order_completed' | 'fulfil_date_unavailable' | 'fulfil_time_unavailable'
 
 export async function patchOrder(
   orderId: string,
@@ -511,7 +512,10 @@ export async function patchOrder(
     // otherwise hand a `date` column back as a JS Date, and the event's `from` must be the same
     // `YYYY-MM-DD` string the `to` is.
     const [before] = await tx<(OrderPatchBefore & { merchant_id: string; voucher_code: string | null; timezone: string | null; config: unknown })[]>`
-      select o.status, o.note, o.courier, o.awb, o.fulfil_date::text, o.merchant_id, o.voucher_code, m.timezone, m.config
+      select o.status, o.note, o.courier, o.awb, o.fulfil_date::text,
+             -- HH:MM, the shape the patch, the rule and the log all use; the driver would hand back HH:MM:SS.
+             to_char(o.fulfil_time_from, 'HH24:MI') as fulfil_time_from, to_char(o.fulfil_time_to, 'HH24:MI') as fulfil_time_to,
+             o.merchant_id, o.voucher_code, m.timezone, m.config
       from orders o join merchants m on m.id = o.merchant_id
       where o.id = ${orderId} for update of o
     `
@@ -519,6 +523,12 @@ export async function patchOrder(
     const completed = (before.status ?? 'new') === 'completed'
     if (patch.status !== undefined && completed && patch.status !== 'completed') {
       return { refused: 'order_completed' as const }
+    }
+    // A completed order's slot is as final as its date (ADR 0024). Only a slot that DIFFERS is refused.
+    if (patch.fulfil_time_from !== undefined && completed) {
+      const same = (patch.fulfil_time_from ?? null) === before.fulfil_time_from
+        && (patch.fulfil_time_to ?? null) === before.fulfil_time_to
+      if (!same) return { refused: 'order_completed' as const }
     }
     if (patch.fulfil_date !== undefined) {
       // A completed order's date is as final as its status (ADR 0024): the goods have been
@@ -535,6 +545,13 @@ export async function patchOrder(
       const open = isDateSelectable(patch.fulfil_date, fulfilmentConfig(before.config), before.timezone ?? DEFAULT_TIMEZONE, new Date())
       if (!open) return { refused: 'fulfil_date_unavailable' as const }
     }
+
+    // The slot (#282), judged against the date the row WILL hold — a moved date carries its slot
+    // along. Pure, so every branch is unit-tested; this line only asks.
+    const slotRefusal = judgeSlotPatch(
+      before, patch, fulfilmentConfig(before.config), before.timezone ?? DEFAULT_TIMEZONE, new Date(),
+    )
+    if (slotRefusal) return { refused: slotRefusal }
 
     await tx`update orders set ${tx(patch as Record<string, string | null>)} where id = ${orderId}`
 
