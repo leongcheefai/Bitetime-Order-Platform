@@ -58,6 +58,11 @@ describe('buildOrderMessage', () => {
     expect(msg).toContain('*Date:* 2026-07-22')
   })
 
+  it('prints the slot on the date line when the order carries one', () => {
+    const msg = buildOrderMessage({ ...ORDER, fulfil_date: '2026-07-22', fulfil_time_from: '14:00:00', fulfil_time_to: '15:00:00' })
+    expect(msg).toContain('*Date:* 2026-07-22 14:00 – 15:00')
+  })
+
   it('omits the line entirely for a legacy order with no date', () => {
     const msg = buildOrderMessage({ ...ORDER, fulfil_date: null })
     expect(msg).not.toContain('*Date:*')

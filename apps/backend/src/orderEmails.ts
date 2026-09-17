@@ -11,6 +11,7 @@
 // `EmailSend` is a type-only import (erased at compile) so this module stays free of `env.ts`'s
 // import-time validation — its pure builders unit-test with no env.
 import type { EmailSend } from './email.js'
+import { fulfilSlotLabel } from './fulfilSlotLabel.js'
 import {
   formatAddress, formatKm, formatMoney, MODE_LABELS,
   type NotifyOrderInput, type NotifyResult,
@@ -202,7 +203,8 @@ export function buildOrderConfirmationEmail(
   textLines.push(`${t('Order for', '订单人')} ${name}`)
   textLines.push('')
   textLines.push(`${t('Order No.', '订单号')}: ${order.order_number}`)
-  if (order.fulfil_date) textLines.push(`${t('Date', '日期')}: ${order.fulfil_date}`)
+  const slot = fulfilSlotLabel(order.fulfil_time_from, order.fulfil_time_to)
+  if (order.fulfil_date) textLines.push(`${t('Date', '日期')}: ${order.fulfil_date}${slot ? ` ${slot}` : ''}`)
   textLines.push(`${t('Method', '方式')}: ${modeLabel}`)
   if (showAddress) textLines.push(`${t('Delivery address', '送货地址')}: ${addr}`)
   textLines.push('')
@@ -228,7 +230,7 @@ export function buildOrderConfirmationEmail(
   const text = textLines.join('\n')
 
   // ── HTML part ──
-  const dateRow = order.fulfil_date ? detailHtml(t('Date', '日期'), String(order.fulfil_date)) : ''
+  const dateRow = order.fulfil_date ? detailHtml(t('Date', '日期'), `${order.fulfil_date}${slot ? ` ${slot}` : ''}`) : ''
   const addressBlock = showAddress ? detailHtml(t('Delivery address', '送货地址'), addr) : ''
 
   const html = emailShell(`  <p style="font-size:15px;">${esc(t('Thank you for your order!', '感谢您的订单！'))}</p>
@@ -453,7 +455,10 @@ export function buildMerchantOrderEmail(
   if (order.customer_name) rows.push(['Name', String(order.customer_name)])
   if (order.customer_wa) rows.push(['WhatsApp', String(order.customer_wa)])
   if (mode) rows.push(['Method', modeLabel])
-  if (order.fulfil_date) rows.push(['Date', String(order.fulfil_date)])
+  if (order.fulfil_date) {
+    const slot = fulfilSlotLabel(order.fulfil_time_from, order.fulfil_time_to)
+    rows.push(['Date', `${order.fulfil_date}${slot ? ` ${slot}` : ''}`])
+  }
   if (showAddress) rows.push(['Address', addr])
   if (distance) rows.push(['Distance', distance])
 
