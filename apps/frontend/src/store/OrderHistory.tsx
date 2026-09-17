@@ -9,7 +9,7 @@ import { StatusBadge } from '../orderStatus'
 import { ItemSelections } from '../ItemSelections'
 import { courierName, trackingUrl } from '../couriers'
 import { formatMoney } from '../currency'
-import { formatOrderDate, formatCalendarDate } from '../orderDate'
+import { formatOrderDate, formatCalendarDate, formatSlotRange } from '../orderDate'
 import { formatTaxRate } from '../taxRate'
 import { fulfilmentLabel, feeLineLabel } from '../fulfilmentLabel'
 import { cn } from '@/lib/utils'
@@ -200,7 +200,7 @@ export default function OrderHistory() {
                             ever collected" and not as data this row lost. */}
                         <div className="text-[12px] text-muted-foreground mt-0.5">
                           {o.fulfil_date
-                            ? `${t('For', '取货日期')} ${formatCalendarDate(o.fulfil_date, lang)}`
+                            ? `${t('For', '取货日期')} ${formatCalendarDate(o.fulfil_date, lang)}${o.fulfil_time_from ? ` · ${formatSlotRange(o.fulfil_time_from, o.fulfil_time_to)}` : ''}`
                             : '—'}
                         </div>
                       </div>
