@@ -35,7 +35,7 @@ export interface DayHours { open: 'HH:MM'; close: 'HH:MM' }
 
 // FulfilmentConfig gains:
 slots_enabled: boolean                       // default false
-hours: Record<Weekday, DayHours | null>      // 0 = Sunday … 6 = Saturday; null = closed that day
+hours: (DayHours | null)[]                   // 7 entries, index 0 = Sunday … 6 = Saturday; null = closed that day
 slot_minutes: SlotMinutes                    // default 60
 slot_notice_minutes: number                  // default 0, clamped 0..1440
 ```
@@ -50,6 +50,9 @@ One `open`/`close` range per weekday. A lunch break is out of scope.
 **Read-side clamps** in `fulfilmentConfig`, so a bad row can never take checkout down:
 
 - `hours[d]` with `close <= open`, or with a value that is not `HH:MM`, reads as `null`.
+- A **missing** `hours` key reads as the default week. A **present** array reads day by day, and a
+  day the array does not name reads as `null`: the merchant sent a list, and a day they did not
+  send is a day they did not open.
 - `slot_minutes` outside `{30, 60, 120}` reads as `60`.
 - `slot_notice_minutes` is clamped to `0..1440`.
 - `slots_enabled` reads as `true` only for the literal `true`.
@@ -80,7 +83,7 @@ export function isSlotSelectable(date: string, slot: Slot, cfg: FulfilmentConfig
 
 /** Why these hours cannot be saved, or null. */
 export type SlotHoursError = 'close_before_open' | 'no_open_day'
-export function validateSlotHours(cfg: FulfilmentConfig): SlotHoursError | null
+export function validateSlotHours(rawHours: unknown, cfg: FulfilmentConfig): SlotHoursError | null
 ```
 
 `selectableSlots` rules:
@@ -97,9 +100,12 @@ slot from a request body and must judge it without building a list. The two must
 test sweeps dates and clock times to pin that they do. A slot is selectable only when `from`
 sits on the step grid from `open`, and `to = from + slot_minutes`.
 
-`validateSlotHours` returns `close_before_open` for a weekday with `close <= open`, and
-`no_open_day` when `slots_enabled` is true and no weekday holds at least one full slot. It
-returns `null` when `slots_enabled` is false, whatever the hours say.
+`validateSlotHours` takes the **raw** submitted hours as well as the parsed config, for the
+reason `too_many` is counted on the raw allowlist: `fulfilmentConfig` reads a `close <= open`
+day as closed, so the parsed config can never show the mistake. It returns `close_before_open`
+for a raw weekday with `close <= open`, and `no_open_day` when `slots_enabled` is true and no
+weekday holds at least one full slot. It returns `null` when `slots_enabled` is false, whatever
+the hours say.
 
 `fulfilmentWarning` gains `{ kind: 'no_slots' }`: slots are on and no offered date has a slot.
 The dashboard banner shows it in red, like `empty`.
@@ -219,8 +225,7 @@ Controls, top to bottom:
 12:00, … (8 slots)". Built with `selectableSlots` from form state, with a date in the future so
 the notice does not hide slots. A day with zero slots shows "0 slots" in amber.
 
-**Validation.** The form runs `validateSlotHours` and refuses to save on an error, naming the
-weekday. The backend runs the same function in `PATCH /api/merchants/:id` and answers `400`
+**Validation.** The form runs `validateSlotHours` and refuses to save on an error. The backend runs the same function in `PATCH /api/merchants/:id` and answers `400`
 with the code.
 
 ## Order drawer and notify
