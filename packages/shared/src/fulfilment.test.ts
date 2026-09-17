@@ -5,6 +5,7 @@ import {
   FULFILMENT_HORIZON_DAYS, MAX_CUSTOM_DATES, DATES_ENDING_SOON_DAYS,
   customDateBounds, pruneCustomDates, validateCustomDates, fulfilmentWarning,
   timeToMinutes, minutesToTime,
+  selectableSlots, isSlotSelectable, slotsBetween, validateSlotHours, minutesInZone,
   type FulfilmentConfig,
 } from './fulfilment.js'
 
@@ -366,5 +367,180 @@ describe('timeToMinutes / minutesToTime', () => {
     for (const v of ['24:00', '9:30', '09:60', '0930', '', null, 930, undefined]) {
       expect(timeToMinutes(v), String(v)).toBeNull()
     }
+  })
+})
+
+// 2026-07-20 is a Monday. NOON_MYT is 12:00 in KL on that day.
+const SLOTS: FulfilmentConfig = {
+  ...DEFAULT_FULFILMENT,
+  window_days: 3,
+  slots_enabled: true,
+  hours: [null, { open: '10:00', close: '14:00' }, { open: '10:00', close: '14:00' }, { open: '10:00', close: '14:00' }, null, null, null],
+  slot_minutes: 60,
+}
+
+describe('minutesInZone', () => {
+  it('reads the wall clock in the shop zone', () => {
+    expect(minutesInZone(KL, NOON_MYT)).toBe(12 * 60)
+    expect(minutesInZone('UTC', NOON_MYT)).toBe(4 * 60)
+  })
+  it('reads midnight as 0, never 1440', () => {
+    expect(minutesInZone(KL, new Date('2026-07-19T16:00:00Z'))).toBe(0)
+  })
+})
+
+describe('slotsBetween', () => {
+  it('steps from open and drops the partial slot at the end', () => {
+    expect(slotsBetween({ open: '10:00', close: '12:30' }, 60)).toEqual([
+      { from: '10:00', to: '11:00' }, { from: '11:00', to: '12:00' },
+    ])
+    expect(slotsBetween({ open: '10:00', close: '12:30' }, 30)).toHaveLength(5)
+    expect(slotsBetween({ open: '10:00', close: '11:59' }, 120)).toEqual([])
+  })
+})
+
+describe('selectableSlots', () => {
+  it('is empty while slots are off, whatever the hours say', () => {
+    expect(selectableSlots('2026-07-21', { ...SLOTS, slots_enabled: false }, KL, NOON_MYT)).toEqual([])
+  })
+
+  it('offers every slot of a future open day', () => {
+    expect(selectableSlots('2026-07-21', SLOTS, KL, NOON_MYT)).toEqual([
+      { from: '10:00', to: '11:00' }, { from: '11:00', to: '12:00' },
+      { from: '12:00', to: '13:00' }, { from: '13:00', to: '14:00' },
+    ])
+  })
+
+  it('drops today’s slots that start before now + notice, and keeps one that starts exactly then', () => {
+    expect(selectableSlots('2026-07-20', SLOTS, KL, NOON_MYT).map(s => s.from)).toEqual(['12:00', '13:00'])
+    expect(selectableSlots('2026-07-20', { ...SLOTS, slot_notice_minutes: 60 }, KL, NOON_MYT).map(s => s.from)).toEqual(['13:00'])
+    expect(selectableSlots('2026-07-20', { ...SLOTS, slot_notice_minutes: 61 }, KL, NOON_MYT)).toEqual([])
+  })
+
+  it('applies the notice across midnight — a day of notice at noon Monday hides Tuesday morning', () => {
+    const cfg = { ...SLOTS, slot_notice_minutes: 1440 }
+    expect(selectableSlots('2026-07-21', cfg, KL, NOON_MYT).map(s => s.from)).toEqual(['12:00', '13:00'])
+  })
+
+  it('is empty on a weekday with no hours, and on a date the date rule refuses', () => {
+    expect(selectableSlots('2026-07-23', SLOTS, KL, NOON_MYT)).toEqual([])   // Thursday: null hours
+    expect(selectableSlots('2026-07-30', SLOTS, KL, NOON_MYT)).toEqual([])   // past the 3-day window
+    expect(selectableSlots('2026-07-21', { ...SLOTS, closed_weekdays: [2] }, KL, NOON_MYT)).toEqual([])
+  })
+
+  it('uses the shop clock, not UTC, to decide which day is today', () => {
+    // LATE_MYT: 01:00 Tuesday in KL, still Monday in UTC. Tuesday 10:00 is 9h away — all four remain.
+    expect(selectableSlots('2026-07-21', SLOTS, KL, LATE_MYT)).toHaveLength(4)
+    // Monday is over on the shop clock: nothing.
+    expect(selectableSlots('2026-07-20', SLOTS, KL, LATE_MYT)).toEqual([])
+  })
+})
+
+describe('isSlotSelectable', () => {
+  const at = (from: string, to: string) => isSlotSelectable('2026-07-21', { from, to }, SLOTS, KL, NOON_MYT)
+
+  it('accepts a slot on the grid and refuses one off it', () => {
+    expect(at('10:00', '11:00')).toBe(true)
+    expect(at('13:00', '14:00')).toBe(true)
+    expect(at('10:30', '11:30')).toBe(false)   // off the step grid
+    expect(at('10:00', '11:30')).toBe(false)   // wrong length
+    expect(at('14:00', '15:00')).toBe(false)   // past close
+    expect(at('09:00', '10:00')).toBe(false)   // before open
+    expect(at('11:00', '10:00')).toBe(false)   // inverted
+    expect(at('10:00', '')).toBe(false)
+  })
+
+  it('refuses everything while slots are off', () => {
+    expect(isSlotSelectable('2026-07-21', { from: '10:00', to: '11:00' }, { ...SLOTS, slots_enabled: false }, KL, NOON_MYT)).toBe(false)
+  })
+
+  it('agrees with selectableSlots over a sweep of dates, clocks and notices', () => {
+    const clocks = [NOON_MYT, LATE_MYT, new Date('2026-07-20T01:59:00Z'), new Date('2026-07-20T05:00:00Z')]
+    const notices = [0, 30, 90, 1440]
+    const dates = ['2026-07-19', '2026-07-20', '2026-07-21', '2026-07-22', '2026-07-23', '2026-07-24']
+    for (const now of clocks) for (const n of notices) for (const minutes of [30, 60, 120] as const) {
+      const cfg = { ...SLOTS, slot_notice_minutes: n, slot_minutes: minutes }
+      for (const date of dates) {
+        const offered = selectableSlots(date, cfg, KL, now)
+        const grid = slotsBetween({ open: '08:00', close: '16:00' }, minutes)
+        for (const s of grid) {
+          const listed = offered.some(o => o.from === s.from && o.to === s.to)
+          expect(isSlotSelectable(date, s, cfg, KL, now), `${date} ${s.from} n=${n} m=${minutes} @${now.toISOString()}`).toBe(listed)
+        }
+      }
+    }
+  })
+})
+
+describe('the date rule when slots are on', () => {
+  it('drops a date with no slot from selectableDates', () => {
+    expect(selectableDates(SLOTS, KL, NOON_MYT)).toEqual(['2026-07-20', '2026-07-21', '2026-07-22'])
+    // At 13:01 Monday nothing is left today: Monday drops.
+    const late = new Date('2026-07-20T05:01:00Z')
+    expect(selectableDates(SLOTS, KL, late)).toEqual(['2026-07-21', '2026-07-22'])
+    expect(isDateSelectable('2026-07-20', SLOTS, KL, late)).toBe(false)
+    expect(isDateSelectable('2026-07-21', SLOTS, KL, late)).toBe(true)
+  })
+
+  it('treats a weekday with null hours as closed in both modes', () => {
+    const thursdayOnly = { ...SLOTS, window_days: 7 }
+    expect(selectableDates(thursdayOnly, KL, NOON_MYT)).not.toContain('2026-07-23')
+    const c = custom(['2026-07-21', '2026-07-23'], { slots_enabled: true, hours: SLOTS.hours })
+    expect(selectableDates(c, KL, NOON_MYT)).toEqual(['2026-07-21'])
+    expect(isDateSelectable('2026-07-23', c, KL, NOON_MYT)).toBe(false)
+  })
+
+  it('ignores hours entirely while slots are off', () => {
+    const off = { ...SLOTS, slots_enabled: false }
+    expect(selectableDates(off, KL, NOON_MYT)).toEqual(['2026-07-20', '2026-07-21', '2026-07-22'])
+  })
+
+  it('isDateSelectable still agrees with selectableDates', () => {
+    for (const now of [NOON_MYT, LATE_MYT, new Date('2026-07-20T05:01:00Z')]) {
+      const list = selectableDates(SLOTS, KL, now)
+      for (const d of consecutive(10, Date.UTC(2026, 6, 18))) {
+        expect(isDateSelectable(d, SLOTS, KL, now), `${d} @${now.toISOString()}`).toBe(list.includes(d))
+      }
+    }
+  })
+})
+
+describe('validateSlotHours', () => {
+  it('passes normal hours, and passes anything while slots are off', () => {
+    expect(validateSlotHours(SLOTS.hours, SLOTS)).toBeNull()
+    expect(validateSlotHours([{ open: '14:00', close: '10:00' }], { ...SLOTS, slots_enabled: false })).toBeNull()
+  })
+
+  it('names close_before_open on the RAW hours, which the reader would have hidden', () => {
+    const raw = [null, { open: '14:00', close: '10:00' }]
+    expect(validateSlotHours(raw, fulfilmentConfig({ fulfilment: { slots_enabled: true, hours: raw } }))).toBe('close_before_open')
+    expect(validateSlotHours([{ open: '10:00', close: '10:00' }], SLOTS)).toBe('close_before_open')
+  })
+
+  it('names no_open_day when no weekday holds one full slot', () => {
+    const cfg = { ...SLOTS, hours: [null, null, null, null, null, null, null] }
+    expect(validateSlotHours(cfg.hours, cfg)).toBe('no_open_day')
+    const short = { ...SLOTS, slot_minutes: 120 as const, hours: [{ open: '10:00', close: '11:00' }, null, null, null, null, null, null] }
+    expect(validateSlotHours(short.hours, short)).toBe('no_open_day')
+  })
+})
+
+describe('fulfilmentWarning — no_slots', () => {
+  it('reports no_slots when slots are on and no offered date holds a slot', () => {
+    const cfg = { ...SLOTS, hours: [null, null, null, null, null, null, null] }
+    expect(fulfilmentWarning(cfg, KL, NOON_MYT)).toEqual({ kind: 'no_slots' })
+  })
+
+  it('says nothing for a rolling slot shop with an open day', () => {
+    expect(fulfilmentWarning(SLOTS, KL, NOON_MYT)).toEqual({ kind: 'none' })
+  })
+
+  it('reports empty, not no_slots, when a custom allowlist has run dry', () => {
+    const c = custom(['2026-07-01'], { slots_enabled: true, hours: SLOTS.hours })
+    expect(fulfilmentWarning(c, KL, NOON_MYT)).toEqual({ kind: 'empty' })
+  })
+
+  it('still reports review first', () => {
+    expect(fulfilmentWarning({ ...SLOTS, needs_review: true }, KL, NOON_MYT)).toEqual({ kind: 'review' })
   })
 })
