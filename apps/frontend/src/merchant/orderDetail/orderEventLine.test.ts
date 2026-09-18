@@ -49,6 +49,15 @@ describe('orderEventLine', () => {
       .toBe('You set the date to 25 Jul 2026')
   })
 
+  it('reads a slot move with an en dash, and says when a slot was set or cleared', () => {
+    expect(orderEventLine(ev({ kind: 'fulfil_time_changed', detail: { from: '10:00-11:00', to: '14:00-15:00' } }), en))
+      .toBe('You moved the time slot from 10:00 – 11:00 to 14:00 – 15:00')
+    expect(orderEventLine(ev({ kind: 'fulfil_time_changed', detail: { from: null, to: '14:00-15:00' } }), en))
+      .toBe('You set the time slot to 14:00 – 15:00')
+    expect(orderEventLine(ev({ kind: 'fulfil_time_changed', detail: { from: '10:00-11:00', to: null } }), en))
+      .toBe('You cleared the time slot')
+  })
+
   it('never shows the note', () => {
     expect(orderEventLine(ev({ kind: 'note_changed' }), en)).toBe('You edited the note')
   })

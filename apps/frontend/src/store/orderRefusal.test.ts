@@ -52,6 +52,11 @@ describe('orderRefusalPlan', () => {
     expect(orderRefusalPlan('fulfil_date_required', ctx()).actions).toEqual(['clear_date'])
   })
 
+  it('clears the slot, not the date, on a slot refusal', () => {
+    expect(orderRefusalPlan('fulfil_time_unavailable', ctx()).actions).toEqual(['clear_slot'])
+    expect(orderRefusalPlan('fulfil_time_required', ctx()).actions).toEqual(['clear_slot'])
+  })
+
   it('offers pickup only when the shop offers pickup', () => {
     // Pointing at a button that is not on screen is worse than no suggestion at all.
     for (const code of ['delivery_out_of_range', 'distance_lookup_failed'] as const) {

@@ -35,7 +35,9 @@ Write:
 ### Fixes
 ### Improvements
 
-Each heading is followed by a plain bullet list ("- " prefix), one short line per item, written for what the merchant can now do or what changed for them — never a PR title, an internal refactor, or a test/dependency change unless it fixed a bug merchants would have noticed. If a release truly has nothing merchant-visible, use a single heading that fits best (usually ### Improvements) with one bullet saying so plainly. Always use headings and bullets — never a prose paragraph, even for a single change.
+Each heading is followed by a plain bullet list ("- " prefix), one short line per item, written for what the merchant can now do or what changed for them — never a PR title, an internal refactor, or a test/dependency change unless it fixed a bug merchants would have noticed.
+
+Leave out anything that only the platform's own staff see or use: the superadmin, the /admin dashboard, admin-only tools, platform alerts and notifications to the platform team, moderation, release tooling, CI, deployment and internal operations. A merchant never sees those, so they are not news to a merchant. If a release truly has nothing merchant-visible, use a single heading that fits best (usually ### Improvements) with one bullet saying so plainly. Always use headings and bullets — never a prose paragraph, even for a single change.
 
 Write in plain English. No links, no PR/issue numbers, no version numbers inside the bullets.`
 }

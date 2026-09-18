@@ -6,6 +6,7 @@
 //
 // The two email arms live in `orderEmails.ts`; what all three share is `orderNotice.ts`.
 import { formatAddress, formatKm, formatMoney, MODE_LABELS, type NotifyOrderInput, type NotifyResult } from './orderNotice.js'
+import { fulfilSlotLabel } from './fulfilSlotLabel.js'
 
 /**
  * Telegram's own ceiling for `sendMessage` text. Over it, the API does not truncate — it
@@ -96,7 +97,10 @@ export function buildOrderMessage(order: any, merchantName?: string): string {
   // with the mode rather than down by the totals. Omitted rather than blanked for rows written
   // before #91 — `orders.fulfil_date` is null for every one of them, and a `*Date:* ` with
   // nothing after it reads as data we lost.
-  if (order.fulfil_date) msg += `*Date:* ${order.fulfil_date}\n`
+  if (order.fulfil_date) {
+    const slot = fulfilSlotLabel(order.fulfil_time_from, order.fulfil_time_to)
+    msg += `*Date:* ${order.fulfil_date}${slot ? ` ${slot}` : ''}\n`
+  }
   if (order.address) msg += `*Address:* ${formatAddress(order.address)}\n`
   // Distance-priced orders only; a region-priced order has no distance and must not print an
   // empty label. `delivery_distance_km` is null for every order placed before #101.

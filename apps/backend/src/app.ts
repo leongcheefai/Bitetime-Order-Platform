@@ -29,6 +29,7 @@ import { syncMerchantBilling, liveSubscriptionBesides } from './billingSync.js'
 import { isOurEvent } from './webhookOwnership.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
+import { notifyMerchantSignup } from './platformNotify.js'
 import { emailOrderConfirmation, emailMerchantOrder } from './orderEmails.js'
 import { signUpAccount, isDuplicateEmailError } from './accountSignup.js'
 import { makeEmailVerifyToken, readEmailVerifyToken } from './emailVerifyToken.js'
@@ -87,7 +88,7 @@ import {
   updateReleaseStatus, updateReleaseHumanization,
   listPublishedReleases, getPublishedReleaseByTag,
 } from './releasesDb.js'
-import { canIssueInvoice, validateOrderReview, isCart, isBusinessNature, isCurrencyCode, DEFAULT_CURRENCY, validateOptionGroups, optionGroupsFromRow, validateFeedback, isFeedbackStatus, validateFeedbackImages, validateTrialFeedback, shopDistance, routedKm, distanceFee, REFUSAL_STATUS, QUOTE_REFUSAL_STATUS, DEFAULT_TIMEZONE, isTimezone, computeMerchantStats, ordersInWindow, windowTotals, todayInZone, granularityFor, fulfilmentConfig, validateCustomDates, MAX_CUSTOM_DATES, pendingShopFromBody, pendingShopMetadata, menuCategoriesFromRow } from '@bitetime/shared'
+import { canIssueInvoice, validateOrderReview, isCart, isBusinessNature, isCurrencyCode, DEFAULT_CURRENCY, validateOptionGroups, optionGroupsFromRow, validateFeedback, isFeedbackStatus, validateFeedbackImages, validateTrialFeedback, shopDistance, routedKm, distanceFee, REFUSAL_STATUS, QUOTE_REFUSAL_STATUS, DEFAULT_TIMEZONE, isTimezone, computeMerchantStats, ordersInWindow, windowTotals, todayInZone, granularityFor, fulfilmentConfig, validateCustomDates, validateSlotHours, MAX_CUSTOM_DATES, pendingShopFromBody, pendingShopMetadata, menuCategoriesFromRow } from '@bitetime/shared'
 import type { CartLine, Granularity } from '@bitetime/shared'
 import { buildRevenueWorkbook, reportFilename, type ReportWindow } from './report.js'
 import { resolveRevenueRange, type ResolvedRevenueRange } from './revenueWindow.js'
@@ -247,6 +248,18 @@ app.get('/api/billing', requireSuperadmin, async (c) => {
 // never read from the body. Only name/billing/referredByCode are accepted from the
 // client (Global Constraint 1). Slug uniqueness resolution moved server-side now that the
 // browser can no longer SELECT merchants.slug directly.
+// The superadmin's Telegram alert for a new shop. Same mutable seam as notifyDeps and
+// githubDeps — production sends over the real Bot API, an API test captures what would go out.
+// The config rides in the object too, so a test can turn the alert ON without setting env vars:
+// unset is the ordinary state of both a dev machine and the DB suites.
+export const platformNotifyDeps: {
+  telegram: typeof telegramSend
+  config: { token: string; chatId: string }
+} = {
+  telegram: telegramSend,
+  config: { token: env.platformTgToken, chatId: env.platformTgChatId },
+}
+
 app.post('/api/merchants', requireUser, async (c) => {
   const user = c.get('user')
   const body = await c.req.json().catch(() => ({} as any))
@@ -303,13 +316,35 @@ app.post('/api/merchants', requireUser, async (c) => {
   // `null` billing is not a shortcut: a shop created milliseconds ago has no merchant_billing
   // row, so there is no customer id to reuse and nothing for canStartTrial to refuse.
   const outcome = await startCardlessTrial(data, null)
+  // `data` was read back before the claim flipped it, so say what is true now rather than making
+  // the client refetch to find out.
+  const row = outcome.ok ? { ...data, status: 'active' } : data
+
+  // Tell the superadmin, for EVERY shop row and in both outcomes. The refused one is the one
+  // that matters: a shop parked at `pending` sells nothing, its owner may never press retry, and
+  // nobody learns of it unless someone opens /admin.
+  //
+  // FIRE AND FORGET, and both halves of that are deliberate. Never awaited, because a slow
+  // Telegram would become a slow signup for a shop that already exists. Never able to reject,
+  // because an unhandled rejection here would be an outbound notice crashing an inbound request.
+  void notifyMerchantSignup(platformNotifyDeps.telegram, platformNotifyDeps.config, {
+    merchant: row,
+    ownerEmail: user.email ?? null,
+    trial: outcome.ok ? outcome.trial : false,
+    frontendUrl: env.frontendUrl,
+  })
+    .then((r) => {
+      if (!r.ok) console.error('Platform signup alert failed for', data.id, '—', r.error)
+    })
+    .catch((e) => console.error('Platform signup alert threw for', data.id, '—', e))
+
+  // Self-serve: a shop Stripe refused stays `pending` and the owner retries from the dashboard
+  // via POST /api/merchants/:id/start-trial. The signup itself still succeeded.
   if (!outcome.ok) {
     console.error('Trial provisioning failed at signup for', data.id, '—', outcome.error)
     return c.json({ ...data, trial: false })
   }
-  // `data` was read back before the claim flipped it, so say what is true now rather than making
-  // the client refetch to find out.
-  return c.json({ ...data, status: 'active', trial: outcome.trial })
+  return c.json({ ...row, trial: outcome.trial })
 })
 
 // Owner-editable shop config. The update goes through `admin` (service_role), which bypasses
@@ -348,6 +383,10 @@ app.patch('/api/merchants/:id', requireMerchantOwns, async (c) => {
     const storedConfig = (stored.config ?? null) as Record<string, unknown> | null
     if (submitted.fulfilment !== undefined) {
       const fulfilment = fulfilmentConfig(submitted)
+      // The RAW hours (#282), for the reason `too_many` counts the raw allowlist: the reader
+      // turns a `close <= open` day into a closed one, and a merchant who typed it must be told.
+      const badHours = validateSlotHours((submitted.fulfilment as Record<string, unknown>)?.hours, fulfilment)
+      if (badHours) return c.json({ error: badHours }, 400)
       if (fulfilment.mode === 'custom') {
         // Counted on the RAW array, before `fulfilmentConfig` caps it: validating the truncated
         // list could never report `too_many`, so a 200-date body saved 91 of them silently —
@@ -3293,6 +3332,9 @@ app.post('/api/orders', async (c) => {
   // date is `placeOrder`'s call, because the window is the shop's rule and not HTTP's — the
   // same split as `mode` (allowlisted here) versus the delivery region (refused there).
   const fulfilDate = typeof b.fulfilDate === 'string' ? b.fulfilDate : null
+  // Same split as the date: the SHAPE here, the rule in `placeOrder` (#282).
+  const fulfilTimeFrom = typeof b.fulfilTimeFrom === 'string' ? b.fulfilTimeFrom : null
+  const fulfilTimeTo = typeof b.fulfilTimeTo === 'string' ? b.fulfilTimeTo : null
 
   if (
     typeof b.merchantId !== 'string' || !b.merchantId ||
@@ -3326,6 +3368,8 @@ app.post('/api/orders', async (c) => {
       quotedTotal,
       voucherCode: typeof b.voucherCode === 'string' ? b.voucherCode : null,
       fulfilDate,
+      fulfilTimeFrom,
+      fulfilTimeTo,
       // Lifted off the ADDRESS, not a sibling body field: it is a property of where the parcel
       // goes, and keeping the two together is what stops an address and a place id from
       // disagreeing. The distance itself is never read from the body — see placeOrder.

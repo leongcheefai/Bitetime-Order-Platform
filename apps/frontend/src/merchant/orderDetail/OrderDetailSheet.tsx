@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { OrderEvent } from '@bitetime/shared'
+import { fulfilmentConfig, selectableSlots, DEFAULT_TIMEZONE, type OrderEvent, type Slot } from '@bitetime/shared'
 import { useSession } from '../../SessionContext'
-import { setOrderStatus, setOrderNote, setOrderTracking, setOrderFulfilDate, fetchOrderEvents } from '../../store'
+import { setOrderStatus, setOrderNote, setOrderTracking, setOrderFulfilment, fetchOrderEvents } from '../../store'
 import { toast } from 'sonner'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import OrderHeader from './OrderHeader'
@@ -38,6 +38,7 @@ export default function OrderDetailSheet({
   const [awbDraft, setAwbDraft] = useState('')
   const [savingTrack, setSavingTrack] = useState(false)
   const [dateDraft, setDateDraft] = useState('')
+  const [slotDraft, setSlotDraft] = useState<Slot | null>(null)
   const [savingDate, setSavingDate] = useState(false)
   // The order log (#268). Null while loading; keyed on the order id below so a different order
   // never shows the previous one's lines. Every write in this drawer returns the events it
@@ -54,6 +55,9 @@ export default function OrderDetailSheet({
     setCourierDraft(order.courier ?? '')
     setAwbDraft(order.awb ?? '')
     setDateDraft(order.fulfil_date ?? '')
+    setSlotDraft(order.fulfil_time_from && order.fulfil_time_to
+      ? { from: order.fulfil_time_from.slice(0, 5), to: order.fulfil_time_to.slice(0, 5) }
+      : null)
     setEvents(null)
   }
 
@@ -113,19 +117,41 @@ export default function OrderDetailSheet({
     }).finally(() => setSavingTrack(false))
   }
 
-  // The date edit. `fulfil_date_unavailable` is the backend refusing a day the shop's own
-  // Fulfilment settings do not offer. The picker already greys those days out, so it reaches a
-  // merchant only when the settings moved under an open drawer, or the day went by while it was
-  // open — and it says where the settings are, because the day looked open when it was picked.
+  // The date and slot edit (#282). `fulfil_date_unavailable` / `fulfil_time_unavailable` are the
+  // backend refusing a day or window the shop's own Fulfilment settings do not offer. The pickers
+  // already hide those, so a refusal reaches a merchant only when the settings moved under an
+  // open drawer, or the time went by while it was open — and it says where the settings are.
+  const fulfilCfg = fulfilmentConfig(merchant?.config)
+  const slotsOn = fulfilCfg.slots_enabled
+  const shopTz = merchant?.timezone ?? DEFAULT_TIMEZONE
+  // The slot as the ROW holds it, `HH:MM-HH:MM` or `''`, against the draft's own key. The slot is
+  // sent only when the two DIFFER: a date move that leaves the slot alone must carry no slot keys,
+  // so the backend keeps the row's slot and judges it on the new day (or, for an order that never
+  // had one, leaves it without one). Sending the draft on every save was how a legacy order at a
+  // slot shop could never move its date — two nulls read as "clear", which a slot shop refuses.
+  const orderSlotKey = order?.fulfil_time_from && order?.fulfil_time_to
+    ? `${order.fulfil_time_from.slice(0, 5)}-${order.fulfil_time_to.slice(0, 5)}` : ''
+  const slotKey = slotDraft ? `${slotDraft.from}-${slotDraft.to}` : ''
+  const slotDirty = slotKey !== orderSlotKey
+  // A slot shop's order that HAD a slot and now has none in the draft: the merchant moved the
+  // date to a day where the old slot is not open, and must pick a new one before saving. The
+  // save button waits for that rather than posting a clear the backend would refuse.
+  const slotMissing = slotsOn && orderSlotKey !== '' && slotDraft === null
+
   function handleDateSave() {
-    if (!order || !dateDraft) return
+    if (!order || !dateDraft || slotMissing) return
     setSavingDate(true)
-    setOrderFulfilDate(order.id, dateDraft, merchant!.id).then(r => {
+    setOrderFulfilment(order.id, {
+      fulfilDate: dateDraft,
+      ...(slotDirty ? { fulfilSlot: slotDraft } : {}),
+    }, merchant!.id).then(r => {
       if (r.ok) {
         applyWrite(r.data)
-        toast.success(t('Date saved', '日期已保存'))
+        toast.success(slotsOn ? t('Date and time saved', '日期与时段已保存') : t('Date saved', '日期已保存'))
       } else if (r.error.code === 'fulfil_date_unavailable') {
         toast.error(t('Your shop is not taking orders for that day. Check Settings → Fulfilment.', '你的店铺在该日期不接单。请查看设置 → 配送日期。'))
+      } else if (r.error.code === 'fulfil_time_unavailable') {
+        toast.error(t('Your shop does not offer that time slot on that day. Check Settings → Fulfilment.', '你的店铺在该日期不提供该时段。请查看设置 → 配送日期。'))
       } else if (r.error.code === 'order_completed') {
         toast.error(t('This order is done. Its date cannot change.', '此订单已结束，日期无法更改。'))
       } else {
@@ -138,7 +164,7 @@ export default function OrderDetailSheet({
   const noteDirty = order != null && noteDraft.trim() !== (order.note ?? '')
   const trackDirty = order != null &&
     (courierDraft !== (order.courier ?? '') || awbDraft.trim() !== (order.awb ?? ''))
-  const dateDirty = order != null && dateDraft !== '' && dateDraft !== (order.fulfil_date ?? '')
+  const dateDirty = order != null && dateDraft !== '' && !slotMissing && (dateDraft !== (order.fulfil_date ?? '') || slotDirty)
 
   return (
     <Sheet open={order !== null} onOpenChange={open => { if (!open) { onClose(); setDrawerFor(undefined) } }}>
@@ -172,7 +198,18 @@ export default function OrderDetailSheet({
               <CustomerCard
                 order={order}
                 fulfilDate={dateDraft}
-                onFulfilDate={setDateDraft}
+                // The slot rides along to the new day when that day offers it — the same rule the
+                // backend applies to a patch with no slot — and is cleared when it does not, so the
+                // select asks for a new one. At a shop with slots off the leftover slot stays; it
+                // is the merchant's to clear.
+                onFulfilDate={iso => {
+                  setDateDraft(iso)
+                  if (slotsOn && slotDraft && !selectableSlots(iso, fulfilCfg, shopTz, new Date()).some(s => s.from === slotDraft.from && s.to === slotDraft.to)) {
+                    setSlotDraft(null)
+                  }
+                }}
+                fulfilSlot={slotDraft}
+                onFulfilSlot={setSlotDraft}
                 onSaveDate={handleDateSave}
                 savingDate={savingDate}
                 dateDirty={dateDirty}

@@ -1,6 +1,6 @@
 import type { User } from '@supabase/auth-js';
 import { voucherFromRow, QUOTE_REFUSALS, validateFeedbackImages } from '@bitetime/shared';
-import type { FeedbackDraft, FeedbackStatus, Granularity, MerchantStats, OrderEvent, OrderRefusal, PendingShop, QuoteRefusal } from '@bitetime/shared';
+import type { FeedbackDraft, FeedbackStatus, Granularity, MerchantStats, OrderEvent, OrderRefusal, PendingShop, QuoteRefusal, Slot } from '@bitetime/shared';
 import { revenueQuery, type RevenueSelection } from './merchant/revenueRange';
 import { auth, storage } from './supabase';
 import { RESERVED_SLUGS } from './slug';
@@ -772,7 +772,7 @@ export class OrderError extends Error {
  * client could name its own. If the backend's price disagrees with our quote it refuses with
  * `price_changed` rather than charging a number the customer never confirmed.
  */
-export async function placeOrder({ merchantId, customerName, customerWa, mode, address, cart, quotedTotal, voucherCode, fulfilDate }: {
+export async function placeOrder({ merchantId, customerName, customerWa, mode, address, cart, quotedTotal, voucherCode, fulfilDate, fulfilSlot }: {
   merchantId: string
   customerName: string
   customerWa: string
@@ -785,6 +785,8 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
   voucherCode?: string | null
   /** `YYYY-MM-DD` on the shop's clock. The backend re-checks it against the shop's window. */
   fulfilDate: string | null
+  /** The slot the customer picked, or null at a shop with slots off (#282). Re-checked against the shop's hours. */
+  fulfilSlot: Slot | null
 }): Promise<Result<{ orderNumber: string; id: string; status: string }, OrderError>> {
   // Optional: a guest has no session, and guest checkout is a first-class path.
   const { data: { session } } = await auth.getSession()
@@ -804,6 +806,7 @@ export async function placeOrder({ merchantId, customerName, customerWa, mode, a
     body: JSON.stringify({
       merchantId, customerName, customerWa, mode, address,
       cart, quotedTotal, voucherCode, fulfilDate,
+      fulfilTimeFrom: fulfilSlot?.from ?? null, fulfilTimeTo: fulfilSlot?.to ?? null,
     }),
   }).catch(() => null)
   if (!res) return { ok: false, error: new OrderError('network') }
@@ -1019,12 +1022,23 @@ export async function setOrderTracking(orderId: string, courier: string | null, 
 }
 
 /**
- * Move the day an order is for. `fulfilDate` is `YYYY-MM-DD` and never empty — a date cannot be
- * cleared, only moved. The backend judges it by the shop's own Fulfilment settings, the same
- * `isDateSelectable` intake applies, and answers `fulfil_date_unavailable` or `order_completed`.
+ * Move the day — and, at a slot shop, the slot — an order is for. `fulfilDate` is `YYYY-MM-DD`
+ * and never empty: a date cannot be cleared, only moved. `fulfilSlot` is sent only when given —
+ * `null` clears (a shop with slots off only), a `Slot` moves. The backend judges both by the
+ * shop's own Fulfilment settings, the same rules intake applies, and answers
+ * `fulfil_date_unavailable`, `fulfil_time_unavailable` or `order_completed`.
  */
-export async function setOrderFulfilDate(orderId: string, fulfilDate: string, merchantId: string): Promise<Result<any>> {
-  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', { fulfil_date: fulfilDate }, { auth: true })
+export async function setOrderFulfilment(
+  orderId: string,
+  patch: { fulfilDate: string; fulfilSlot?: Slot | null },
+  merchantId: string,
+): Promise<Result<any>> {
+  const body: Record<string, unknown> = { fulfil_date: patch.fulfilDate }
+  if (patch.fulfilSlot !== undefined) {
+    body.fulfil_time_from = patch.fulfilSlot?.from ?? null
+    body.fulfil_time_to = patch.fulfilSlot?.to ?? null
+  }
+  return apiSend<any>(`/api/merchants/${merchantId}/orders/${orderId}`, 'PATCH', body, { auth: true })
 }
 
 /**

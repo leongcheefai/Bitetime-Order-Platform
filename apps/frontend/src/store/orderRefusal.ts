@@ -32,6 +32,8 @@ export type RefusalAction =
   | 'requote'
   /** Clear the chosen fulfilment date so the stale one leaves the grid. */
   | 'clear_date'
+  /** Clear the chosen time slot so the stale one leaves the list. */
+  | 'clear_slot'
   /**
    * Re-check every cart line's selections against the freshly-loaded menu: drop picks whose
    * option is gone or switched off, and reopen the picker on what that leaves invalid. MUST come
@@ -186,6 +188,12 @@ export function orderRefusalPlan(code: OrderRefusalCode | undefined, ctx: OrderR
     case 'fulfil_date_required':
       // Clearing the selection is what recovers it: the re-render drops the stale date from the grid.
       return { message: t('Please choose a date for your order.', '请选择订单日期。'), actions: ['clear_date'] }
+
+    case 'fulfil_time_unavailable':
+    case 'fulfil_time_required':
+      // Same recovery as the date: clearing the selection re-renders the list without the slot
+      // that closed. The date stays — the customer has not been told their DAY is gone.
+      return { message: t('Please choose a time slot for your order.', '请选择订单时段。'), actions: ['clear_slot'] }
 
     case 'invalid_body':
       // A permanent refusal — the same cart is refused identically — so say what would change it.

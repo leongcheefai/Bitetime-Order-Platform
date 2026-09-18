@@ -368,3 +368,14 @@ describe('pickOrderFields — fulfil_date', () => {
     expect(pickOrderFields({ total: 0, merchant_id: 'x', fulfil_date: '2026-07-25' })).toEqual({ fulfil_date: '2026-07-25' })
   })
 })
+
+describe('pickOrderFields — fulfil_time (#282)', () => {
+  it('takes the slot pair together, as two strings or two nulls, and drops a half pair', () => {
+    expect(pickOrderFields({ fulfil_time_from: '10:00', fulfil_time_to: '11:00' }))
+      .toEqual({ fulfil_time_from: '10:00', fulfil_time_to: '11:00' })
+    expect(pickOrderFields({ fulfil_time_from: null, fulfil_time_to: null }))
+      .toEqual({ fulfil_time_from: null, fulfil_time_to: null })
+    expect(pickOrderFields({ fulfil_time_from: '10:00' })).toEqual({})
+    expect(pickOrderFields({ fulfil_time_from: '10:00', fulfil_time_to: '' })).toEqual({})
+  })
+})

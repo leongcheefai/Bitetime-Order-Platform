@@ -56,6 +56,16 @@ export function orderEventLine(e: OrderEvent, t: Translate): string {
         `你将日期从${formatCalendarDate(from, 'zh')}改为${formatCalendarDate(to, 'zh')}`,
       )
     }
+    case 'fulfil_time_changed': {
+      // `'HH:MM-HH:MM'` on the wire, an en dash with spaces on screen — the same shape the header
+      // and the customer's confirmation print, so the log names the window the way they do.
+      const label = (v: unknown) => (typeof v === 'string' ? v.replace('-', ' – ') : null)
+      const to = label(e.detail.to)
+      const from = label(e.detail.from)
+      if (!to) return t('You cleared the time slot', '你清除了时段')
+      if (!from) return t(`You set the time slot to ${to}`, `你将时段设为${to}`)
+      return t(`You moved the time slot from ${from} to ${to}`, `你将时段从${from}改为${to}`)
+    }
     case 'voucher_released':
       return t(`Voucher ${codeOf(e)} use returned`, `优惠券 ${codeOf(e)} 的使用次数已退回`)
     case 'voucher_restored':

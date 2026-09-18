@@ -319,6 +319,85 @@ describe('order log', () => {
         expect(await res.json()).toEqual({ error: 'No updatable fields' })
       })
     })
+
+    describe('fulfil_time (#282)', () => {
+      function plusDays(days: number): string {
+        const today = todayInZone(DEFAULT_TIMEZONE, new Date())
+        return new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
+      }
+      function weekdayOf(iso: string): number {
+        return new Date(`${iso}T00:00:00Z`).getUTCDay()
+      }
+      async function setFulfilment(fulfilment: Record<string, unknown>) {
+        const { error } = await serviceClient().from('merchants').update({ config: { fulfilment } }).eq('id', shop)
+        if (error) throw new Error(error.message)
+      }
+      const ALL_DAY = Array.from({ length: 7 }, () => ({ open: '00:00', close: '23:00' }))
+      const slotsOn = (over: Record<string, unknown> = {}) => setFulfilment({
+        mode: 'rolling', lead_days: 0, window_days: 14, closed_weekdays: [],
+        slots_enabled: true, hours: ALL_DAY, slot_minutes: 60, slot_notice_minutes: 0, ...over,
+      })
+      const slot = (from: string, to: string) => ({ fulfil_time_from: from, fulfil_time_to: to })
+
+      it('moves the slot, records both ends, and hands the row back with the new times', async () => {
+        await slotsOn()
+        const orderId = await seedOrder(shop, 'new')
+        await patchOrder(orderId, { fulfil_date: plusDays(2) })
+        const res = await patchOrder(orderId, slot('10:00', '11:00'))
+        expect(res.status).toBe(200)
+        const body = (await res.json()) as { fulfil_time_from: string; fulfil_time_to: string; events: EventRow[] }
+        expect(body.fulfil_time_from).toBe('10:00:00')
+        expect(body.fulfil_time_to).toBe('11:00:00')
+        expect(body.events.map(e => e.kind)).toEqual(['fulfil_time_changed'])
+        expect((await eventsOf(orderId)).at(-1)).toMatchObject({
+          kind: 'fulfil_time_changed', detail: { from: null, to: '10:00-11:00' },
+        })
+      })
+
+      it('refuses a slot outside the hours and records nothing', async () => {
+        await slotsOn({ hours: Array.from({ length: 7 }, () => ({ open: '10:00', close: '14:00' })) })
+        const orderId = await seedOrder(shop, 'new')
+        await patchOrder(orderId, { fulfil_date: plusDays(2) })
+        const n = (await eventsOf(orderId)).length
+        const res = await patchOrder(orderId, slot('14:00', '15:00'))
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ error: 'fulfil_time_unavailable' })
+        expect((await eventsOf(orderId)).length).toBe(n)
+      })
+
+      it('refuses a date move whose kept slot is closed on the new day', async () => {
+        const target = plusDays(3)
+        const hours = ALL_DAY.map((h, i) => (i === weekdayOf(target) ? { open: '12:00', close: '14:00' } : h))
+        await slotsOn({ hours })
+        const orderId = await seedOrder(shop, 'new')
+        await patchOrder(orderId, { fulfil_date: plusDays(2), ...slot('10:00', '11:00') })
+        const res = await patchOrder(orderId, { fulfil_date: target })
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ error: 'fulfil_time_unavailable' })
+        const ok = await patchOrder(orderId, { fulfil_date: target, ...slot('12:00', '13:00') })
+        expect(ok.status).toBe(200)
+        expect(((await ok.json()) as { events: EventRow[] }).events.map(e => e.kind)).toEqual(['fulfil_date_changed', 'fulfil_time_changed'])
+      })
+
+      it('refuses to move the slot of a completed order (ADR 0024)', async () => {
+        await slotsOn()
+        const orderId = await seedOrder(shop, 'completed')
+        const res = await patchOrder(orderId, slot('10:00', '11:00'))
+        expect(res.status).toBe(409)
+        expect(await res.json()).toEqual({ error: 'order_completed' })
+      })
+
+      it('lets a shop with slots off clear a slot, and refuses a new one', async () => {
+        await slotsOn()
+        const orderId = await seedOrder(shop, 'new')
+        await patchOrder(orderId, { fulfil_date: plusDays(2), ...slot('10:00', '11:00') })
+        await setFulfilment({ mode: 'rolling', lead_days: 0, window_days: 14, closed_weekdays: [], slots_enabled: false })
+        expect((await patchOrder(orderId, slot('12:00', '13:00'))).status).toBe(409)
+        const res = await patchOrder(orderId, { fulfil_time_from: null, fulfil_time_to: null })
+        expect(res.status).toBe(200)
+        expect(((await res.json()) as { fulfil_time_from: null }).fulfil_time_from).toBeNull()
+      })
+    })
   })
 
   describe('GET /api/merchants/:id/orders/:orderId/events', () => {

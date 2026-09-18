@@ -29,7 +29,7 @@ import { placeOrder, OrderError, type PlaceOrderInput } from '../../src/orders.j
 import type { DistanceDeps, DistanceOutcome } from '../../src/distance.js'
 import { sqlDistanceCache } from '../../src/distanceCache.js'
 import { quoteMerchantWindow, quoteIpWindow } from '../../src/quotaWindows.js'
-import { MAX_CART_QTY, MAX_CART_LINES, todayInZone, DEFAULT_TIMEZONE } from '@bitetime/shared'
+import { MAX_CART_QTY, MAX_CART_LINES, todayInZone, DEFAULT_TIMEZONE, minutesInZone, minutesToTime } from '@bitetime/shared'
 import type { CartLine } from '@bitetime/shared'
 
 /**
@@ -415,6 +415,8 @@ describe('POST /api/orders', () => {
             quotedTotal: 57.2,
             voucherCode: null,
             fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+            fulfilTimeFrom: null,
+            fulfilTimeTo: null,
             destinationPlaceId: 'ChIJord-susp-dest',
           },
           new Date(),
@@ -1330,6 +1332,79 @@ describe('POST /api/orders', () => {
       expect(res.status).toBe(409)
       expect(await errorOf(res)).toBe('fulfil_date_unavailable')
     })
+
+    // ── Time slots (#282) ──────────────────────────────────────────────────────
+    describe('time slots', () => {
+      // Open every weekday all day, 60-minute slots, no notice — so `tomorrowInShopZone()` at
+      // 10:00–11:00 is certainly offered.
+      const ALL_DAY = Array.from({ length: 7 }, () => ({ open: '00:00', close: '23:00' }))
+      const slotShop = () => setFulfilmentConfig(shop, {
+        lead_days: 0, window_days: 14, closed_weekdays: [],
+        slots_enabled: true, hours: ALL_DAY, slot_minutes: 60, slot_notice_minutes: 0,
+      })
+      const withSlot = (over: Record<string, unknown> = {}) =>
+        body(shop, productId, { fulfilDate: tomorrowInShopZone(), fulfilTimeFrom: '10:00', fulfilTimeTo: '11:00', ...over })
+
+      it('stores both ends of the slot at a slot shop', async () => {
+        await slotShop()
+        const res = await post(withSlot())
+        expect(res.status).toBe(200)
+        const [order] = await ordersOf(shop)
+        expect(order.fulfil_time_from).toBe('10:00:00')
+        expect(order.fulfil_time_to).toBe('11:00:00')
+      })
+
+      it('refuses an order with no slot at a slot shop, and the counter does not move', async () => {
+        await slotShop()
+        const res = await post(body(shop, productId, { fulfilDate: tomorrowInShopZone() }))
+        expect(res.status).toBe(409)
+        expect(await errorOf(res)).toBe('fulfil_time_required')
+        expect(await ordersOf(shop)).toEqual([])
+        expect(await counterOf(shop)).toBeNull()
+      })
+
+      it('refuses a slot outside the hours, off the grid, of the wrong length, or half-sent', async () => {
+        await slotShop()
+        for (const [over, why] of [
+          [{ fulfilTimeFrom: '23:00', fulfilTimeTo: '24:00' }, 'past close'],
+          [{ fulfilTimeFrom: '10:30', fulfilTimeTo: '11:30' }, 'off the grid'],
+          [{ fulfilTimeFrom: '10:00', fulfilTimeTo: '12:00' }, 'wrong length'],
+          [{ fulfilTimeTo: undefined }, 'one end only'],
+          [{ fulfilTimeFrom: 'ten', fulfilTimeTo: 'eleven' }, 'not a time'],
+        ] as const) {
+          const res = await post(withSlot(over as Record<string, unknown>))
+          expect(res.status, why).toBe(409)
+          expect(await errorOf(res), why).toBe('fulfil_time_unavailable')
+        }
+        expect(await ordersOf(shop)).toEqual([])
+        expect(await counterOf(shop)).toBeNull()
+      })
+
+      it('refuses a same-day slot that starts inside the notice', async () => {
+        await setFulfilmentConfig(shop, {
+          lead_days: 0, window_days: 14, closed_weekdays: [],
+          slots_enabled: true, hours: ALL_DAY, slot_minutes: 60, slot_notice_minutes: 1440,
+        })
+        // The next grid slot after now, today: certainly inside a day of notice.
+        const nowMin = minutesInZone(DEFAULT_TIMEZONE, new Date())
+        const from = Math.min(22, Math.floor(nowMin / 60) + 1) * 60
+        const res = await post(body(shop, productId, {
+          fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+          fulfilTimeFrom: minutesToTime(from), fulfilTimeTo: minutesToTime(from + 60),
+        }))
+        expect(res.status).toBe(409)
+        // Today holds no slot inside a day of notice, so the DATE is refused first. Both are honest.
+        expect(['fulfil_date_unavailable', 'fulfil_time_unavailable']).toContain(await errorOf(res))
+      })
+
+      it('ignores a slot at a shop with slots off and stores nulls', async () => {
+        const res = await post(withSlot())
+        expect(res.status).toBe(200)
+        const [order] = await ordersOf(shop)
+        expect(order.fulfil_time_from).toBeNull()
+        expect(order.fulfil_time_to).toBeNull()
+      })
+    })
   })
 
   // ── Tax: derived inside the transaction, snapshotted with the rate that produced it (#88) ──
@@ -1657,6 +1732,8 @@ describe('POST /api/orders', () => {
         quotedTotal: 57.2,
         voucherCode: null,
         fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+        fulfilTimeFrom: null,
+        fulfilTimeTo: null,
         destinationPlaceId: 'ChIJord-provider-miss',
         ...extra,
       })
@@ -1800,6 +1877,8 @@ describe('POST /api/orders', () => {
         quotedTotal: 57.2,
         voucherCode: null,
         fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+        fulfilTimeFrom: null,
+        fulfilTimeTo: null,
         destinationPlaceId: null,
         ...extra,
       })
@@ -1968,6 +2047,8 @@ describe('POST /api/orders', () => {
         quotedTotal: 57.2,
         voucherCode: null,
         fulfilDate: todayInZone(DEFAULT_TIMEZONE, new Date()),
+        fulfilTimeFrom: null,
+        fulfilTimeTo: null,
         destinationPlaceId: null,
         callerIp,
         ...extra,

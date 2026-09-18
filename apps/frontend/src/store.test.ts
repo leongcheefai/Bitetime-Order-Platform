@@ -711,6 +711,7 @@ describe('placeOrder', () => {
       cart: [{ productId: 'p1', qty: 2, selections: [] }],
       quotedTotal: 24,
       fulfilDate: '2026-07-21',
+      fulfilSlot: null,
     })
 
     const [url, init] = fetchMock.mock.calls[0]
@@ -722,6 +723,8 @@ describe('placeOrder', () => {
       cart: [{ productId: 'p1', qty: 2, selections: [] }],
       quotedTotal: 24,
       fulfilDate: '2026-07-21',
+      fulfilTimeFrom: null,
+      fulfilTimeTo: null,
     })
     expect(result).toEqual({ ok: true, data: { orderNumber: 'BT-260714-0050', id: 'order-uuid-1' } })
   })

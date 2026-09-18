@@ -5,7 +5,7 @@ import { orderPatchEvents } from '../../src/orderEvents.js'
 // actually changed, and none for a field written back to the value it already had — a retried
 // patch must stay a no-op on the log as well as on the row.
 describe('orderPatchEvents', () => {
-  const before = { status: 'new', note: null, courier: null, awb: null, fulfil_date: '2026-07-21' }
+  const before = { status: 'new', note: null, courier: null, awb: null, fulfil_date: '2026-07-21', fulfil_time_from: null, fulfil_time_to: null }
 
   it('records a status move with both ends', () => {
     expect(orderPatchEvents(before, { status: 'preparing' })).toEqual([
@@ -59,5 +59,16 @@ describe('orderPatchEvents', () => {
     expect(orderPatchEvents({ ...before, fulfil_date: null }, { fulfil_date: '2026-07-25' })).toEqual([
       { kind: 'fulfil_date_changed', detail: { from: null, to: '2026-07-25' } },
     ])
+  })
+
+  it('records fulfil_time_changed with both ends as HH:MM-HH:MM labels, and nothing for an unchanged slot', () => {
+    const b = { ...before, fulfil_time_from: '10:00', fulfil_time_to: '11:00' }
+    expect(orderPatchEvents(b, { fulfil_time_from: '13:00', fulfil_time_to: '14:00' }))
+      .toEqual([{ kind: 'fulfil_time_changed', detail: { from: '10:00-11:00', to: '13:00-14:00' } }])
+    expect(orderPatchEvents(b, { fulfil_time_from: '10:00', fulfil_time_to: '11:00' })).toEqual([])
+    expect(orderPatchEvents({ ...b, fulfil_time_from: null, fulfil_time_to: null }, { fulfil_time_from: '10:00', fulfil_time_to: '11:00' }))
+      .toEqual([{ kind: 'fulfil_time_changed', detail: { from: null, to: '10:00-11:00' } }])
+    expect(orderPatchEvents(b, { fulfil_time_from: null, fulfil_time_to: null }))
+      .toEqual([{ kind: 'fulfil_time_changed', detail: { from: '10:00-11:00', to: null } }])
   })
 })

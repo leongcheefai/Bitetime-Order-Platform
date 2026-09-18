@@ -11,6 +11,8 @@ const base: SubmitGateInput = {
   distanceUsable: false,
   quoted: false,
   chosenDate: '2026-07-26',
+  slotRequired: false,
+  chosenSlot: null,
   noMethods: false,
   busy: false,
 }
@@ -105,5 +107,15 @@ describe('canSubmit', () => {
   it('refuses whenever the address is not ready', () => {
     expect(region({ address: { ...REGION_ADDRESS, state: '' } }).canSubmit).toBe(false)
     expect(express({ quoted: false }).canSubmit).toBe(false)
+  })
+})
+
+describe('time slot (#282)', () => {
+  it('asks nothing of a shop with slots off', () => {
+    expect(gate({ slotRequired: false, chosenSlot: null }).canSubmit).toBe(true)
+  })
+  it('needs a chosen slot at a slot shop', () => {
+    expect(gate({ slotRequired: true, chosenSlot: null }).canSubmit).toBe(false)
+    expect(gate({ slotRequired: true, chosenSlot: { from: '10:00', to: '11:00' } }).canSubmit).toBe(true)
   })
 })

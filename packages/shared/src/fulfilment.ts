@@ -7,6 +7,19 @@
 /** Which rule decides the dates a shop offers. Closed set — see CONTEXT.md → Fulfilment date. */
 export type FulfilmentMode = 'rolling' | 'custom'
 
+/** The slot lengths a shop may pick. Closed set — the form offers exactly these. */
+export type SlotMinutes = 30 | 60 | 120
+export const SLOT_MINUTES: readonly SlotMinutes[] = [30, 60, 120]
+
+/** The longest notice a shop may ask for: one day. Beyond that, `lead_days` is the tool. */
+export const SLOT_NOTICE_MAX = 1440
+
+/** One weekday's opening hours, `HH:MM` 24-hour, shop-local. `close` is after `open`. */
+export interface DayHours { open: string; close: string }
+
+/** One window a customer may pick, `HH:MM` both ends, `to` = `from` + `slot_minutes`. */
+export interface Slot { from: string; to: string }
+
 /** Per-merchant shape, stored under `merchants.config -> 'fulfilment'`. */
 export interface FulfilmentConfig {
   /** `rolling` computes a moving range; `custom` offers an explicit allowlist and nothing else. */
@@ -31,12 +44,28 @@ export interface FulfilmentConfig {
    * Confirm control can still clear it.
    */
   needs_review: boolean
+  /**
+   * The customer picks a TIME SLOT after the date (#282). Off for every shop until its owner turns
+   * it on, so the day this shipped changed nothing for anyone. While off, `hours`, `slot_minutes`
+   * and `slot_notice_minutes` are dormant — kept in the row like an unused mode's settings.
+   */
+  slots_enabled: boolean
+  /** Opening hours per weekday, index 0 = Sunday … 6 = Saturday. `null` = closed that day. */
+  hours: (DayHours | null)[]
+  /** How long one slot is. */
+  slot_minutes: SlotMinutes
+  /** A slot must START at least this many minutes after now, on the shop's clock. */
+  slot_notice_minutes: number
 }
+
+/** The hours a shop starts from when it opens the Time slots card: 09:00–18:00 every day. Dormant until `slots_enabled`. */
+export const DEFAULT_HOURS: readonly (DayHours | null)[] =
+  Array.from({ length: 7 }, () => ({ open: '09:00', close: '18:00' }))
 
 /**
  * What a shop that has never opened the Fulfilment tab offers: today through two weeks out,
- * closed on no day. Every existing merchant reads as this, so the feature works on day one
- * without a single merchant touching their settings.
+ * closed on no day, no time slots. Every existing merchant reads as this, so the feature works
+ * on day one without a single merchant touching their settings.
  */
 export const DEFAULT_FULFILMENT: FulfilmentConfig = {
   mode: 'rolling',
@@ -45,6 +74,10 @@ export const DEFAULT_FULFILMENT: FulfilmentConfig = {
   closed_weekdays: [],
   custom_dates: [],
   needs_review: false,
+  slots_enabled: false,
+  hours: DEFAULT_HOURS.map(h => (h ? { ...h } : null)),
+  slot_minutes: 60,
+  slot_notice_minutes: 0,
 }
 
 export const DEFAULT_TIMEZONE = 'Asia/Kuala_Lumpur'
@@ -80,6 +113,40 @@ function clampInt(v: unknown, lo: number, hi: number, fallback: number): number 
   return Math.min(hi, Math.max(lo, Math.trunc(v)))
 }
 
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
+
+/** `HH:MM` (24-hour) as minutes since midnight, or null for anything else. */
+export function timeToMinutes(v: unknown): number | null {
+  if (typeof v !== 'string') return null
+  const m = TIME_RE.exec(v)
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null
+}
+
+export function minutesToTime(min: number): string {
+  return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`
+}
+
+/** One weekday's hours off the raw bag. Anything that is not a real, non-empty range reads as closed. */
+function dayHours(raw: unknown): DayHours | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const r = raw as Record<string, unknown>
+  const open = timeToMinutes(r.open)
+  const close = timeToMinutes(r.close)
+  if (open === null || close === null || close <= open) return null
+  return { open: r.open as string, close: r.close as string }
+}
+
+/**
+ * Seven days of hours off the raw bag. A MISSING key reads as the default week: the merchant
+ * never opened the card. A PRESENT array reads day by day, and a day the array does not name is
+ * closed — the merchant sent a list, and a day they did not send is a day they did not open.
+ */
+function hoursFromRaw(raw: unknown): (DayHours | null)[] {
+  if (raw === undefined) return DEFAULT_HOURS.map(h => (h ? { ...h } : null))
+  const src = Array.isArray(raw) ? raw : []
+  return Array.from({ length: 7 }, (_, i) => dayHours(src[i]))
+}
+
 /**
  * Read a merchant's fulfilment rules off the raw `config` jsonb.
  *
@@ -112,6 +179,12 @@ export function fulfilmentConfig(raw: unknown): FulfilmentConfig {
       dates.filter((d): d is string => typeof d === 'string' && dayMs(d) !== null),
     )].sort().slice(0, MAX_CUSTOM_DATES),
     needs_review: f.needs_review === true,
+    slots_enabled: f.slots_enabled === true,
+    hours: hoursFromRaw(f.hours),
+    slot_minutes: (SLOT_MINUTES as readonly number[]).includes(f.slot_minutes as number)
+      ? (f.slot_minutes as SlotMinutes)
+      : DEFAULT_FULFILMENT.slot_minutes,
+    slot_notice_minutes: clampInt(f.slot_notice_minutes, 0, SLOT_NOTICE_MAX, DEFAULT_FULFILMENT.slot_notice_minutes),
   }
 }
 
@@ -162,6 +235,19 @@ export function todayInZone(tz: string, now: Date): string {
   return `${get('year')}-${get('month')}-${get('day')}`
 }
 
+/**
+ * Minutes since midnight on the SHOP's clock. `hourCycle: 'h23'` so midnight reads 0, never 24.
+ * The same fallback rule as `todayInZone`: a junk zone reads as the default, never throws.
+ */
+export function minutesInZone(tz: string, now: Date): number {
+  const zone = isTimezone(tz) ? tz : DEFAULT_TIMEZONE
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(now)
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? '0')
+  return get('hour') * 60 + get('minute')
+}
+
 /** The window's bounds as UTC-midnight ms, or null if the shop clock cannot be read. */
 function windowBounds(cfg: FulfilmentConfig, tz: string, now: Date): { first: number; last: number } | null {
   const today = dayMs(todayInZone(tz, now))
@@ -198,7 +284,7 @@ export function customDateBounds(tz: string, now: Date): { first: string; last: 
  * In `custom`, lead days, the window and closed weekdays do not apply at all: the merchant named
  * the dates, and honouring their own notice period is theirs to do by not ticking tomorrow.
  */
-export function selectableDates(cfg: FulfilmentConfig, tz: string, now: Date): string[] {
+function datesInRule(cfg: FulfilmentConfig, tz: string, now: Date): string[] {
   if (cfg.needs_review) return []
   if (cfg.mode === 'custom') {
     const b = customBoundsMs(tz, now)
@@ -225,7 +311,7 @@ export function selectableDates(cfg: FulfilmentConfig, tz: string, now: Date): s
  * `selectableDates`, because intake gets a date from a request body and must judge it without
  * building a list — but the two MUST agree, and a test pins that they do.
  */
-export function isDateSelectable(date: string, cfg: FulfilmentConfig, tz: string, now: Date): boolean {
+function dateInRule(date: string, cfg: FulfilmentConfig, tz: string, now: Date): boolean {
   const ms = dayMs(date)
   if (ms === null) return false
   if (cfg.needs_review) return false
@@ -238,6 +324,139 @@ export function isDateSelectable(date: string, cfg: FulfilmentConfig, tz: string
   if (!b) return false
   if (ms < b.first || ms > b.last) return false
   return !cfg.closed_weekdays.includes(new Date(ms).getUTCDay())
+}
+
+// ── Time slots (#282) ─────────────────────────────────────────────────────────────────────────
+
+/** The full grid of one day's hours: from `open`, stepping `slotMinutes`, dropping a slot that runs past `close`. */
+export function slotsBetween(day: DayHours, slotMinutes: SlotMinutes): Slot[] {
+  const open = timeToMinutes(day.open)
+  const close = timeToMinutes(day.close)
+  if (open === null || close === null) return []
+  const out: Slot[] = []
+  for (let from = open; from + slotMinutes <= close; from += slotMinutes) {
+    out.push({ from: minutesToTime(from), to: minutesToTime(from + slotMinutes) })
+  }
+  return out
+}
+
+/**
+ * The earliest minute, counted from the shop's midnight TODAY, at which a slot may start.
+ * Minutes-since-today rather than an instant, so a day's offset is a plain `× 1440` and the
+ * notice crosses midnight without a zone-offset calculation. (A DST shift inside the shop's own
+ * zone would move this by an hour; the platform's shops have none, and an hour of notice is not
+ * a price.)
+ */
+function earliestStart(cfg: FulfilmentConfig, tz: string, now: Date): number {
+  return minutesInZone(tz, now) + cfg.slot_notice_minutes
+}
+
+/** A slot's start as minutes from the shop's midnight today. Null when either date is unreadable. */
+function slotStartFromToday(date: string, from: number, tz: string, now: Date): number | null {
+  const day = dayMs(date)
+  const today = dayMs(todayInZone(tz, now))
+  if (day === null || today === null) return null
+  return Math.round((day - today) / DAY) * 1440 + from
+}
+
+/** The slots of one date that the DATE RULE has already accepted. */
+function slotsOnDay(date: string, cfg: FulfilmentConfig, tz: string, now: Date): Slot[] {
+  const ms = dayMs(date)
+  if (ms === null) return []
+  const hours = cfg.hours[new Date(ms).getUTCDay()]
+  if (!hours) return []
+  const earliest = earliestStart(cfg, tz, now)
+  return slotsBetween(hours, cfg.slot_minutes).filter(s => {
+    const start = slotStartFromToday(date, timeToMinutes(s.from)!, tz, now)
+    return start !== null && start >= earliest
+  })
+}
+
+/**
+ * Every date this shop is currently taking orders for, in order. What the picker renders.
+ *
+ * With slots on, a date that holds no slot is not offered — a weekday with no hours, or today
+ * once its last slot has passed — so the storefront never shows a day the customer cannot
+ * complete. That filter lives HERE and in `isDateSelectable`, so intake refuses the same days.
+ */
+export function selectableDates(cfg: FulfilmentConfig, tz: string, now: Date): string[] {
+  const dates = datesInRule(cfg, tz, now)
+  if (!cfg.slots_enabled) return dates
+  return dates.filter(d => slotsOnDay(d, cfg, tz, now).length > 0)
+}
+
+/**
+ * May this shop take an order for this date, right now?
+ *
+ * The intake check. It is deliberately a predicate over one date rather than a lookup in
+ * `selectableDates`, because intake gets a date from a request body and must judge it without
+ * building a list — but the two MUST agree, and a test pins that they do.
+ */
+export function isDateSelectable(date: string, cfg: FulfilmentConfig, tz: string, now: Date): boolean {
+  if (!dateInRule(date, cfg, tz, now)) return false
+  return !cfg.slots_enabled || slotsOnDay(date, cfg, tz, now).length > 0
+}
+
+/**
+ * Every slot this shop offers on this date, in order. What the slot picker renders.
+ * Empty while slots are off, on a date the date rule refuses, and on a weekday with no hours.
+ */
+export function selectableSlots(date: string, cfg: FulfilmentConfig, tz: string, now: Date): Slot[] {
+  if (!cfg.slots_enabled) return []
+  if (!dateInRule(date, cfg, tz, now)) return []
+  return slotsOnDay(date, cfg, tz, now)
+}
+
+/**
+ * May this shop take an order for this slot on this date, right now?
+ *
+ * The intake predicate. Judged from the body's two strings without building a list, the way
+ * `isDateSelectable` is — and a test sweeps the grid to pin that the two agree. A slot is only
+ * selectable when it sits ON the step grid from `open` and is exactly `slot_minutes` long.
+ */
+export function isSlotSelectable(date: string, slot: Slot, cfg: FulfilmentConfig, tz: string, now: Date): boolean {
+  if (!cfg.slots_enabled) return false
+  if (!dateInRule(date, cfg, tz, now)) return false
+  const ms = dayMs(date)
+  if (ms === null) return false
+  const hours = cfg.hours[new Date(ms).getUTCDay()]
+  if (!hours) return false
+  const from = timeToMinutes(slot.from)
+  const to = timeToMinutes(slot.to)
+  const open = timeToMinutes(hours.open)
+  const close = timeToMinutes(hours.close)
+  if (from === null || to === null || open === null || close === null) return false
+  if (to - from !== cfg.slot_minutes) return false
+  if (from < open || to > close || (from - open) % cfg.slot_minutes !== 0) return false
+  const start = slotStartFromToday(date, from, tz, now)
+  return start !== null && start >= earliestStart(cfg, tz, now)
+}
+
+export type SlotHoursError = 'invalid_time' | 'close_before_open' | 'no_open_day'
+
+/**
+ * Why these hours cannot be saved, or null.
+ *
+ * Takes the RAW hours as well as the parsed config, for the reason `too_many` is counted on the
+ * raw allowlist: `fulfilmentConfig` reads a `close <= open` day as closed, so the parsed config
+ * can never show the mistake — and a merchant who typed it must be told, not quietly closed.
+ * `no_open_day` is the slot twin of the all-seven-days-closed refusal.
+ */
+export function validateSlotHours(rawHours: unknown, cfg: FulfilmentConfig): SlotHoursError | null {
+  if (!cfg.slots_enabled) return null
+  if (Array.isArray(rawHours)) {
+    for (const day of rawHours) {
+      if (typeof day !== 'object' || day === null) continue
+      const open = timeToMinutes((day as Record<string, unknown>).open)
+      const close = timeToMinutes((day as Record<string, unknown>).close)
+      // An open day whose time is not a time — an emptied `<input type="time">`, most often. The
+      // reader would close the day and say nothing; the merchant ticked it open and must be told.
+      if (open === null || close === null) return 'invalid_time'
+      if (close <= open) return 'close_before_open'
+    }
+  }
+  const anyOpen = cfg.hours.some(h => h !== null && slotsBetween(h, cfg.slot_minutes).length > 0)
+  return anyOpen ? null : 'no_open_day'
 }
 
 /** Drop the dates that have gone past. Called on SAVE, never on read — see ADR 0015. */
@@ -275,6 +494,8 @@ export type FulfilmentWarning =
   | { kind: 'none' }
   | { kind: 'review' }
   | { kind: 'empty' }
+  /** Slots are on, the date rule offers days, and none of them holds a slot. */
+  | { kind: 'no_slots' }
   | { kind: 'ending'; last: string; daysLeft: number }
 
 /**
@@ -286,9 +507,12 @@ export type FulfilmentWarning =
  */
 export function fulfilmentWarning(cfg: FulfilmentConfig, tz: string, now: Date): FulfilmentWarning {
   if (cfg.needs_review) return { kind: 'review' }
-  if (cfg.mode !== 'custom') return { kind: 'none' }
+  const byDate = datesInRule(cfg, tz, now)
+  if (cfg.mode === 'custom' && byDate.length === 0) return { kind: 'empty' }
   const open = selectableDates(cfg, tz, now)
-  if (open.length === 0) return { kind: 'empty' }
+  // The slot twin of the dry allowlist: the dates are there, and none can be completed.
+  if (cfg.slots_enabled && byDate.length > 0 && open.length === 0) return { kind: 'no_slots' }
+  if (cfg.mode !== 'custom') return { kind: 'none' }
   const today = dayMs(todayInZone(tz, now))
   const last = open[open.length - 1]
   const lastMs = dayMs(last)

@@ -75,6 +75,17 @@ export const env = {
   // superadmin pulls the release by hand from /admin, exactly as before this was automated.
   releasePullSecret: process.env.RELEASE_PULL_SECRET || '',
 
+  // The PLATFORM's own Telegram chat — where the superadmin hears that a shop signed up
+  // (platformNotify.ts). A PAIR: the bot token and the chat id, and either one missing turns the
+  // alert off. Not to be confused with the per-merchant token in `merchant_secrets`, which is a
+  // different bot in a different chat telling a different person about orders.
+  //
+  // OPTIONAL, same posture as googleMapsApiKey: unset means the send is skipped and logged. It
+  // can be nothing else — the alert is a notice about a signup that has already committed, so a
+  // missing variable must never fail the signup and must never stop the backend from booting.
+  platformTgToken: process.env.PLATFORM_TG_TOKEN || '',
+  platformTgChatId: process.env.PLATFORM_TG_CHAT_ID || '',
+
   // Signs the merchant email-verification link (emailVerifyToken.ts).
   //
   // OPTIONAL, same posture as GOOGLE_MAPS_API_KEY and ANTHROPIC_API_KEY: unset, the feature is
