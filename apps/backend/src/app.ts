@@ -30,8 +30,12 @@ import { isOurEvent } from './webhookOwnership.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
 import { createHitpay, HitpayKeyRejected, type Hitpay } from './hitpay.js'
-import { keyLast4, newWebhookToken } from './hitpayPayment.js'
-import { clearHitpayConnection, readHitpayConnection, saveHitpayConnection } from './hitpayPaymentDb.js'
+import { isLive, keyLast4, moneyString, newWebhookToken, QR_LIFETIME_MINUTES, readSignalRequestId } from './hitpayPayment.js'
+import {
+  clearHitpayConnection, closeOrderPayment, insertOrderPayment, latestOrderPayment, merchantByWebhookToken,
+  orderPaymentByRequestId, payableOrder, readHitpayConnection, saveHitpayConnection, type OrderPaymentRow,
+} from './hitpayPaymentDb.js'
+import { confirmHitpayPayment, type PaymentAlert } from './hitpayConfirm.js'
 import { notifyMerchantSignup } from './platformNotify.js'
 import { createSupportTelegram, type SupportConfig, type SupportTelegram } from './supportTelegram.js'
 import {
@@ -62,7 +66,7 @@ import { applyProductCopy } from './productCopyDb.js'
 import { parseOrderList, searchTerm } from './orderList.js'
 import { resolveRoutedDistance } from './routedDistance.js'
 import { liveDistanceDeps } from './distanceCache.js'
-import { invoiceLookupIpWindow, reviewSubmitIpWindow, quoteIpWindow, quoteMerchantWindow, placesGlobalWindow, menuImportMerchantWindow, assistantMerchantWindow, MENU_IMPORT_LIFETIME_LIMIT, MENU_IMPORT_MONTHLY_LIMIT, ASSISTANT_MONTHLY_LIMIT, MERCHANT_DEVICE_LIMIT } from './quotaWindows.js'
+import { invoiceLookupIpWindow, reviewSubmitIpWindow, hitpayQrIpWindow, hitpayStatusIpWindow, quoteIpWindow, quoteMerchantWindow, placesGlobalWindow, menuImportMerchantWindow, assistantMerchantWindow, MENU_IMPORT_LIFETIME_LIMIT, MENU_IMPORT_MONTHLY_LIMIT, ASSISTANT_MONTHLY_LIMIT, MERCHANT_DEVICE_LIMIT } from './quotaWindows.js'
 import { chooseEvictions, sessionIdFromToken, lastSeen } from './deviceLimit.js'
 import { listSessions, deleteSessions } from './deviceLimitDb.js'
 import { deviceIdentity } from './deviceLabel.js'
@@ -970,6 +974,125 @@ app.delete('/api/merchants/:id/hitpay', requireMerchantOwns, async (c) => {
     return c.json({ error: 'store_failed' }, 500)
   }
   return c.json({ connected: false, keyLast4: null })
+})
+
+// The merchant's alert after a HitPay payment. A seam so the payment suite can count alerts
+// without the notify fan-out; Task 6 fills the real body.
+export const hitpayAlertDeps: { alert: (a: PaymentAlert) => Promise<void> } = {
+  alert: async () => {},
+}
+
+const confirmDeps = () => ({
+  hitpay: hitpayDeps.hitpay,
+  apiBase: hitpayDeps.config.apiBase,
+  alert: (a: PaymentAlert) => hitpayAlertDeps.alert(a),
+})
+
+const qrBody = (row: OrderPaymentRow) => ({
+  status: 'live' as const,
+  qrPayload: row.qrPayload,
+  amount: moneyString(row.amount),
+  currency: row.currency,
+  expiresAt: row.expiresAt.toISOString(),
+})
+
+// The customer's QR. Unauthenticated and addressed by the order UUID, exactly like the
+// payment-proof door: a guest has no token, and a UUID is not guessable.
+app.post('/api/orders/:orderId/hitpay-qr', async (c) => {
+  if (!hitpayQrIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  if (!hitpayDeps.config.apiBase) return c.json({ error: 'hitpay_not_configured' }, 503)
+  try {
+    const order = await payableOrder(c.req.param('orderId'))
+    if (!order) return c.json({ error: 'not_found' }, 404)
+    if (order.status !== 'pending_payment' || !order.hitpayConnected) return c.json({ error: 'not_payable' }, 409)
+    const conn = await readHitpayConnection(order.merchantId)
+    if (!conn) return c.json({ error: 'not_payable' }, 409)
+
+    const now = new Date()
+    const latest = await latestOrderPayment(order.id, order.merchantId)
+    if (latest && isLive(latest, now)) return c.json(qrBody(latest))
+    if (latest && latest.status !== 'completed') {
+      // The old QR's time ran out on OUR clock. Ask HitPay before making a second one: a customer
+      // who paid at 14:59 must not be handed a QR that can take a second payment.
+      const outcome = await confirmHitpayPayment(confirmDeps(), latest)
+      if (outcome === 'paid' || outcome === 'paid_after_cancel' || outcome === 'recorded' || outcome === 'already') {
+        return c.json({ status: 'completed' as const })
+      }
+      if (outcome === 'unavailable') return c.json({ error: 'gateway_unavailable' }, 502)
+      await closeOrderPayment(latest.id, order.merchantId, 'expired')
+    }
+
+    let created: { id: string; qrPayload: string }
+    try {
+      created = await hitpayDeps.hitpay.createQr(hitpayDeps.config.apiBase, conn.apiKey, {
+        amount: moneyString(order.total),
+        currency: order.currency.toLowerCase(),
+        reference: order.id,
+        expiresAfterMinutes: QR_LIFETIME_MINUTES,
+      })
+    } catch (e) {
+      console.error('HitPay QR create failed:', e instanceof Error ? e.message : String(e))
+      return c.json({ error: 'gateway_unavailable' }, 502)
+    }
+    const inserted = await insertOrderPayment({
+      orderId: order.id, merchantId: order.merchantId, gateway: 'hitpay', gatewayRequestId: created.id,
+      qrPayload: created.qrPayload, amount: moneyString(order.total), currency: order.currency,
+      expiresAt: new Date(now.getTime() + QR_LIFETIME_MINUTES * 60_000),
+    })
+    if (inserted === 'conflict') {
+      // A concurrent request won the order's one pending row. Hand back ITS QR; the request we
+      // just made at HitPay expires unseen, and allow_repeated_payments=false keeps it harmless.
+      const winner = await latestOrderPayment(order.id, order.merchantId)
+      return winner && winner.status === 'pending' ? c.json(qrBody(winner)) : c.json({ error: 'gateway_unavailable' }, 502)
+    }
+    return c.json(qrBody(inserted))
+  } catch (e: any) {
+    console.error('HitPay QR route failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+})
+
+// The browser's poll while the QR is on screen. Each call runs the same confirmation as the
+// webhook, so a payment confirms even when HitPay's signal is late or lost.
+app.get('/api/orders/:orderId/hitpay-status', async (c) => {
+  if (!hitpayStatusIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  try {
+    const order = await payableOrder(c.req.param('orderId'))
+    if (!order) return c.json({ error: 'not_found' }, 404)
+    let row = await latestOrderPayment(order.id, order.merchantId)
+    if (!row) return c.json({ payment: 'none', orderStatus: order.status, expiresAt: null })
+    if (row.status !== 'completed' && hitpayDeps.config.apiBase) {
+      await confirmHitpayPayment(confirmDeps(), row)
+      row = (await latestOrderPayment(order.id, order.merchantId)) ?? row
+    }
+    const fresh = (await payableOrder(order.id)) ?? order
+    return c.json({ payment: row.status, orderStatus: fresh.status, expiresAt: row.expiresAt.toISOString() })
+  } catch (e: any) {
+    console.error('HitPay status route failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+})
+
+// HitPay's signal. The status code is a conversation with HitPay, not with a person: any non-2xx
+// makes HitPay send it again. So an ignored signal gets 200, and only a database failure gets
+// 500. The body is NOT trusted — it carries no signature we can check — so the only thing read
+// from it is which request to ask HitPay about, and the request must belong to the shop the
+// URL token names.
+app.post('/api/hitpay/webhook/:token', async (c) => {
+  const body = await c.req.json().catch(() => null)
+  try {
+    const merchantId = await merchantByWebhookToken(c.req.param('token'))
+    if (!merchantId) return c.json({ ok: true })
+    const requestId = readSignalRequestId(body)
+    if (!requestId) return c.json({ ok: true })
+    const row = await orderPaymentByRequestId(requestId, merchantId)
+    if (!row || !hitpayDeps.config.apiBase) return c.json({ ok: true })
+    await confirmHitpayPayment(confirmDeps(), row)
+    return c.json({ ok: true })
+  } catch (e: any) {
+    console.error('HitPay webhook failed:', e?.message ?? e)
+    return c.json({ error: 'store_failed' }, 500)
+  }
 })
 
 // ── User-scoped reads ─────────────────────────────────────────────────────────
