@@ -29,6 +29,9 @@ import { syncMerchantBilling, liveSubscriptionBesides } from './billingSync.js'
 import { isOurEvent } from './webhookOwnership.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
+import { createHitpay, HitpayKeyRejected, type Hitpay } from './hitpay.js'
+import { keyLast4, newWebhookToken } from './hitpayPayment.js'
+import { clearHitpayConnection, readHitpayConnection, saveHitpayConnection } from './hitpayPaymentDb.js'
 import { notifyMerchantSignup } from './platformNotify.js'
 import { createSupportTelegram, type SupportConfig, type SupportTelegram } from './supportTelegram.js'
 import {
@@ -883,6 +886,90 @@ app.put('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
   const { error } = await admin.from('merchant_secrets').upsert(row)
   if (error) return c.json({ error: 'Upsert failed' }, 500)
   return c.json({ ok: true })
+})
+
+// ── HitPay: a shop's OWN account (spec 2026-10-02-hitpay-duitnow-qr-design.md) ─────────────────
+// The merchant pastes one API key. TinyOrder registers its own webhook on the merchant's account
+// with that key — which is also the key test — and stores the key server-side only. No route
+// ever returns it: the browser gets `keyLast4`.
+//
+// Same mutable seam as supportDeps: production uses the real adapter and env, an API test swaps
+// in a fake and turns the feature on without env vars.
+export const hitpayDeps: { hitpay: Hitpay; config: { apiBase: string; publicBackendUrl: string } } = {
+  hitpay: createHitpay(),
+  config: { apiBase: env.hitpayApiBase, publicBackendUrl: env.backendPublicUrl },
+}
+
+const hitpayConfigured = () => Boolean(hitpayDeps.config.apiBase && hitpayDeps.config.publicBackendUrl)
+
+app.get('/api/merchants/:id/hitpay', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  try {
+    const conn = await readHitpayConnection(m.id)
+    return c.json({ connected: Boolean(conn), keyLast4: conn ? keyLast4(conn.apiKey) : null })
+  } catch (e: any) {
+    console.error('HitPay status read failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+})
+
+app.put('/api/merchants/:id/hitpay', requireMerchantOwns, async (c) => {
+  if (!hitpayConfigured()) return c.json({ error: 'hitpay_not_configured' }, 503)
+  const m = c.get('merchant')
+  // DuitNow settles in MYR only. `currency` cannot change after signup (writes.ts), so this check
+  // holds for as long as the connection does.
+  if ((m.currency ?? 'MYR') !== 'MYR') return c.json({ error: 'currency_not_supported' }, 400)
+  const b = await c.req.json().catch(() => ({}) as any)
+  const apiKey = typeof b?.apiKey === 'string' ? b.apiKey.trim() : ''
+  if (!apiKey || apiKey.length > 255) return c.json({ error: 'invalid_key' }, 400)
+
+  const { apiBase, publicBackendUrl } = hitpayDeps.config
+  const token = newWebhookToken()
+  const url = `${publicBackendUrl.replace(/\/$/, '')}/api/hitpay/webhook/${token}`
+  let previous: Awaited<ReturnType<typeof readHitpayConnection>>
+  let webhook: { id: string }
+  try {
+    previous = await readHitpayConnection(m.id)
+  } catch (e: any) {
+    console.error('HitPay connect lookup failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+  try {
+    webhook = await hitpayDeps.hitpay.registerWebhook(apiBase, apiKey, url)
+  } catch (e) {
+    if (e instanceof HitpayKeyRejected) return c.json({ error: 'invalid_key' }, 400)
+    console.error('HitPay connect failed:', e instanceof Error ? e.message : String(e))
+    return c.json({ error: 'gateway_unavailable' }, 502)
+  }
+  try {
+    await saveHitpayConnection(m.id, { apiKey, webhookId: webhook.id, token })
+  } catch (e: any) {
+    console.error('HitPay connect store failed:', e?.message ?? e)
+    return c.json({ error: 'store_failed' }, 500)
+  }
+  // Best effort, after the new one is stored: a webhook left behind on the merchant's account
+  // only points at a token that no longer names a shop.
+  if (previous) {
+    hitpayDeps.hitpay.removeWebhook(apiBase, previous.apiKey, previous.webhookId)
+      .catch(e => console.error('HitPay old webhook removal failed:', e?.message ?? e))
+  }
+  return c.json({ connected: true, keyLast4: keyLast4(apiKey) })
+})
+
+app.delete('/api/merchants/:id/hitpay', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  try {
+    const conn = await readHitpayConnection(m.id)
+    if (conn && hitpayDeps.config.apiBase) {
+      await hitpayDeps.hitpay.removeWebhook(hitpayDeps.config.apiBase, conn.apiKey, conn.webhookId)
+        .catch(e => console.error('HitPay webhook removal failed:', e?.message ?? e))
+    }
+    await clearHitpayConnection(m.id)
+  } catch (e: any) {
+    console.error('HitPay disconnect failed:', e?.message ?? e)
+    return c.json({ error: 'store_failed' }, 500)
+  }
+  return c.json({ connected: false, keyLast4: null })
 })
 
 // ── User-scoped reads ─────────────────────────────────────────────────────────

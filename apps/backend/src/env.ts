@@ -35,6 +35,14 @@ export const env = {
   // failing closed is the house rule.
   googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
 
+  // HitPay (spec 2026-10-02): each merchant's OWN account, reached with the merchant's own key —
+  // TinyOrder holds no HitPay credential. These two only say WHERE: the API base (sandbox in local
+  // work, live in production) and this backend's public HTTPS origin, which starts the webhook URL
+  // registered on each merchant's account. Optional: unset, the HitPay routes answer 503 and a
+  // shop with no connection is not affected.
+  hitpayApiBase: process.env.HITPAY_API_BASE || '',
+  backendPublicUrl: process.env.BACKEND_PUBLIC_URL || '',
+
   // GitHub (auto-files merchant feedback as issues on leongcheefai/Bitetime-Order-Platform,
   // see github.ts). Optional, same posture as googleMapsApiKey: unset means issue creation
   // is skipped and logged, never a startup error — the feedback table is the source of

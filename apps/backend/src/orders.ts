@@ -677,12 +677,13 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
     payment_bank: string | null
     payment_qr: string | null
     payment_note: string | null
+    hitpay_connected: boolean | null
   }
   const rows = await tx<MerchantRow[]>`
     select order_prefix, status::text, shipping, currency, config, timezone, tax_enabled, tax_rate,
            pickup_enabled, delivery_enabled, express_enabled,
            delivery_base_fee, delivery_rate_per_km, delivery_max_km, origin_place_id,
-           payment_bank, payment_qr, payment_note
+           payment_bank, payment_qr, payment_note, hitpay_connected
     from merchants where id = ${merchantId}
   `
   const merchant = rows[0]
@@ -712,9 +713,10 @@ async function assertOrderableMerchant(tx: postgres.TransactionSql, merchantId: 
     // second rule the customer meets as a refusal of a button they were just offered.
     methods: shopMethods(merchant),
     // #182: an order is born pending_payment only when the customer will actually SEE somewhere
-    // to send proof — the same condition Storefront.tsx uses to render the upload widget. A shop
-    // with none of the three has no upload surface, so gating it would strand every order.
-    hasPaymentInfo: Boolean(merchant.payment_bank || merchant.payment_qr || merchant.payment_note),
+    // to pay — the static bank/QR/note with its proof upload, or (spec 2026-10-02) the shop's own
+    // HitPay QR. A shop with none of these has no payment surface, so gating it would strand
+    // every order.
+    hasPaymentInfo: Boolean(merchant.payment_bank || merchant.payment_qr || merchant.payment_note || merchant.hitpay_connected),
   }
 }
 
