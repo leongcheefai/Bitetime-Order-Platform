@@ -27,6 +27,8 @@ pnpm --filter @bitetime/backend test        # backend unit tests (notify, etc.) 
 pnpm --filter @bitetime/backend test:db     # DB-backed tests: RLS + API (needs a running local Supabase; reads its keys itself)
 pnpm --filter @bitetime/backend db:migrate   # apply pending SQL migrations to the LOCAL Supabase DB
 pnpm --filter @bitetime/backend db:push      # HUMAN ONLY — writes to PRODUCTION. Never run this yourself.
+pnpm --filter @bitetime/backend telegram:webhook poll   # forward a DEV bot's updates to the local support webhook (the support chat's `stripe listen`)
+pnpm --filter @bitetime/backend telegram:webhook set <backend-url>   # HUMAN ONLY for production — registers the support webhook
 
 stripe listen --project-name bitetimeco --forward-to http://localhost:8787/api/stripe/webhook   # REQUIRED for any local billing work
 
@@ -212,6 +214,21 @@ The cost of that: a decline now reaches the merchant as a 502 (`could_not_read_m
 Menu import writes **nothing**. It returns drafts; the merchant saves them through the ordinary product upsert, under every rule that already applies there. Two fields it deliberately does not read: `descr_zh` (excluded from the product write allowlist, and the form has no input for it) and any `unit` outside the product form's own list.
 
 Adding a Claude call means adding an adapter, not a call site inside a route — and remember `@anthropic-ai/sdk` already carries its `--external:` flag in the esbuild command.
+
+### Support chat
+
+The dashboard's **Help** bubble (`merchant/SupportFab.tsx`) answers from a fixed bilingual FAQ (`merchant/supportFaq.ts`), then lets the merchant talk to the superadmin through **Telegram**. Each shop gets one **forum topic** in the `PLATFORM_SUPPORT_CHAT_ID` supergroup, created on its first message; the superadmin replies in that topic and `POST /api/telegram/support-webhook` stores the reply. The browser **polls** (5 s open, 60 s closed, none while the tab is hidden) — there is no Realtime, because `src/supabase.ts` deliberately ships without `realtime-js`. The bubble replaced `FeedbackFab`; the feedback form lives on as one of its views (`FeedbackForm.tsx`). It is mounted on `Dashboard`, `PendingScreen` and `SuspendedScreen` — a suspended merchant is the one who most needs to ask. Spec: `docs/superpowers/specs/2026-10-02-support-chat-design.md`.
+
+Split: `supportChat.ts` (pure — texts, update parser, secret compare), `supportTelegram.ts` (Bot API adapter, **no `parse_mode` ever**: the text is a merchant's free text), `supportChatDb.ts` (SQL), `supportDelivery.ts` (claim topic → header → text → photos, one retry when Telegram reports the topic deleted). `supportDeps` on `app.ts` is the test seam.
+
+Rules that are easy to break:
+
+- **The webhook's status code is for Telegram, not a person.** Any non-2xx makes Telegram send the update again. An ignored update gets `200`; only a failed database read or write gets `500`, and the partial unique index on `tg_message_id` makes that retry safe.
+- **A superadmin passes `requireMerchantOwns`**, so the routes check `merchant.owner_id === user.id` themselves: a superadmin cannot post as the merchant, cannot mark replies read, and their GET does not count as the merchant being "seen" (that would stop the away email). The bubble is hidden by `role`, not by `merchant`, because "view as shop" sets `merchant`.
+- **The poll cursor is a message id, not a timestamp.** A JS `Date` keeps milliseconds and Postgres keeps microseconds; a timestamp round-tripped through the browser returns the last message again.
+- **A hidden tab does not poll**, so the backend sees that merchant as away and sends the away email. That is the design, and it is also why an automated browser tab (which reports `document.hidden`) never shows replies until it is made visible.
+- **Local work needs a separate dev bot.** Telegram refuses `getUpdates` on a bot with a webhook. `telegram:webhook poll` forwards updates to the local backend and refuses to run on a bot that has one, because deleting the production webhook would silently stop every merchant's replies.
+- **Feedback submitted locally files a real GitHub issue** when `GITHUB_TOKEN` is set in `apps/backend/.env`. Start the backend with `GITHUB_TOKEN=` on the command line to test the form.
 
 ### Shipping / pricing
 
