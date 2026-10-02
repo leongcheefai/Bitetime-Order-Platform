@@ -1498,6 +1498,25 @@ export async function disconnectHitpay(merchantId: string): Promise<Result<Hitpa
   return apiSend<HitpayConnection>(`/api/merchants/${merchantId}/hitpay`, 'DELETE', undefined, { auth: 'required' })
 }
 
+export type HitpayQr =
+  | { status: 'live'; qrPayload: string; amount: string; currency: string; expiresAt: string }
+  | { status: 'completed' }
+
+export type HitpayStatus = {
+  payment: 'none' | 'pending' | 'completed' | 'expired' | 'failed'
+  orderStatus: string
+  expiresAt: string | null
+}
+
+/** No auth: addressed by the order UUID, like the payment-proof upload. A guest has no token. */
+export async function requestHitpayQr(orderId: string): Promise<Result<HitpayQr>> {
+  return apiSend<HitpayQr>(`/api/orders/${orderId}/hitpay-qr`, 'POST', {})
+}
+
+export async function fetchHitpayStatus(orderId: string): Promise<Result<HitpayStatus>> {
+  return apiGet<HitpayStatus>(`/api/orders/${orderId}/hitpay-status`)
+}
+
 // ── Merchant platform feedback (#89) ────────────────────────────────────────────
 // merchantId scopes the route; the backend re-derives ownership from the bearer token
 // and ignores anything else in the body, so there is nothing else to send.
