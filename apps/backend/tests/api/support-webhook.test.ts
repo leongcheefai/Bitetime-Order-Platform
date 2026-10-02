@@ -60,6 +60,7 @@ describe('support webhook', () => {
       async createTopic() { throw new Error('not expected') },
       async sendText(_c, t, text) { sentTexts.push({ topicId: t, text }); return nextId++ },
       async sendPhoto() { return nextId++ },
+      async reopenTopic() {},
     }
     supportDeps.telegram = tg
     supportDeps.email = async (to, subject) => { emails.push({ to, subject }) }
@@ -117,6 +118,22 @@ describe('support webhook', () => {
     u.message.photo = [{ file_id: 'abc' }]
     expect((await hook(u)).status).toBe(200)
     expect(sentTexts).toEqual([{ topicId, text: 'Photos do not reach the merchant. Send text.' }])
+  })
+
+  it('marks the thread resolved when the topic is closed, and open again when it is reopened', async () => {
+    const service = (field: string) => {
+      const u = reply(topicId, 'x')
+      delete u.message.text
+      u.message[field] = {}
+      return u
+    }
+    const resolvedAt = async () =>
+      (await svc.from('support_threads').select('resolved_at').eq('merchant_id', shopId).single()).data!.resolved_at
+
+    expect((await hook(service('forum_topic_closed'))).status).toBe(200)
+    expect(await resolvedAt()).not.toBeNull()
+    expect((await hook(service('forum_topic_reopened'))).status).toBe(200)
+    expect(await resolvedAt()).toBeNull()
   })
 
   it('cuts a long reply to 2000 characters', async () => {

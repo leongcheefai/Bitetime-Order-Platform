@@ -241,6 +241,22 @@ The fourth view is the feedback form.
 - Every string uses `t(en, zh)`. The panel takes the shop's brand colour from `BrandTheme` on the
   dashboard; on `PendingScreen` and `SuspendedScreen` it is platform-coloured.
 
+## Resolving a thread
+
+Added after the first build. The superadmin marks a thread done with Telegram's own **Close
+topic**; there is no command to learn.
+
+| Event | Effect |
+|---|---|
+| The superadmin closes the topic | Telegram sends a `forum_topic_closed` service message into it. The webhook sets `support_threads.resolved_at = now()`. |
+| The superadmin reopens the topic | `forum_topic_reopened` → the webhook clears `resolved_at`. |
+| The merchant writes again | `insertMerchantMessage` clears `resolved_at` in the same transaction as the insert, and the delivery calls `reopenForumTopic` so the topic comes back to the top of the superadmin's list. A failed reopen is logged; the message still lands, because the bot is an admin and can post into a closed topic. |
+| The merchant opens the chat | `GET …/support/messages` returns `resolved_at`. A "Marked as resolved" line shows after the last message written up to that moment. |
+
+Service messages need only `message_thread_id`, not `is_topic_message`. A reopen by a bot is the
+backend's own call and is ignored by the human-sender rule. `TOPIC_NOT_MODIFIED` from
+`reopenForumTopic` (the topic is already open) counts as success.
+
 ## Errors
 
 | Case | Result |
@@ -267,7 +283,6 @@ The fourth view is the feedback form.
 
 - Photos from the superadmin to the merchant.
 - Edits of a Telegram reply.
-- A closed or resolved state for a thread.
 - Claude answers. `supportFaq.ts` stays the data source for that later.
 - Chat for storefront customers.
 - An `/admin` inbox. Telegram is the inbox.

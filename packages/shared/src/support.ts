@@ -18,8 +18,10 @@ export interface SupportMessage {
 export interface SupportFeed {
   messages: SupportMessage[]
   unread: number
-  /** False when the platform has no support chat configured. The panel then shows mail/WhatsApp. */
+  /** False when the platform has no support chat configured. The panel then shows mail. */
   available: boolean
+  /** When the superadmin closed the shop's Telegram topic; null while the thread is open. */
+  resolved_at: string | null
 }
 
 export interface SupportSendResult {

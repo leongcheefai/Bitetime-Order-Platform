@@ -37,7 +37,7 @@ const postEmpty = (path: string, token: string) =>
 let nextId = 1_000_000 + Math.floor(Math.random() * 1_000_000_000)
 
 function fakeTelegram() {
-  const calls = { topics: [] as string[], texts: [] as { topicId: number; text: string }[], photos: [] as number[] }
+  const calls = { topics: [] as string[], texts: [] as { topicId: number; text: string }[], photos: [] as number[], reopens: [] as number[] }
   const gone = new Set<number>()
   let failAll = false
   const tg: SupportTelegram = {
@@ -56,6 +56,9 @@ function fakeTelegram() {
     async sendPhoto(_cfg, topicId) {
       calls.photos.push(topicId)
       return nextId++
+    },
+    async reopenTopic(_cfg, topicId) {
+      calls.reopens.push(topicId)
     },
   }
   return { tg, calls, gone, setFailAll: (v: boolean) => { failAll = v } }
@@ -120,6 +123,22 @@ describe('support chat — merchant routes', () => {
     expect(res.status).toBe(201)
     expect(fake.calls.topics).toEqual([])
     expect(fake.calls.texts.map(t => t.text)).toEqual(['second message'])
+    expect(fake.calls.reopens).toEqual([]) // the thread was never resolved
+  })
+
+  it('reopens a resolved topic when the merchant writes again, and clears resolved_at', async () => {
+    const svc = serviceClient()
+    await svc.from('support_threads').update({ resolved_at: new Date().toISOString() }).eq('merchant_id', ownShopId)
+    const before = await json(await get(`/api/merchants/${ownShopId}/support/messages`, ownerToken))
+    expect(before.resolved_at).not.toBeNull()
+
+    const { data } = await svc.from('support_threads').select('tg_topic_id').eq('merchant_id', ownShopId).single()
+    expect((await send(ownShopId, ownerToken, 'it broke again')).status).toBe(201)
+    expect(fake.calls.reopens).toEqual([Number(data!.tg_topic_id)])
+    expect(fake.calls.texts.at(-1)!.text).toBe('it broke again')
+
+    const after = await json(await get(`/api/merchants/${ownShopId}/support/messages`, ownerToken))
+    expect(after.resolved_at).toBeNull()
   })
 
   it('creates exactly one topic when two first messages arrive together', async () => {

@@ -1,6 +1,6 @@
 // The chat view. Messages come from useSupportFeed; this file only renders and collects input.
 import { useEffect, useRef, useState } from 'react'
-import { ImagePlus, Send, X } from 'lucide-react'
+import { CheckCircle2, ImagePlus, Send, X } from 'lucide-react'
 import {
   FEEDBACK_IMAGE_TYPES, FEEDBACK_MAX_IMAGES, SUPPORT_MAX_LENGTH, type SupportMessage,
 } from '@bitetime/shared'
@@ -10,6 +10,7 @@ import { Textarea } from '../components/ui/textarea'
 import { Button } from '../components/ui/button'
 import SupportLinks from './SupportLinks'
 import type { OutboxItem } from './useSupportFeed'
+import { resolvedLineAfter } from './supportFeed'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -18,12 +19,13 @@ interface Props {
   outbox: OutboxItem[]
   notAlerted: boolean
   imagesFailed: number
+  resolvedAt: string | null
   onSend: (body: string, files: File[]) => Promise<boolean>
   onRetry: (localId: string) => void
   onDiscard: (localId: string) => void
 }
 
-export default function SupportChat({ merchantId, messages, outbox, notAlerted, imagesFailed, onSend, onRetry, onDiscard }: Props) {
+export default function SupportChat({ merchantId, messages, outbox, notAlerted, imagesFailed, resolvedAt, onSend, onRetry, onDiscard }: Props) {
   const { t } = useSession()
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -32,6 +34,7 @@ export default function SupportChat({ merchantId, messages, outbox, notAlerted, 
   // Keep the newest message in view as messages arrive.
   useEffect(() => { end.current?.scrollIntoView({ block: 'end' }) }, [messages.length, outbox.length])
 
+  const lineAfter = resolvedLineAfter(messages, resolvedAt)
   const trimmed = text.trim()
   const canSend = trimmed.length > 0 && trimmed.length <= SUPPORT_MAX_LENGTH
 
@@ -54,26 +57,35 @@ export default function SupportChat({ merchantId, messages, outbox, notAlerted, 
           </p>
         )}
         <ul className="flex flex-col gap-2">
-          {messages.map(m => (
-            <li key={m.id} className={cn('flex', m.sender === 'merchant' ? 'justify-end' : 'justify-start')}>
-              <div className={cn(
-                'max-w-[85%] rounded-lg px-3 py-2 text-[14px] whitespace-pre-wrap break-words',
-                m.sender === 'merchant' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
-              )}>
-                {m.sender === 'admin' && (
-                  <span className="mb-0.5 block text-[11px] font-medium text-muted-foreground">
-                    {t('TinyOrder team', 'TinyOrder 团队')}
-                  </span>
-                )}
-                {m.body}
-                {m.image_count > 0 && (
-                  <div className="mt-2 flex gap-1.5">
-                    {Array.from({ length: m.image_count }, (_, i) => (
-                      <SupportImage key={i} merchantId={merchantId} messageId={m.id} index={i} />
-                    ))}
-                  </div>
-                )}
+          {messages.map((m, i) => (
+            <li key={m.id} className="flex flex-col">
+              <div className={cn('flex', m.sender === 'merchant' ? 'justify-end' : 'justify-start')}>
+                <div className={cn(
+                  'max-w-[85%] rounded-lg px-3 py-2 text-[14px] whitespace-pre-wrap break-words',
+                  m.sender === 'merchant' ? 'bg-primary text-primary-foreground' : 'bg-muted text-foreground',
+                )}>
+                  {m.sender === 'admin' && (
+                    <span className="mb-0.5 block text-[11px] font-medium text-muted-foreground">
+                      {t('TinyOrder team', 'TinyOrder 团队')}
+                    </span>
+                  )}
+                  {m.body}
+                  {m.image_count > 0 && (
+                    <div className="mt-2 flex gap-1.5">
+                      {Array.from({ length: m.image_count }, (_, j) => (
+                        <SupportImage key={j} merchantId={merchantId} messageId={m.id} index={j} />
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
+              {lineAfter === i + 1 && (
+                <div role="status" className="my-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="flex items-center gap-1"><CheckCircle2 size={13} />{t('Marked as resolved', '已标记为已解决')}</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              )}
             </li>
           ))}
           {outbox.map(o => (

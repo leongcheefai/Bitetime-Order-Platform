@@ -84,6 +84,22 @@ describe('parseUpdate', () => {
     expect(parseUpdate(null, CHAT)).toEqual({ kind: 'ignore' })
     expect(parseUpdate('nope', CHAT)).toEqual({ kind: 'ignore' })
   })
+  it('reports a topic closed by a person as resolved', () => {
+    const u = update({ forum_topic_closed: {}, is_topic_message: undefined })
+    expect(parseUpdate(u, CHAT)).toEqual({ kind: 'closed', topicId: 42 })
+  })
+  it('reports a topic reopened by a person', () => {
+    const u = update({ forum_topic_reopened: {}, is_topic_message: undefined })
+    expect(parseUpdate(u, CHAT)).toEqual({ kind: 'reopened', topicId: 42 })
+  })
+  it('ignores a reopen done by a bot — the backend already cleared the flag itself', () => {
+    const u = update({ forum_topic_reopened: {}, from: { id: 9, is_bot: true } })
+    expect(parseUpdate(u, CHAT)).toEqual({ kind: 'ignore' })
+  })
+  it('ignores a close in another chat', () => {
+    const u = update({ forum_topic_closed: {}, chat: { id: -100999, type: 'supergroup' } })
+    expect(parseUpdate(u, CHAT)).toEqual({ kind: 'ignore' })
+  })
   it('ignores whitespace-only text', () => {
     expect(parseUpdate(update({ text: '   ' }), CHAT)).toEqual({ kind: 'ignore' })
   })

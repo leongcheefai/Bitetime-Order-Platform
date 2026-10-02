@@ -9,6 +9,8 @@ export interface DeliverInput {
   /** Read lazily: only a NEW topic's header needs it. */
   ownerEmail: () => Promise<string | null>
   messageId: string
+  /** The thread was marked done and this message reopens it — reopen the Telegram topic too. */
+  reopen: boolean
   body: string
   images: File[]
   frontendUrl: string
@@ -29,6 +31,11 @@ export async function deliverMerchantMessage(
         name: merchant.name, slug: merchant.slug, status: merchant.status,
         ownerEmail: await input.ownerEmail(), frontendUrl: input.frontendUrl,
       }))
+    } else if (input.reopen) {
+      // A failed reopen must not cost the alert: the bot is an admin and can still post into a
+      // closed topic, so the message lands either way — only less visibly.
+      await telegram.reopenTopic(config, topicId)
+        .catch(e => console.error(`support ${input.messageId}: reopenForumTopic failed:`, e?.message ?? e))
     }
     const tgId = await telegram.sendText(config, topicId, merchantText(input.body, input.images.length))
     await setMessageTelegramId(input.messageId, tgId)

@@ -33,7 +33,7 @@ import { notifyMerchantSignup } from './platformNotify.js'
 import { createSupportTelegram, type SupportConfig, type SupportTelegram } from './supportTelegram.js'
 import {
   listMessages, unreadCount, touchSeen, markRead, insertMerchantMessage, setMessageImages,
-  messageImagePaths, merchantByTopic, insertAdminReply, claimAwayEmail,
+  messageImagePaths, merchantByTopic, insertAdminReply, claimAwayEmail, setThreadResolved, threadResolvedAt,
 } from './supportChatDb.js'
 import { deliverMerchantMessage } from './supportDelivery.js'
 import { parseUpdate, clampReply, secretMatches, awayEmail, PHOTO_NOTICE } from './supportChat.js'
@@ -2772,8 +2772,10 @@ app.get('/api/merchants/:id/support/messages', requireMerchantOwns, async (c) =>
   // here, or it would stop the away email the merchant needs.
   if (merchant.owner_id === user.id) await touchSeen(merchant.id)
 
-  const [messages, unread] = await Promise.all([listMessages(merchant.id, after), unreadCount(merchant.id)])
-  return c.json({ messages, unread, available: supportAvailable() })
+  const [messages, unread, resolvedAt] = await Promise.all([
+    listMessages(merchant.id, after), unreadCount(merchant.id), threadResolvedAt(merchant.id),
+  ])
+  return c.json({ messages, unread, available: supportAvailable(), resolved_at: resolvedAt })
 })
 
 app.post('/api/merchants/:id/support/read', requireMerchantOwns, async (c) => {
@@ -2808,7 +2810,7 @@ app.post('/api/merchants/:id/support/messages', requireMerchantOwns, async (c) =
   }
 
   // Store FIRST: nothing after this line can lose the merchant's words.
-  const message = await insertMerchantMessage({ merchantId: merchant.id, userId: user.id, body: parsed.value })
+  const { message, wasResolved } = await insertMerchantMessage({ merchantId: merchant.id, userId: user.id, body: parsed.value })
 
   const paths: string[] = []
   const uploaded: File[] = []
@@ -2829,6 +2831,7 @@ app.post('/api/merchants/:id/support/messages', requireMerchantOwns, async (c) =
     merchant: { id: merchant.id, name: merchant.name, slug: merchant.slug, status: merchant.status },
     ownerEmail: async () => user.email ?? null,
     messageId: message.id,
+    reopen: wasResolved,
     body: parsed.value,
     images: uploaded,
     frontendUrl: env.frontendUrl,
@@ -2878,6 +2881,18 @@ app.post('/api/telegram/support-webhook', async (c) => {
     return c.json({ error: 'lookup_failed' }, 500)
   }
   if (!merchantId) return c.json({ ok: true })
+
+  // Closing the topic in Telegram is the superadmin's "done". A database failure answers 500 so
+  // Telegram sends the service message again — the update is idempotent either way.
+  if (parsed.kind === 'closed' || parsed.kind === 'reopened') {
+    try {
+      await setThreadResolved(merchantId, parsed.kind === 'closed')
+    } catch (e: any) {
+      console.error('support webhook: storing a topic state failed:', e?.message ?? e)
+      return c.json({ error: 'store_failed' }, 500)
+    }
+    return c.json({ ok: true })
+  }
 
   if (parsed.kind === 'photo') {
     await supportDeps.telegram.sendText(cfg, parsed.topicId, PHOTO_NOTICE)

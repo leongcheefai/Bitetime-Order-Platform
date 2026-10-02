@@ -58,15 +58,39 @@ export async function markRead(merchantId: string): Promise<void> {
     on conflict (merchant_id) do update set merchant_last_read_at = now()`
 }
 
-export async function insertMerchantMessage(input: { merchantId: string; userId: string; body: string }): Promise<SupportMessage> {
+/**
+ * A merchant writing again reopens a thread the superadmin marked done. `wasResolved` tells the
+ * caller to reopen the Telegram topic too; the flag is cleared HERE, in the same transaction as
+ * the insert, so the message and the reopening cannot be split by a crash between them.
+ */
+export async function insertMerchantMessage(
+  input: { merchantId: string; userId: string; body: string },
+): Promise<{ message: SupportMessage; wasResolved: boolean }> {
   return withTransaction(async (tx) => {
     await tx`insert into support_threads (merchant_id) values (${input.merchantId}) on conflict do nothing`
+    const reopened = await tx`
+      update support_threads set resolved_at = null
+       where merchant_id = ${input.merchantId} and resolved_at is not null
+      returning merchant_id`
     const [row] = await tx<Row[]>`
       insert into support_messages (merchant_id, sender, author_user_id, body)
       values (${input.merchantId}, 'merchant', ${input.userId}, ${input.body})
       returning id, sender, body, image_paths, created_at`
-    return toMessage(row)
+    return { message: toMessage(row), wasResolved: reopened.length > 0 }
   })
+}
+
+/** The superadmin closed (true) or reopened (false) the shop's topic in Telegram. */
+export async function setThreadResolved(merchantId: string, resolved: boolean): Promise<void> {
+  await sql`
+    update support_threads set resolved_at = ${resolved ? sql`now()` : null}
+     where merchant_id = ${merchantId}`
+}
+
+export async function threadResolvedAt(merchantId: string): Promise<string | null> {
+  const [r] = await sql<{ resolved_at: Date | null }[]>`
+    select resolved_at from support_threads where merchant_id = ${merchantId}`
+  return r?.resolved_at ? r.resolved_at.toISOString() : null
 }
 
 export async function setMessageImages(messageId: string, paths: string[]): Promise<void> {

@@ -26,6 +26,8 @@ export function useSupportFeed(merchantId: string | null, open: boolean) {
   // Screenshots the last send could not store. The words still landed, so this is a caveat to
   // show, not a failed send — the same posture as the feedback form's thank-you.
   const [imagesFailed, setImagesFailed] = useState(0)
+  // When the superadmin closed the shop's topic in Telegram. Null while the thread is open.
+  const [resolvedAt, setResolvedAt] = useState<string | null>(null)
   const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.hidden)
   const cursor = useRef<string | null>(null)
 
@@ -41,6 +43,7 @@ export function useSupportFeed(merchantId: string | null, open: boolean) {
     if (!r.ok) return // the next interval tries again; one failed poll is not news
     setUnread(r.data.unread)
     setAvailable(r.data.available)
+    setResolvedAt(r.data.resolved_at)
     const incoming = r.data.messages
     if (incoming.length) {
       cursor.current = incoming[incoming.length - 1].id
@@ -73,6 +76,8 @@ export function useSupportFeed(merchantId: string | null, open: boolean) {
     setMessages(prev => mergeMessages(prev, [r.data.message]))
     setNotAlerted(!r.data.alerted)
     setImagesFailed(r.data.images_failed)
+    // The backend reopened the thread with this message; do not wait a poll to drop the line.
+    setResolvedAt(null)
     return true
   }, [merchantId])
 
@@ -99,5 +104,5 @@ export function useSupportFeed(merchantId: string | null, open: boolean) {
     void markSupportRead(merchantId)
   }, [merchantId])
 
-  return { messages, outbox, unread, available, notAlerted, imagesFailed, send, retry, discard, markRead }
+  return { messages, outbox, unread, available, notAlerted, imagesFailed, resolvedAt, send, retry, discard, markRead }
 }

@@ -237,9 +237,11 @@ Sent once per order, stamped `orders.merchant_emailed_at`, and here the guard is
 
 ## Support chat
 
-A conversation between **one shop** and the **platform** (the superadmin), never between a shop and its customers. One **support thread** per shop, for all time — there is no ticket and no closed state. A **support message** is from the `merchant` or from the `admin`. The merchant writes in the dashboard's Help panel; the admin writes in that shop's Telegram forum topic. Merchant messages may carry up to three screenshots; admin replies are text only.
+A conversation between **one shop** and the **platform** (the superadmin), never between a shop and its customers. One **support thread** per shop, for all time — there is no ticket, only a thread that is open or **resolved**. A **support message** is from the `merchant` or from the `admin`. The merchant writes in the dashboard's Help panel; the admin writes in that shop's Telegram forum topic. Merchant messages may carry up to three screenshots; admin replies are text only.
 
 The **FAQ** in the same panel is fixed content the merchant taps through; nothing matches free text and no model answers. **Talk to a person** is the step from the FAQ into the thread.
+
+A thread is **resolved** when the superadmin closes the shop's topic in Telegram, and open again when they reopen it or when the merchant writes again. Resolved is a marker, not an archive: the history stays, and the merchant sees a "Marked as resolved" line where it happened.
 
 An **away email** tells a shop owner that the admin replied while they were not looking: only when the dashboard has not polled for two minutes, at most one per hour per shop, and it carries no reply text — the dashboard is where the conversation lives.
 

@@ -43,6 +43,20 @@ describe('supportTelegram', () => {
     expect(form.get('photo')).toBeInstanceOf(File)
   })
 
+  it('reopens a forum topic', async () => {
+    const f = fakeFetch(() => ({ body: { ok: true, result: true } }))
+    const tg = createSupportTelegram(f.impl)
+    await tg.reopenTopic(cfg, 314)
+    expect(f.calls[0].url).toBe('https://api.telegram.org/botT0K/reopenForumTopic')
+    expect(JSON.parse(String(f.calls[0].init.body))).toEqual({ chat_id: '-100123', message_thread_id: 314 })
+  })
+
+  it('treats reopening a topic that is already open as done', async () => {
+    const f = fakeFetch(() => ({ status: 400, body: { ok: false, description: 'Bad Request: TOPIC_NOT_MODIFIED' } }))
+    const tg = createSupportTelegram(f.impl)
+    await expect(tg.reopenTopic(cfg, 314)).resolves.toBeUndefined()
+  })
+
   it('throws TelegramThreadGone when the topic no longer exists', async () => {
     const f = fakeFetch(() => ({ status: 400, body: { ok: false, description: 'Bad Request: message thread not found' } }))
     const tg = createSupportTelegram(f.impl)

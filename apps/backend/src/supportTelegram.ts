@@ -22,6 +22,8 @@ export interface SupportTelegram {
   createTopic(cfg: SupportConfig, name: string): Promise<number>
   sendText(cfg: SupportConfig, topicId: number, text: string): Promise<number>
   sendPhoto(cfg: SupportConfig, topicId: number, photo: File): Promise<number>
+  /** Undo the superadmin's "Close topic" when the merchant writes again. Already open is fine. */
+  reopenTopic(cfg: SupportConfig, topicId: number): Promise<void>
 }
 
 export function createSupportTelegram(fetchImpl: typeof fetch = fetch): SupportTelegram {
@@ -55,6 +57,16 @@ export function createSupportTelegram(fetchImpl: typeof fetch = fetch): SupportT
       form.append('photo', photo, photo.name)
       const r = await call(cfg, 'sendPhoto', form, false, topicId)
       return Number(r.message_id)
+    },
+    async reopenTopic(cfg, topicId) {
+      const body = JSON.stringify({ chat_id: cfg.chatId, message_thread_id: topicId })
+      try {
+        await call(cfg, 'reopenForumTopic', body, true, topicId)
+      } catch (e) {
+        // The topic is open already — someone reopened it by hand. That is the state we wanted.
+        if (e instanceof Error && /TOPIC_NOT_MODIFIED/.test(e.message)) return
+        throw e
+      }
     },
   }
 }

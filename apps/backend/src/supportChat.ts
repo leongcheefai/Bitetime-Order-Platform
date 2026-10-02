@@ -49,6 +49,8 @@ export function merchantText(body: string, imageCount: number): string {
 export type ParsedUpdate =
   | { kind: 'reply'; topicId: number; messageId: number; text: string }
   | { kind: 'photo'; topicId: number }
+  | { kind: 'closed'; topicId: number }
+  | { kind: 'reopened'; topicId: number }
   | { kind: 'ignore' }
 
 const IGNORE: ParsedUpdate = { kind: 'ignore' }
@@ -57,6 +59,11 @@ const IGNORE: ParsedUpdate = { kind: 'ignore' }
  * Read one Telegram update. Only `message` counts: an `edited_message` does not change a reply
  * the merchant may already have read. The chat must be the support chat, the sender a human,
  * and the message inside a topic — "General" belongs to no shop.
+ *
+ * Closing a topic in Telegram is how the superadmin marks a thread done, and Telegram reports it
+ * as a service message (`forum_topic_closed` / `forum_topic_reopened`) inside that topic. Those
+ * need only the thread id: `is_topic_message` is a flag for ordinary posts. A reopen by a BOT is
+ * our own `reopenForumTopic` call, which already cleared the flag — the human-sender rule drops it.
  */
 export function parseUpdate(update: unknown, chatId: string): ParsedUpdate {
   if (!update || typeof update !== 'object') return IGNORE
@@ -65,7 +72,10 @@ export function parseUpdate(update: unknown, chatId: string): ParsedUpdate {
   if (String(m.chat?.id ?? '') !== String(chatId)) return IGNORE
   if (!m.from || m.from.is_bot !== false) return IGNORE
   const topicId = m.message_thread_id
-  if (m.is_topic_message !== true || !Number.isInteger(topicId)) return IGNORE
+  if (!Number.isInteger(topicId)) return IGNORE
+  if (m.forum_topic_closed) return { kind: 'closed', topicId }
+  if (m.forum_topic_reopened) return { kind: 'reopened', topicId }
+  if (m.is_topic_message !== true) return IGNORE
 
   if (typeof m.text === 'string' && m.text.trim()) {
     if (!Number.isInteger(m.message_id)) return IGNORE

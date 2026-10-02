@@ -25,3 +25,14 @@ export function mergeMessages(current: SupportMessage[], incoming: SupportMessag
   return [...current, ...fresh].sort((x, y) =>
     x.created_at === y.created_at ? (x.id < y.id ? -1 : 1) : (x.created_at < y.created_at ? -1 : 1))
 }
+
+/**
+ * Where the "Marked as resolved" line goes: after the last message written up to the moment the
+ * superadmin closed the topic. Null hides it. A reply posted after the close (an admin can still
+ * write into a closed topic) stays below the line, so the line never claims to cover it.
+ */
+export function resolvedLineAfter(messages: SupportMessage[], resolvedAt: string | null): number | null {
+  if (!resolvedAt) return null
+  const count = messages.filter(m => m.created_at <= resolvedAt).length
+  return count > 0 ? count : null
+}
