@@ -188,9 +188,8 @@ connect and disconnect routes use `requireMerchantOwns`.
 | The shop currency is not MYR | `400 currency_not_supported` |
 | `HITPAY_API_BASE` or `BACKEND_PUBLIC_URL` is not set | `503 hitpay_not_configured` |
 
-A shop with HitPay connected must not change its currency. The backend has no currency lock
-today, so the merchant config write gets a new refusal: a currency other than MYR while
-`hitpay_connected` is true answers `400 currency_locked_by_hitpay`.
+A shop cannot change its currency after signup: `currency` is not in the merchant config write
+allowlist (`writes.ts`). Thus a connected shop stays MYR, and no new refusal is necessary.
 
 ### Disconnect: `DELETE /api/merchants/:id/hitpay`
 
@@ -245,7 +244,7 @@ The status code is for HitPay, not for a person. Only a failed database read or 
 
 | Order status at the lock | Action |
 |---|---|
-| `pending_payment` | Move to `new`. Mark the row `completed` with `paid_at`. Write `payment_confirmed`. |
+| `pending_payment` | Move to `new`. Mark the row `completed` with `paid_at`. Write `payment_confirmed` and a `status_changed` (both actor `system`), the same pair a payment proof writes today. |
 | `cancelled` | Keep the status. Mark the row `completed`. Write `payment_after_cancel`. |
 | Any other status (the merchant moved it already) | Mark the row `completed` only. |
 | The row is already `completed` | Do nothing. |
