@@ -989,10 +989,14 @@ export const hitpayAlertDeps: { alert: (a: PaymentAlert) => Promise<void> } = {
     const banner = a.outcome === 'paid' ? PAID_BANNER : PAID_AFTER_CANCEL_BANNER
     const emailCfg = { frontendUrl: env.frontendUrl, emailFrom: env.emailFrom, qrBaseUrl: env.supabaseUrl }
     const input = { merchantId: a.merchantId, orderNumber: a.orderNumber }
-    await Promise.all([
+    const [telegram, email] = await Promise.all([
       notifyOrderPlaced(admin, notifyDeps.telegram, input, banner),
       emailMerchantOrder(admin, admin, notifyDeps.email, input, emailCfg, banner),
     ])
+    // The arms return their failures rather than throw. Nobody reads this result, so a failed
+    // arm is logged here or it is invisible.
+    if (!telegram.ok) console.error(`HitPay paid alert: Telegram failed for ${a.orderNumber}:`, telegram.error)
+    if (!email.ok) console.error(`HitPay paid alert: email failed for ${a.orderNumber}:`, email.error)
   },
 }
 

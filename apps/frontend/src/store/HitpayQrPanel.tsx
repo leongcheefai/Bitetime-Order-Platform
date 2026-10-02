@@ -50,7 +50,9 @@ export default function HitpayQrPanel({
   const onPaidRef = useRef(onPaid)
   useEffect(() => { onPaidRef.current = onPaid })
 
+  // The clock restarts with each answer: `now` from the mount would show a fresh QR as 15:01.
   function show(next: View) {
+    setNow(Date.now())
     setView(next)
     if (next.kind === 'paid') onPaidRef.current()
   }
@@ -60,6 +62,7 @@ export default function HitpayQrPanel({
     requestHitpayQr(orderId).then(r => {
       if (cancelled) return
       const next = viewFrom(r)
+      setNow(Date.now())
       setView(next)
       if (next.kind === 'paid') onPaidRef.current()
     })
