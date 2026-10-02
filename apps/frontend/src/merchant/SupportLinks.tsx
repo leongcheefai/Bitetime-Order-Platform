@@ -1,19 +1,18 @@
-import { Mail, MessageCircle } from 'lucide-react'
+import { Mail } from 'lucide-react'
 import { useSession } from '../SessionContext'
-import { SUPPORT_EMAIL, SUPPORT_WA_DISPLAY, SUPPORT_WA_HREF, supportMailto } from '../support'
+import { SUPPORT_EMAIL, supportMailto } from '../support'
 import { cn } from '@/lib/utils'
 
 /**
- * The two ways a merchant reaches a human outside the support chat: mail and WhatsApp.
+ * How a merchant reaches a human outside the support chat: mail.
  *
  * Merchant-side only, and only inside the Help panel (SupportFab). The sidebar used to carry a
- * stacked copy too; it went once the panel became the one place to ask for help.
+ * stacked copy, and both used to offer WhatsApp; the panel's chat replaced both.
  *
  * `compact` is one muted line (the feedback form, the chat's "could not alert" notice); the
- * default is stacked and tappable (the panel's "chat not available" view). `whatsapp={false}`
- * leaves mail only — the feedback form's footer, where the chat is one tap away already.
+ * default is stacked and tappable (the panel's "chat not available" view).
  */
-export default function SupportLinks({ compact = false, whatsapp = true }: { compact?: boolean; whatsapp?: boolean }) {
+export default function SupportLinks({ compact = false }: { compact?: boolean }) {
   const { t, merchant } = useSession()
   const mailto = supportMailto(merchant ? { name: merchant.name, slug: merchant.slug } : undefined)
 
@@ -31,25 +30,13 @@ export default function SupportLinks({ compact = false, whatsapp = true }: { com
           ? t('Need an answer?', '需要回复？')
           : t('Contact us', '联系我们')}
       </span>
-      {/* Labels, never the address itself. The sidebar is 210px and the address is 30 characters:
-          it clipped mid-word, which reads as a broken address rather than a truncated one. The
-          real value goes in `title`, for a merchant who wants to copy it. */}
+      {/* A label, never the address itself. In a narrow column the 30-character address clipped
+          mid-word, which reads as a broken address rather than a truncated one. The real value
+          goes in `title`, for a merchant who wants to copy it. */}
       <a className={link} href={mailto} title={SUPPORT_EMAIL}>
         <Mail {...icon} />
         {t('Email us', '发邮件给我们')}
       </a>
-      {whatsapp && SUPPORT_WA_HREF && (
-        <a
-          className={link}
-          href={SUPPORT_WA_HREF}
-          title={SUPPORT_WA_DISPLAY}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <MessageCircle {...icon} />
-          {t('WhatsApp', 'WhatsApp')}
-        </a>
-      )}
     </div>
   )
 }

@@ -289,10 +289,9 @@ export default function FeedbackForm({ onDone }: { onDone: () => void }) {
 
       {/* Outside the sent/form branch on purpose: it belongs on BOTH screens. This form
           never replies — a merchant who has just reported a broken checkout is exactly the
-          one who still needs a human, and the thank-you is the last thing they read. Mail only:
-          the panel's "Talk to a person" is the live channel, one tap back from here. */}
+          one who still needs a human, and the thank-you is the last thing they read. */}
       <div className="mt-4 pt-3 border-t border-border">
-        <SupportLinks compact whatsapp={false} />
+        <SupportLinks compact />
       </div>
     </div>
   )
