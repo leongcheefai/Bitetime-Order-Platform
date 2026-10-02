@@ -12,7 +12,7 @@ import FulfilmentDatesBanner from './FulfilmentDatesBanner'
 import TrialFeedbackPrompt from './TrialFeedbackPrompt'
 import OnboardingChecklist from './OnboardingChecklist'
 import { SkeletonText } from '../components/Loaders'
-import FeedbackFab from './FeedbackFab'
+import SupportFab from './SupportFab'
 import SupportLinks from './SupportLinks'
 import { NavGuardProvider, useNavGuard } from './NavGuard'
 import { UpgradeNavProvider } from './UpgradeNav'
@@ -158,7 +158,7 @@ function DashboardInner() {
         {section === 'settings'  && <ShopSettings />}
         </Suspense>
       </div>
-      <FeedbackFab />
+      <SupportFab onNavigate={selectSection} />
     </DashboardShell>
     </BrandTheme>
     </UpgradeNavProvider>

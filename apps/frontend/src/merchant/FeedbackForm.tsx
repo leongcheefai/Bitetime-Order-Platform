@@ -54,8 +54,15 @@ export default function FeedbackForm({ onDone }: { onDone: () => void }) {
   // The form unmounts when the merchant leaves the feedback view. A submission still in flight
   // then resolves against a component that is gone; this guard keeps it from setting state. The
   // request itself is not cancelled and still writes the row.
-  const mounted = useRef(true)
-  useEffect(() => () => { mounted.current = false }, [])
+  //
+  // Set to true IN the effect, not only in useRef's initial value: StrictMode mounts, unmounts
+  // and mounts again in development, and a guard that only ever flips to false stays false after
+  // that rehearsal — every send then lands on a form that thinks it is gone and sits on Sending….
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   useEffect(() => () => {
     if (autoCloseTimer.current !== null) clearTimeout(autoCloseTimer.current)
