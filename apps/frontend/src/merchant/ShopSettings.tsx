@@ -22,6 +22,7 @@ import BrandColourCard from './BrandColourCard'
 import { useDashboardSubsection } from '../useDashboardSection'
 import AddressAutocomplete from '../store/AddressAutocomplete'
 import PaymentQrPicker from './PaymentQrPicker'
+import HitpayCard from './HitpayCard'
 import SettingsMenu from './SettingsMenu'
 import DevicesTab from './DevicesTab'
 
@@ -505,6 +506,8 @@ function PaymentTab({ onDirtyChange }: TabProps) {
   }
 
   return (
+    <>
+    <HitpayCard className={CARD} />
     <form onSubmit={save}>
       <div className={CARD}>
         <h3 className={HEADING}>{t('Currency', '货币')}</h3>
@@ -554,7 +557,14 @@ function PaymentTab({ onDirtyChange }: TabProps) {
         </div>
       </div>
       <div className={CARD}>
-        <h3 className={HEADING}>{t('Payment', '付款')}</h3>
+        <h3 className={HEADING}>
+          {merchant!.hitpay_connected ? t('Backup payment info', '备用付款信息') : t('Payment', '付款')}
+        </h3>
+        {merchant!.hitpay_connected && (
+          <p className="text-[12px] text-muted-foreground leading-[1.5] -mt-2 mb-3">
+            {t('Customers see this only when HitPay cannot make a QR.', '仅在 HitPay 无法生成二维码时向顾客显示。')}
+          </p>
+        )}
         <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-[6px]">
             <Label htmlFor="shop-bank">{t('Bank / payment details', '银行/付款信息')}</Label>
@@ -586,6 +596,7 @@ function PaymentTab({ onDirtyChange }: TabProps) {
       </div>
       <SaveRow busy={busy} label={{ idle: t('Save payment', '保存付款'), busy: t('Saving…', '保存中…') }} />
     </form>
+    </>
   )
 }
 

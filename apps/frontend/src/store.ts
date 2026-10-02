@@ -1482,6 +1482,22 @@ export async function upsertMerchantSecret(merchantId: string, secret: any): Pro
   return toVoid(await apiSend(`/api/merchants/${merchantId}/secret`, 'PUT', secret, { auth: true }))
 }
 
+// ── HitPay: the shop's own account (spec 2026-10-02) ──────────────────────────────────────────
+// The key goes up once and never comes back: every answer carries `keyLast4` only.
+export type HitpayConnection = { connected: boolean; keyLast4: string | null }
+
+export async function fetchHitpayConnection(merchantId: string): Promise<Result<HitpayConnection>> {
+  return apiGet<HitpayConnection>(`/api/merchants/${merchantId}/hitpay`, { auth: 'required' })
+}
+
+export async function connectHitpay(merchantId: string, apiKey: string): Promise<Result<HitpayConnection>> {
+  return apiSend<HitpayConnection>(`/api/merchants/${merchantId}/hitpay`, 'PUT', { apiKey }, { auth: 'required' })
+}
+
+export async function disconnectHitpay(merchantId: string): Promise<Result<HitpayConnection>> {
+  return apiSend<HitpayConnection>(`/api/merchants/${merchantId}/hitpay`, 'DELETE', undefined, { auth: 'required' })
+}
+
 // ── Merchant platform feedback (#89) ────────────────────────────────────────────
 // merchantId scopes the route; the backend re-derives ownership from the bearer token
 // and ignores anything else in the body, so there is nothing else to send.
