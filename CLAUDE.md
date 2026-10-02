@@ -231,6 +231,21 @@ Rules that are easy to break:
 - **Local work needs a separate dev bot.** Telegram refuses `getUpdates` on a bot with a webhook. `telegram:webhook poll` forwards updates to the local backend and refuses to run on a bot that has one, because deleting the production webhook would silently stop every merchant's replies.
 - **Feedback submitted locally files a real GitHub issue** when `GITHUB_TOKEN` is set in `apps/backend/.env`. Start the backend with `GITHUB_TOKEN=` on the command line to test the form.
 
+### Customer payments (HitPay DuitNow QR)
+
+A shop can connect its **own** HitPay account (Settings → Payment). The customer then pays each order with a DuitNow QR for the exact total, and the order moves from `pending_payment` to `new` by itself. TinyOrder never holds money: the key is the merchant's, the money settles to the merchant, and Stripe stays subscription-only. Spec: `docs/superpowers/specs/2026-10-02-hitpay-duitnow-qr-design.md`.
+
+Split: `hitpay.ts` (adapter, key as a parameter), `hitpayPayment.ts` (pure rules), `hitpayPaymentDb.ts` (SQL), `hitpayConfirm.ts` (the one confirmation function). `hitpayDeps` and `hitpayAlertDeps` on `app.ts` are the test seams.
+
+Rules that are easy to break:
+
+- **The webhook body is never trusted.** HitPay's API-registered webhooks carry no salt we can read, so the body is a hint: the backend reads `payment_request_id`, then asks `GET /v1/payment-requests/{id}` with the key of the shop that owns the row. Do not "optimise" this by reading `status` from the body.
+- **No route returns the key.** The browser gets `keyLast4`. `GET /api/merchants/:id/secret` returns only the Telegram columns.
+- **One live QR for each order** is a partial unique index (`order_payments_one_pending`), and a QR whose time ran out is checked with HitPay before a new one is made — a customer who paid at 14:59 must not get a second QR that can take a second payment.
+- **The merchant alert waits for the payment.** `/api/notify/order` skips the merchant arms for a connected shop's unpaid order; `hitpayAlertDeps.alert` sends them after the commit, with a banner. The email's `merchant_emailed_at` claim makes a repeated confirmation send one email.
+- **The webhook answers 200 for every ignored signal.** Only a database failure answers 500.
+- **Local work needs the sandbox.** Set `HITPAY_API_BASE=https://api.sandbox.hit-pay.com/v1` and `BACKEND_PUBLIC_URL` to a public HTTPS tunnel to `:8787` — HitPay rejects localhost. Without a tunnel the browser poll still confirms payments; only the webhook path is missing.
+
 ### Shipping / pricing
 
 All order totals come from one pure module, `packages/shared/src/pricing.ts` — `priceOrder()` (shipping region, promo, voucher, tax, rounding) and `voucherError()`. It lives in `@bitetime/shared` because it runs on **both** sides of the wire: the browser prices to quote, the backend prices to commit, and the backend refuses a quote it disagrees with (`price_changed`). The row → domain mappers (`shopRates`, `shopTax`, `productFromRow`, `voucherFromRow`) are shared for the same reason — mapping one side and not the other is a refused checkout, not a rounding gap. There is no order-level referral discount; it was removed in #70. Shipping rates are per-merchant: `WM` (West Malaysia) and `EM` (East Malaysia), with `EM_STATES` selecting the region; a storefront that collects no state passes `resolvedShipping` (flat fee). See `CONTEXT.md → Order pricing`.
