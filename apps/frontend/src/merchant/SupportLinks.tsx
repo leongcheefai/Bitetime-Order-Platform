@@ -4,14 +4,16 @@ import { SUPPORT_EMAIL, SUPPORT_WA_DISPLAY, SUPPORT_WA_HREF, supportMailto } fro
 import { cn } from '@/lib/utils'
 
 /**
- * The two ways a merchant reaches a human: mail and WhatsApp.
+ * The two ways a merchant reaches a human outside the support chat: mail and WhatsApp.
  *
- * Merchant-side only. A superadmin needs no link to themselves, which is why this is mounted by
- * Dashboard and the feedback dialog rather than by the shell those two share with /admin.
+ * Merchant-side only, and only inside the Help panel (SupportFab). The sidebar used to carry a
+ * stacked copy too; it went once the panel became the one place to ask for help.
  *
- * `compact` is the dialog footer (one line, muted); the default is the sidebar (stacked, tappable).
+ * `compact` is one muted line (the feedback form, the chat's "could not alert" notice); the
+ * default is stacked and tappable (the panel's "chat not available" view). `whatsapp={false}`
+ * leaves mail only — the feedback form's footer, where the chat is one tap away already.
  */
-export default function SupportLinks({ compact = false }: { compact?: boolean }) {
+export default function SupportLinks({ compact = false, whatsapp = true }: { compact?: boolean; whatsapp?: boolean }) {
   const { t, merchant } = useSession()
   const mailto = supportMailto(merchant ? { name: merchant.name, slug: merchant.slug } : undefined)
 
@@ -36,7 +38,7 @@ export default function SupportLinks({ compact = false }: { compact?: boolean })
         <Mail {...icon} />
         {t('Email us', '发邮件给我们')}
       </a>
-      {SUPPORT_WA_HREF && (
+      {whatsapp && SUPPORT_WA_HREF && (
         <a
           className={link}
           href={SUPPORT_WA_HREF}

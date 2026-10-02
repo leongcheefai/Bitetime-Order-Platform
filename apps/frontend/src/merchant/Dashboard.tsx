@@ -13,7 +13,6 @@ import TrialFeedbackPrompt from './TrialFeedbackPrompt'
 import OnboardingChecklist from './OnboardingChecklist'
 import { SkeletonText } from '../components/Loaders'
 import SupportFab from './SupportFab'
-import SupportLinks from './SupportLinks'
 import { NavGuardProvider, useNavGuard } from './NavGuard'
 import { UpgradeNavProvider } from './UpgradeNav'
 import { useDashboardSection, useDashboardSubsection } from '../useDashboardSection'
@@ -136,7 +135,6 @@ function DashboardInner() {
       activeSub={section === 'customers' ? segment : undefined}
       onSelect={selectSection}
       backTo={role === 'superadmin' ? { href: '/admin/merchants', label: t('Back to admin', '返回管理') } : undefined}
-      footerExtra={<SupportLinks />}
     >
       <BillingBanner />
       {/* Below billing: a shop about to shut outranks an address we cannot yet reach. */}
