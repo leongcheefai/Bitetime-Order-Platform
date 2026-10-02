@@ -74,7 +74,7 @@ describe('support chat — merchant routes', () => {
   const orig = { ...supportDeps }
 
   beforeAll(async () => {
-    for (const s of ['support-own', 'support-stranger', 'support-suspended', 'support-race', 'support-cursor']) {
+    for (const s of ['support-own', 'support-stranger', 'support-suspended', 'support-pending', 'support-race', 'support-cursor']) {
       await resetMerchant(s)
     }
     const owner = await tokenOf(await makeUser('support-owner@example.com', 'password123'))
@@ -187,6 +187,12 @@ describe('support chat — merchant routes', () => {
     expect((await send(suspendedShopId, suspendedToken, 'why am I suspended?')).status).toBe(201)
   })
 
+  it('lets a pending shop ask for help', async () => {
+    const u = await tokenOf(await makeUser('support-pending@example.com', 'password123'))
+    const shop = await seedMerchant({ slug: 'support-pending', owner_id: u.userId, status: 'pending' })
+    expect((await send(shop, u.token, 'my trial did not start')).status).toBe(201)
+  })
+
   it('validates the text and the images', async () => {
     expect((await send(ownShopId, ownerToken, '   ')).status).toBe(400)
     expect((await send(ownShopId, ownerToken, 'a'.repeat(2001))).status).toBe(400)
@@ -199,6 +205,14 @@ describe('support chat — merchant routes', () => {
     const res = await send(ownShopId, ownerToken, 'hello')
     expect(res.status).toBe(503)
     expect((await json(res)).error).toBe('support_unavailable')
+    const feed = await json(await get(`/api/merchants/${ownShopId}/support/messages`, ownerToken))
+    expect(feed.available).toBe(false)
+  })
+
+  // Without the webhook secret no reply can ever come back, so the chat must not pretend to work.
+  it('counts a missing webhook secret as unavailable', async () => {
+    supportDeps.config = { token: 'T', chatId: '-100123', webhookSecret: '' }
+    expect((await send(ownShopId, ownerToken, 'hello')).status).toBe(503)
     const feed = await json(await get(`/api/merchants/${ownShopId}/support/messages`, ownerToken))
     expect(feed.available).toBe(false)
   })

@@ -188,10 +188,10 @@ nothing else.
 
 ### Webhook registration
 
-`pnpm --filter @bitetime/backend telegram:set-webhook <backend-url>` calls `setWebhook` with
+`pnpm --filter @bitetime/backend telegram:webhook set <backend-url>` calls `setWebhook` with
 `secret_token` and `allowed_updates: ["message"]`. The superadmin runs it for production.
 
-Local work: Telegram cannot reach `localhost`. `telegram:set-webhook --poll` reads `getUpdates`
+Local work: Telegram cannot reach `localhost`. `telegram:webhook poll` reads `getUpdates`
 and posts each update, with the secret header, to the local webhook route — the same idea as
 `stripe listen`. Telegram refuses `getUpdates` on a bot that has a webhook, so local work uses a
 **separate dev bot and a dev supergroup**. The script refuses `--poll` when `getWebhookInfo`
@@ -208,7 +208,7 @@ reports a webhook URL, so it can never delete the production webhook.
 | `merchant/SupportChat.tsx` | The chat view: message list, text box, image picker, retry. |
 | `merchant/FeedbackForm.tsx` | The form from `FeedbackFab`, moved out with its logic unchanged (session guard, object-URL cleanup). |
 | `merchant/supportFaq.ts` | Bilingual FAQ data: groups → questions → answers. An answer can carry a link to a dashboard section. |
-| `merchant/useSupportPoll.ts` | 5 s while the panel is open, 60 s while it is closed, no poll while `document.hidden`. |
+| `merchant/useSupportFeed.ts` | 5 s while the panel is open, 60 s while it is closed, no poll while `document.hidden`. |
 | `store.ts` | `listSupportMessages`, `sendSupportMessage`, `markSupportRead`, on the `Result<T, E>` convention. |
 
 `FeedbackFab.tsx` is deleted.
@@ -277,4 +277,4 @@ The fourth view is the feedback form.
 1. Make the forum supergroup. Add the bot as an admin with "Manage topics".
 2. Set `PLATFORM_SUPPORT_CHAT_ID` and `PLATFORM_TG_WEBHOOK_SECRET` on Railway.
 3. Run `db:push` for the migration.
-4. Run `telegram:set-webhook` against the production backend URL.
+4. Run `telegram:webhook set <backend-url>` against the production backend URL.

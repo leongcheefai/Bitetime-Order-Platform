@@ -151,6 +151,7 @@ export default function SupportPanel({ merchantId, feed, onClose, onNavigate }: 
             messages={feed.messages}
             outbox={feed.outbox}
             notAlerted={feed.notAlerted}
+            imagesFailed={feed.imagesFailed}
             onSend={feed.send}
             onRetry={(id) => void feed.retry(id)}
             onDiscard={feed.discard}

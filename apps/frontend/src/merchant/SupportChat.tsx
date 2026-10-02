@@ -17,12 +17,13 @@ interface Props {
   messages: SupportMessage[]
   outbox: OutboxItem[]
   notAlerted: boolean
+  imagesFailed: number
   onSend: (body: string, files: File[]) => Promise<boolean>
   onRetry: (localId: string) => void
   onDiscard: (localId: string) => void
 }
 
-export default function SupportChat({ merchantId, messages, outbox, notAlerted, onSend, onRetry, onDiscard }: Props) {
+export default function SupportChat({ merchantId, messages, outbox, notAlerted, imagesFailed, onSend, onRetry, onDiscard }: Props) {
   const { t } = useSession()
   const [text, setText] = useState('')
   const [files, setFiles] = useState<File[]>([])
@@ -96,6 +97,14 @@ export default function SupportChat({ merchantId, messages, outbox, notAlerted, 
             </li>
           ))}
         </ul>
+        {imagesFailed > 0 && (
+          <p role="status" className="mt-3 text-right text-[12px] text-danger-fg">
+            {t(
+              `${imagesFailed} screenshot${imagesFailed === 1 ? '' : 's'} could not be attached.`,
+              `有 ${imagesFailed} 张截图未能上传。`,
+            )}
+          </p>
+        )}
         {notAlerted && (
           <div role="status" className="mt-3 rounded-md border border-border p-3 text-[12px]">
             <p className="mb-1">{t('We saved your message, but we could not alert the team. Email us instead.',

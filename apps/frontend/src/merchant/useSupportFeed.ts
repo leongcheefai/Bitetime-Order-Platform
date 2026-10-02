@@ -23,6 +23,9 @@ export function useSupportFeed(merchantId: string | null, open: boolean) {
   const [unread, setUnread] = useState(0)
   const [available, setAvailable] = useState(true)
   const [notAlerted, setNotAlerted] = useState(false)
+  // Screenshots the last send could not store. The words still landed, so this is a caveat to
+  // show, not a failed send — the same posture as the feedback form's thank-you.
+  const [imagesFailed, setImagesFailed] = useState(0)
   const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.hidden)
   const cursor = useRef<string | null>(null)
 
@@ -69,6 +72,7 @@ export function useSupportFeed(merchantId: string | null, open: boolean) {
     setOutbox(prev => prev.filter(o => o.localId !== item.localId))
     setMessages(prev => mergeMessages(prev, [r.data.message]))
     setNotAlerted(!r.data.alerted)
+    setImagesFailed(r.data.images_failed)
     return true
   }, [merchantId])
 
@@ -95,5 +99,5 @@ export function useSupportFeed(merchantId: string | null, open: boolean) {
     void markSupportRead(merchantId)
   }, [merchantId])
 
-  return { messages, outbox, unread, available, notAlerted, send, retry, discard, markRead }
+  return { messages, outbox, unread, available, notAlerted, imagesFailed, send, retry, discard, markRead }
 }

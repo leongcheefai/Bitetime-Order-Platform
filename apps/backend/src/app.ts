@@ -2748,7 +2748,12 @@ export const supportDeps: {
   config: { token: env.platformTgToken, chatId: env.platformSupportChatId, webhookSecret: env.platformTgWebhookSecret },
 }
 
-const supportAvailable = () => Boolean(supportDeps.config.token && supportDeps.config.chatId)
+// All three, not just the pair that sends: without the webhook secret the reply route refuses
+// every update, so a merchant could write in but never hear back — worse than the mail fallback.
+const supportAvailable = () => {
+  const { token, chatId, webhookSecret } = supportDeps.config
+  return Boolean(token && chatId && webhookSecret)
+}
 
 // EXPORTED for tests/api/support-chat.test.ts only, which fills it by calling allow() directly —
 // the same reason feedbackWindow is exported (#147).
