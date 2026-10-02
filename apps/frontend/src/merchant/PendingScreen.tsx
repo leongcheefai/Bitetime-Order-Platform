@@ -5,6 +5,7 @@ import { trackEvent } from '../analytics/events'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import Wordmark from '../components/Wordmark'
+import SupportFab from './SupportFab'
 
 export default function PendingScreen() {
   const { t, merchant, refreshMerchant } = useSession()
@@ -64,6 +65,7 @@ export default function PendingScreen() {
           </p>
         )}
       </Card>
+      <SupportFab />
     </div>
   )
 }

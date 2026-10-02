@@ -9,6 +9,7 @@ import { PRICING_TIERS } from '../marketing/pricingTiers'
 import { defaultReactivation, yearlySavingPercent, type Cycle } from './reactivationChoice'
 import OrdersView from './OrdersView'
 import TrialFeedbackPrompt from './TrialFeedbackPrompt'
+import SupportFab from './SupportFab'
 import { Button } from '@/components/ui/button'
 
 // Suspended = the subscription lapsed (trial ended unpaid, cancellation) or a superadmin action.
@@ -123,6 +124,7 @@ export default function SuspendedScreen() {
           {t('Your orders', '您的订单')}
         </h2>
         <OrdersView readOnly />
+        <SupportFab />
       </div>
     )
   }
@@ -222,6 +224,7 @@ export default function SuspendedScreen() {
         {t('Your orders', '您的订单')}
       </h2>
       <OrdersView readOnly />
+      <SupportFab />
     </div>
   )
 }

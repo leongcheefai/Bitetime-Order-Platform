@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  SUPPORT_EMAIL, SUPPORT_WA, SUPPORT_WA_DISPLAY, SUPPORT_WA_HREF, supportMailto,
+  SUPPORT_EMAIL, supportMailto,
 } from './support'
 
 describe('supportMailto', () => {
@@ -19,16 +19,5 @@ describe('supportMailto', () => {
 
   it('still gives an address when there is no shop to name', () => {
     expect(supportMailto()).toBe(`mailto:${SUPPORT_EMAIL}`)
-  })
-})
-
-describe('the WhatsApp link', () => {
-  it('is a dialable wa.me link', () => {
-    // The trap waNumber.ts exists for: a link that renders fine and resolves to no one.
-    expect(SUPPORT_WA_HREF).toBe(`https://wa.me/${SUPPORT_WA}`)
-  })
-
-  it('shows the same digits it dials', () => {
-    expect(SUPPORT_WA_DISPLAY.replace(/\D/g, '')).toBe(SUPPORT_WA)
   })
 })

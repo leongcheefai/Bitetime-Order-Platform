@@ -1,7 +1,7 @@
 import type { FeedbackCategory } from '@bitetime/shared'
 import type { Lang } from '../types'
 
-// Record<FeedbackCategory, …>, not Record<string, …> — same reasoning as FeedbackFab's
+// Record<FeedbackCategory, …>, not Record<string, …> — same reasoning as FeedbackForm's
 // CATEGORY_LABELS: a fifth category upstream should be a compile error here too, not a
 // silent raw-key fallback. Wording is intentionally different (admin-facing vs
 // merchant-facing); only the type is shared.

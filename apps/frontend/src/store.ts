@@ -1,6 +1,6 @@
 import type { User } from '@supabase/auth-js';
-import { voucherFromRow, QUOTE_REFUSALS, validateFeedbackImages } from '@bitetime/shared';
-import type { FeedbackDraft, FeedbackStatus, Granularity, MerchantStats, OrderEvent, OrderRefusal, PendingShop, QuoteRefusal, Slot } from '@bitetime/shared';
+import { voucherFromRow, QUOTE_REFUSALS, validateFeedbackImages, validateSupportMessage } from '@bitetime/shared';
+import type { FeedbackDraft, FeedbackStatus, Granularity, MerchantStats, OrderEvent, OrderRefusal, PendingShop, QuoteRefusal, Slot, SupportFeed, SupportSendResult } from '@bitetime/shared';
 import { revenueQuery, type RevenueSelection } from './merchant/revenueRange';
 import { auth, storage } from './supabase';
 import { RESERVED_SLUGS } from './slug';
@@ -1540,6 +1540,45 @@ export async function fetchAdminFeedback(status?: FeedbackStatus): Promise<Resul
 // FeedbackItem — the spread in AdminFeedback is correct, not merely harmless.
 export async function setFeedbackStatus(id: string, status: FeedbackStatus): Promise<Result<FeedbackItem>> {
   return apiSend<FeedbackItem>(`/api/admin/feedback/${id}`, 'PATCH', { status }, { auth: true })
+}
+
+// ── Support chat ──────────────────────────────────────────────────────────────
+// docs/superpowers/specs/2026-10-02-support-chat-design.md. The panel polls listSupportMessages;
+// `after` is the id of the last message it holds.
+
+export async function listSupportMessages(merchantId: string, after?: string): Promise<Result<SupportFeed>> {
+  const qs = after ? `?after=${encodeURIComponent(after)}` : ''
+  return apiGet<SupportFeed>(`/api/merchants/${merchantId}/support/messages${qs}`, { auth: true })
+}
+
+export async function sendSupportMessage(
+  merchantId: string,
+  body: string,
+  files: File[] = [],
+): Promise<Result<SupportSendResult>> {
+  // Both checks run here first so the merchant is told before the request, in the same words the
+  // backend would use — the same reason submitFeedback validates before it sends.
+  const text = validateSupportMessage(body)
+  if (!text.ok) return { ok: false, error: { code: text.code, message: text.error } }
+  const images = validateFeedbackImages(files.map(f => ({ type: f.type, size: f.size })))
+  if (!images.ok) {
+    const name = images.index === null ? null : files[images.index]?.name
+    return { ok: false, error: { code: images.code, message: name ? `${images.error}: ${name}` : images.error } }
+  }
+
+  const form = new FormData()
+  form.append('body', text.value)
+  for (const file of files) form.append('images', file)
+  return apiSendForm<SupportSendResult>(`/api/merchants/${merchantId}/support/messages`, form, { auth: true })
+}
+
+export async function markSupportRead(merchantId: string): Promise<Result<void>> {
+  return toVoid(await apiSend(`/api/merchants/${merchantId}/support/read`, 'POST', undefined, { auth: true }))
+}
+
+export async function fetchSupportImage(merchantId: string, messageId: string, index: number): Promise<Result<Blob>> {
+  const r = await apiGetFile(`/api/merchants/${merchantId}/support/messages/${messageId}/images/${index}`, { auth: 'required' })
+  return mapOk(r, d => d.blob)
 }
 
 // ── Trial feedback (#155) ───────────────────────────────────────────────────────

@@ -86,6 +86,13 @@ export const env = {
   platformTgToken: process.env.PLATFORM_TG_TOKEN || '',
   platformTgChatId: process.env.PLATFORM_TG_CHAT_ID || '',
 
+  // The support chat (supportChat.ts): a forum SUPERGROUP where each shop gets one topic, and the
+  // secret Telegram echoes back in X-Telegram-Bot-Api-Secret-Token on every webhook call. The bot
+  // is PLATFORM_TG_TOKEN above. May equal PLATFORM_TG_CHAT_ID — the signup alerts then land in
+  // "General". OPTIONAL: unset, "Talk to a person" answers 503 and the panel shows mail/WhatsApp.
+  platformSupportChatId: process.env.PLATFORM_SUPPORT_CHAT_ID || '',
+  platformTgWebhookSecret: process.env.PLATFORM_TG_WEBHOOK_SECRET || '',
+
   // Signs the merchant email-verification link (emailVerifyToken.ts).
   //
   // OPTIONAL, same posture as GOOGLE_MAPS_API_KEY and ANTHROPIC_API_KEY: unset, the feature is

@@ -30,6 +30,13 @@ import { isOurEvent } from './webhookOwnership.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
 import { notifyMerchantSignup } from './platformNotify.js'
+import { createSupportTelegram, type SupportConfig, type SupportTelegram } from './supportTelegram.js'
+import {
+  listMessages, unreadCount, touchSeen, markRead, insertMerchantMessage, setMessageImages,
+  messageImagePaths, merchantByTopic, insertAdminReply, claimAwayEmail, setThreadResolved, threadResolvedAt,
+} from './supportChatDb.js'
+import { deliverMerchantMessage } from './supportDelivery.js'
+import { parseUpdate, clampReply, secretMatches, awayEmail, PHOTO_NOTICE } from './supportChat.js'
 import { emailOrderConfirmation, emailMerchantOrder } from './orderEmails.js'
 import { signUpAccount, isDuplicateEmailError } from './accountSignup.js'
 import { makeEmailVerifyToken, readEmailVerifyToken } from './emailVerifyToken.js'
@@ -88,7 +95,7 @@ import {
   updateReleaseStatus, updateReleaseHumanization,
   listPublishedReleases, getPublishedReleaseByTag,
 } from './releasesDb.js'
-import { canIssueInvoice, validateOrderReview, isCart, isBusinessNature, isCurrencyCode, DEFAULT_CURRENCY, validateOptionGroups, optionGroupsFromRow, validateFeedback, isFeedbackStatus, validateFeedbackImages, validateTrialFeedback, shopDistance, routedKm, distanceFee, REFUSAL_STATUS, QUOTE_REFUSAL_STATUS, DEFAULT_TIMEZONE, isTimezone, computeMerchantStats, ordersInWindow, windowTotals, todayInZone, granularityFor, fulfilmentConfig, validateCustomDates, validateSlotHours, MAX_CUSTOM_DATES, pendingShopFromBody, pendingShopMetadata, menuCategoriesFromRow } from '@bitetime/shared'
+import { canIssueInvoice, validateOrderReview, isCart, isBusinessNature, isCurrencyCode, DEFAULT_CURRENCY, validateOptionGroups, optionGroupsFromRow, validateFeedback, isFeedbackStatus, validateFeedbackImages, validateSupportMessage, validateTrialFeedback, shopDistance, routedKm, distanceFee, REFUSAL_STATUS, QUOTE_REFUSAL_STATUS, DEFAULT_TIMEZONE, isTimezone, computeMerchantStats, ordersInWindow, windowTotals, todayInZone, granularityFor, fulfilmentConfig, validateCustomDates, validateSlotHours, MAX_CUSTOM_DATES, pendingShopFromBody, pendingShopMetadata, menuCategoriesFromRow } from '@bitetime/shared'
 import type { CartLine, Granularity } from '@bitetime/shared'
 import { buildRevenueWorkbook, reportFilename, type ReportWindow } from './report.js'
 import { resolveRevenueRange, type ResolvedRevenueRange } from './revenueWindow.js'
@@ -2723,6 +2730,205 @@ app.patch('/api/admin/feedback/:feedbackId', requireSuperadmin, async (c) => {
 
   return c.json(row)
 })
+
+// ── Support chat ────────────────────────────────────────────────────────────────
+// docs/superpowers/specs/2026-10-02-support-chat-design.md. A merchant talks to the superadmin
+// through one Telegram forum topic per shop. The browser polls GET …/support/messages; the
+// superadmin's replies arrive on POST /api/telegram/support-webhook.
+//
+// Same mutable seam as platformNotifyDeps: production uses the real Bot API and Resend, an API
+// test swaps in fakes and turns the feature on without env vars.
+export const supportDeps: {
+  telegram: SupportTelegram
+  email: typeof resendSend
+  config: SupportConfig
+} = {
+  telegram: createSupportTelegram(),
+  email: resendSend,
+  config: { token: env.platformTgToken, chatId: env.platformSupportChatId, webhookSecret: env.platformTgWebhookSecret },
+}
+
+// All three, not just the pair that sends: without the webhook secret the reply route refuses
+// every update, so a merchant could write in but never hear back — worse than the mail fallback.
+const supportAvailable = () => {
+  const { token, chatId, webhookSecret } = supportDeps.config
+  return Boolean(token && chatId && webhookSecret)
+}
+
+// EXPORTED for tests/api/support-chat.test.ts only, which fills it by calling allow() directly —
+// the same reason feedbackWindow is exported (#147).
+export const supportWindow = createSlidingWindow({ limit: 30, windowMs: 60 * 60_000, now: () => Date.now() })
+
+const SUPPORT_IMAGE_BUCKET = 'support-images'
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+app.get('/api/merchants/:id/support/messages', requireMerchantOwns, async (c) => {
+  const user = c.get('user')
+  const merchant = c.get('merchant')
+  const after = c.req.query('after') || null
+  if (after !== null && !UUID_RE.test(after)) return c.json({ error: 'Bad cursor' }, 400)
+
+  // A superadmin passes requireMerchantOwns. Their read must not count as the MERCHANT being
+  // here, or it would stop the away email the merchant needs.
+  if (merchant.owner_id === user.id) await touchSeen(merchant.id)
+
+  const [messages, unread, resolvedAt] = await Promise.all([
+    listMessages(merchant.id, after), unreadCount(merchant.id), threadResolvedAt(merchant.id),
+  ])
+  return c.json({ messages, unread, available: supportAvailable(), resolved_at: resolvedAt })
+})
+
+app.post('/api/merchants/:id/support/read', requireMerchantOwns, async (c) => {
+  const merchant = c.get('merchant')
+  if (merchant.owner_id !== c.get('user').id) return c.json({ error: 'Forbidden' }, 403)
+  await markRead(merchant.id)
+  return c.json({ ok: true })
+})
+
+app.post('/api/merchants/:id/support/messages', requireMerchantOwns, async (c) => {
+  const user = c.get('user')
+  const merchant = c.get('merchant')
+  // A row with sender = 'merchant' must come from the merchant, never from a superadmin viewing
+  // the shop.
+  if (merchant.owner_id !== user.id) return c.json({ error: 'Forbidden' }, 403)
+  if (!supportAvailable()) return c.json({ error: 'support_unavailable' }, 503)
+  if (!supportWindow.allow(user.id)) return c.json({ error: 'Too many messages. Please try again later.' }, 429)
+
+  const form = await c.req.parseBody({ all: true }).catch(() => ({} as Record<string, unknown>))
+  const parsed = validateSupportMessage(form['body'])
+  if (!parsed.ok) return c.json({ error: parsed.error }, 400)
+
+  const raw = form['images']
+  const files = (Array.isArray(raw) ? raw : [raw]).filter((f): f is File => f instanceof File)
+  const images = validateFeedbackImages(files.map(f => ({ type: f.type, size: f.size })))
+  if (!images.ok) {
+    const name = images.index === null ? null : files[images.index]?.name
+    return c.json({ error: name ? `${images.error}: ${name}` : images.error }, 400)
+  }
+  for (const file of files) {
+    if (!FEEDBACK_IMAGE_EXT[file.type]) return c.json({ error: `Unsupported image type: ${file.name}` }, 400)
+  }
+
+  // Store FIRST: nothing after this line can lose the merchant's words.
+  const { message, wasResolved } = await insertMerchantMessage({ merchantId: merchant.id, userId: user.id, body: parsed.value })
+
+  const paths: string[] = []
+  const uploaded: File[] = []
+  for (const file of files) {
+    const path = `${merchant.id}/${message.id}/${crypto.randomUUID()}.${FEEDBACK_IMAGE_EXT[file.type]}`
+    const { error } = await admin.storage.from(SUPPORT_IMAGE_BUCKET).upload(path, file, { contentType: file.type, upsert: true })
+    if (error) {
+      console.error(`support ${message.id}: screenshot upload failed:`, error.message)
+      continue
+    }
+    paths.push(path)
+    uploaded.push(file)
+  }
+  if (paths.length) await setMessageImages(message.id, paths)
+
+  // The POST refuses anyone but the owner, so the caller's own email IS the owner's.
+  const alerted = await deliverMerchantMessage(supportDeps, {
+    merchant: { id: merchant.id, name: merchant.name, slug: merchant.slug, status: merchant.status },
+    ownerEmail: async () => user.email ?? null,
+    messageId: message.id,
+    reopen: wasResolved,
+    body: parsed.value,
+    images: uploaded,
+    frontendUrl: env.frontendUrl,
+  })
+
+  return c.json({
+    message: { ...message, image_count: paths.length },
+    alerted,
+    images_failed: files.length - paths.length,
+  }, 201)
+})
+
+/** Same shape as the feedback image route: the caller names an INDEX, never a path. */
+app.get('/api/merchants/:id/support/messages/:msgId/images/:index', requireMerchantOwns, async (c) => {
+  const msgId = c.req.param('msgId')
+  if (!UUID_RE.test(msgId)) return c.json({ error: 'not_found' }, 404)
+  const paths = (await messageImagePaths(c.get('merchant').id, msgId)) ?? []
+  const index = Number(c.req.param('index'))
+  if (!Number.isInteger(index) || index < 0 || index >= paths.length) return c.json({ error: 'not_found' }, 404)
+  return streamPrivateObject(SUPPORT_IMAGE_BUCKET, paths[index])
+})
+
+/**
+ * The superadmin's replies, from Telegram. Registered with setWebhook by
+ * scripts/telegramWebhook.ts, which also sets the secret Telegram echoes back here.
+ *
+ * Status codes are a conversation with Telegram, not with a person: any non-2xx makes Telegram
+ * send the update AGAIN. So an update we deliberately ignore gets 200, and only a failure we
+ * want retried — a database read or write throwing — gets 500. The unique tg_message_id index
+ * makes that retry safe.
+ */
+app.post('/api/telegram/support-webhook', async (c) => {
+  const cfg = supportDeps.config
+  if (!cfg.token || !cfg.chatId || !cfg.webhookSecret) return c.json({ error: 'support_unavailable' }, 503)
+  if (!secretMatches(c.req.header('X-Telegram-Bot-Api-Secret-Token') ?? '', cfg.webhookSecret)) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const parsed = parseUpdate(await c.req.json().catch(() => null), cfg.chatId)
+  if (parsed.kind === 'ignore') return c.json({ ok: true })
+
+  let merchantId: string | null
+  try {
+    merchantId = await merchantByTopic(parsed.topicId)
+  } catch (e: any) {
+    console.error('support webhook: topic lookup failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+  if (!merchantId) return c.json({ ok: true })
+
+  // Closing the topic in Telegram is the superadmin's "done". A database failure answers 500 so
+  // Telegram sends the service message again — the update is idempotent either way.
+  if (parsed.kind === 'closed' || parsed.kind === 'reopened') {
+    try {
+      await setThreadResolved(merchantId, parsed.kind === 'closed')
+    } catch (e: any) {
+      console.error('support webhook: storing a topic state failed:', e?.message ?? e)
+      return c.json({ error: 'store_failed' }, 500)
+    }
+    return c.json({ ok: true })
+  }
+
+  if (parsed.kind === 'photo') {
+    await supportDeps.telegram.sendText(cfg, parsed.topicId, PHOTO_NOTICE)
+      .catch(e => console.error('support webhook: photo notice failed:', e?.message ?? e))
+    return c.json({ ok: true })
+  }
+
+  let stored: Awaited<ReturnType<typeof insertAdminReply>>
+  try {
+    stored = await insertAdminReply({ merchantId, body: clampReply(parsed.text), tgMessageId: parsed.messageId })
+  } catch (e: any) {
+    console.error('support webhook: storing a reply failed:', e?.message ?? e)
+    return c.json({ error: 'store_failed' }, 500)
+  }
+
+  // A repeated update stored nothing, so it must not email either. An email failure is logged
+  // and answered 200: the reply is stored, and a retry would not resend the claimed email anyway.
+  if (stored) {
+    try {
+      if (await claimAwayEmail(merchantId)) await sendSupportAwayEmail(merchantId)
+    } catch (e: any) {
+      console.error('support webhook: away email failed for', merchantId, '—', e?.message ?? e)
+    }
+  }
+  return c.json({ ok: true })
+})
+
+async function sendSupportAwayEmail(merchantId: string) {
+  const { data: shop } = await admin.from('merchants').select('name, owner_id').eq('id', merchantId).maybeSingle()
+  if (!shop?.owner_id) return
+  const { data: owner } = await admin.auth.admin.getUserById(shop.owner_id)
+  const to = owner?.user?.email
+  if (!to) return
+  const mail = awayEmail({ shopName: shop.name, dashboardUrl: `${env.frontendUrl.replace(/\/+$/, '')}/merchant` })
+  await supportDeps.email(to, mail.subject, { text: mail.text })
+}
 
 // Same pattern as githubDeps: held mutable so tests can capture what would be sent to GitHub
 // and Claude without a live network call. Production uses the real fetch/SDK adapters.
