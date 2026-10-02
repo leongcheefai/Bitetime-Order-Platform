@@ -33,9 +33,10 @@ import { notifyMerchantSignup } from './platformNotify.js'
 import { createSupportTelegram, type SupportConfig, type SupportTelegram } from './supportTelegram.js'
 import {
   listMessages, unreadCount, touchSeen, markRead, insertMerchantMessage, setMessageImages,
-  messageImagePaths,
+  messageImagePaths, merchantByTopic, insertAdminReply, claimAwayEmail,
 } from './supportChatDb.js'
 import { deliverMerchantMessage } from './supportDelivery.js'
+import { parseUpdate, clampReply, secretMatches, awayEmail, PHOTO_NOTICE } from './supportChat.js'
 import { emailOrderConfirmation, emailMerchantOrder } from './orderEmails.js'
 import { signUpAccount, isDuplicateEmailError } from './accountSignup.js'
 import { makeEmailVerifyToken, readEmailVerifyToken } from './emailVerifyToken.js'
@@ -2844,6 +2845,70 @@ app.get('/api/merchants/:id/support/messages/:msgId/images/:index', requireMerch
   if (!Number.isInteger(index) || index < 0 || index >= paths.length) return c.json({ error: 'not_found' }, 404)
   return streamPrivateObject(SUPPORT_IMAGE_BUCKET, paths[index])
 })
+
+/**
+ * The superadmin's replies, from Telegram. Registered with setWebhook by
+ * scripts/telegramWebhook.ts, which also sets the secret Telegram echoes back here.
+ *
+ * Status codes are a conversation with Telegram, not with a person: any non-2xx makes Telegram
+ * send the update AGAIN. So an update we deliberately ignore gets 200, and only a failure we
+ * want retried — a database read or write throwing — gets 500. The unique tg_message_id index
+ * makes that retry safe.
+ */
+app.post('/api/telegram/support-webhook', async (c) => {
+  const cfg = supportDeps.config
+  if (!cfg.token || !cfg.chatId || !cfg.webhookSecret) return c.json({ error: 'support_unavailable' }, 503)
+  if (!secretMatches(c.req.header('X-Telegram-Bot-Api-Secret-Token') ?? '', cfg.webhookSecret)) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
+  const parsed = parseUpdate(await c.req.json().catch(() => null), cfg.chatId)
+  if (parsed.kind === 'ignore') return c.json({ ok: true })
+
+  let merchantId: string | null
+  try {
+    merchantId = await merchantByTopic(parsed.topicId)
+  } catch (e: any) {
+    console.error('support webhook: topic lookup failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+  if (!merchantId) return c.json({ ok: true })
+
+  if (parsed.kind === 'photo') {
+    await supportDeps.telegram.sendText(cfg, parsed.topicId, PHOTO_NOTICE)
+      .catch(e => console.error('support webhook: photo notice failed:', e?.message ?? e))
+    return c.json({ ok: true })
+  }
+
+  let stored: Awaited<ReturnType<typeof insertAdminReply>>
+  try {
+    stored = await insertAdminReply({ merchantId, body: clampReply(parsed.text), tgMessageId: parsed.messageId })
+  } catch (e: any) {
+    console.error('support webhook: storing a reply failed:', e?.message ?? e)
+    return c.json({ error: 'store_failed' }, 500)
+  }
+
+  // A repeated update stored nothing, so it must not email either. An email failure is logged
+  // and answered 200: the reply is stored, and a retry would not resend the claimed email anyway.
+  if (stored) {
+    try {
+      if (await claimAwayEmail(merchantId)) await sendSupportAwayEmail(merchantId)
+    } catch (e: any) {
+      console.error('support webhook: away email failed for', merchantId, '—', e?.message ?? e)
+    }
+  }
+  return c.json({ ok: true })
+})
+
+async function sendSupportAwayEmail(merchantId: string) {
+  const { data: shop } = await admin.from('merchants').select('name, owner_id').eq('id', merchantId).maybeSingle()
+  if (!shop?.owner_id) return
+  const { data: owner } = await admin.auth.admin.getUserById(shop.owner_id)
+  const to = owner?.user?.email
+  if (!to) return
+  const mail = awayEmail({ shopName: shop.name, dashboardUrl: `${env.frontendUrl.replace(/\/+$/, '')}/merchant` })
+  await supportDeps.email(to, mail.subject, { text: mail.text })
+}
 
 // Same pattern as githubDeps: held mutable so tests can capture what would be sent to GitHub
 // and Claude without a live network call. Production uses the real fetch/SDK adapters.
