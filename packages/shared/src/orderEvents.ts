@@ -4,7 +4,7 @@
  *
  * Shared for the reason `refusal.ts` is: the backend writes a kind, the drawer renders a
  * sentence for it, and the two must agree. Adding a kind means three places — this list, the
- * CHECK constraint on `order_events.kind` (last moved in `20260917120100_order_events_fulfil_time.sql`), and the drawer's sentence table, whose
+ * CHECK constraint on `order_events.kind` (last moved in `20261002140000_hitpay_duitnow_qr.sql`), and the drawer's sentence table, whose
  * exhaustiveness test fails until the new kind has words.
  *
  * WHAT IS NOT HERE: the sentence. `t(en, zh)` is the browser's, and the merchant's own actions
@@ -33,6 +33,10 @@ export const ORDER_EVENT_KINDS = [
   'voucher_released',
   /** Un-cancelling took the voucher use back (ADR 0023). `detail.code`. */
   'voucher_restored',
+  /** HitPay confirmed the payment (spec 2026-10-02). `detail.gateway`, `detail.request_id`. Actor `system`. */
+  'payment_confirmed',
+  /** HitPay confirmed a payment on an order that was already cancelled. The shop must refund it. */
+  'payment_after_cancel',
 ] as const
 
 export type OrderEventKind = (typeof ORDER_EVENT_KINDS)[number]

@@ -70,6 +70,10 @@ export function orderEventLine(e: OrderEvent, t: Translate): string {
       return t(`Voucher ${codeOf(e)} use returned`, `优惠券 ${codeOf(e)} 的使用次数已退回`)
     case 'voucher_restored':
       return t(`Voucher ${codeOf(e)} use taken back`, `优惠券 ${codeOf(e)} 的使用次数已收回`)
+    case 'payment_confirmed':
+      return t('Payment received by DuitNow (HitPay)', '已通过 DuitNow（HitPay）收款')
+    case 'payment_after_cancel':
+      return t('Customer paid after you cancelled. Refund them in HitPay.', '顾客在您取消后付款。请在 HitPay 退款。')
     default: {
       const never: never = kind
       return never

@@ -65,6 +65,8 @@ export interface Merchant {
   payment_qr?: string | null
   payment_bank?: string | null
   payment_note?: string | null
+  /** The shop connected its own HitPay account (spec 2026-10-02). Written by the backend only. */
+  hitpay_connected?: boolean | null
   /** Industry the shop runs in (#161), one of `BUSINESS_NATURES`. Absent/null for a shop that
    *  signed up before the field existed — render it through `businessNatureLabel`, which names
    *  that state rather than dropping the shop. */
