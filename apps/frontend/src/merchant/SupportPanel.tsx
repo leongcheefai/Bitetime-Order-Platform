@@ -1,6 +1,6 @@
 // The support panel: FAQ → answer, the chat, and the feedback form, as views of one card.
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ChevronRight, MessageCircle, MessageSquarePlus, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, ChevronRight, MessageCircle, MessageSquarePlus, X } from 'lucide-react'
 import { useSession } from '../SessionContext'
 import { Button } from '../components/ui/button'
 import SupportLinks from './SupportLinks'
@@ -9,6 +9,11 @@ import FeedbackForm from './FeedbackForm'
 import { SUPPORT_FAQ, type Bilingual, type FaqGroup, type FaqItem } from './supportFaq'
 import type { useSupportFeed } from './useSupportFeed'
 import { cn } from '@/lib/utils'
+
+// The answer view's secondary actions. `outline` reads as disabled on the cream panel (muted
+// text, half-pixel border), so these take the `soft` variant (accent text, full border) on the
+// white card fill, which lifts them off the page. "Talk to a person" stays the one filled button.
+const ACTION = 'bg-card font-medium hover:bg-muted'
 
 type View =
   | { kind: 'home' }
@@ -126,18 +131,19 @@ export default function SupportPanel({ merchantId, feed, onClose, onNavigate }: 
           {view.item.link && onNavigate && (
             <Button
               type="button"
-              variant="outline"
+              variant="soft"
               size="sm"
-              className="mt-3"
+              className={cn('mt-3', ACTION)}
               onClick={() => { onNavigate(view.item.link!.section, view.item.link!.sub); onClose() }}
             >
               {T(view.item.link.label)}
+              <ArrowRight size={16} />
             </Button>
           )}
           <div className="mt-6 border-t border-border pt-4">
             <p className="mb-2 text-[13px] text-muted-foreground">{t('Did this help?', '这个回答有帮助吗？')}</p>
             <div className="flex gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setView({ kind: 'home' })}>{t('Yes', '有')}</Button>
+              <Button type="button" variant="soft" size="sm" className={ACTION} onClick={() => setView({ kind: 'home' })}>{t('Yes, thanks', '有，谢谢')}</Button>
               <Button type="button" size="sm" onClick={talk}>{t('Talk to a person', '联系客服')}</Button>
             </div>
           </div>
