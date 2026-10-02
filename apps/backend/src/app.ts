@@ -38,7 +38,7 @@ import {
   clearHitpayConnection, closeOrderPayment, insertOrderPayment, latestOrderPayment, merchantAlertHeld, merchantByWebhookToken,
   orderPaymentByRequestId, payableOrder, readHitpayConnection, saveHitpayConnection, type OrderPaymentRow,
 } from './hitpayPaymentDb.js'
-import { confirmHitpayPayment, type PaymentAlert } from './hitpayConfirm.js'
+import { confirmHitpayPayment, isSettled, type PaymentAlert } from './hitpayConfirm.js'
 import { notifyMerchantSignup } from './platformNotify.js'
 import { createSupportTelegram, type SupportConfig, type SupportTelegram } from './supportTelegram.js'
 import {
@@ -1033,10 +1033,11 @@ app.post('/api/orders/:orderId/hitpay-qr', async (c) => {
       // The old QR's time ran out on OUR clock. Ask HitPay before making a second one: a customer
       // who paid at 14:59 must not be handed a QR that can take a second payment.
       const outcome = await confirmHitpayPayment(confirmDeps(), latest)
-      if (outcome === 'paid' || outcome === 'paid_after_cancel' || outcome === 'recorded' || outcome === 'already') {
-        return c.json({ status: 'completed' as const })
-      }
+      if (isSettled(outcome)) return c.json({ status: 'completed' as const })
       if (outcome === 'unavailable') return c.json({ error: 'gateway_unavailable' }, 502)
+      // HitPay holds a completed payment that does not match this order. A new QR would invite a
+      // second payment and bury the first; the row stays as it is for a person to look at.
+      if (outcome === 'mismatch') return c.json({ error: 'payment_needs_review' }, 409)
       await closeOrderPayment(latest.id, order.merchantId, 'expired')
     }
 

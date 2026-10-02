@@ -18,10 +18,17 @@ export function paysWithHitpay(merchant: { hitpay_connected?: boolean | null }, 
   return merchant.hitpay_connected === true && status === 'pending_payment'
 }
 
+const PAID_ORDER_STATUSES = ['new', 'preparing', 'ready', 'completed']
+
 /**
- * Paid when the payment row says so, OR when the order already left `pending_payment` — the
- * merchant may have marked it by hand, and a QR still asking for money then is wrong.
+ * Paid when the order moved past `pending_payment` to a live status — by this payment, or by the
+ * merchant's own hand, and a QR still asking for money then is wrong. NOT when it was cancelled:
+ * a cancelled order is never "Payment received", even if money arrived (the shop refunds it).
  */
 export function isPaid(s: HitpayStatus): boolean {
-  return s.payment === 'completed' || s.orderStatus !== 'pending_payment'
+  return PAID_ORDER_STATUSES.includes(s.orderStatus)
+}
+
+export function isCancelled(s: HitpayStatus): boolean {
+  return s.orderStatus === 'cancelled'
 }

@@ -14,6 +14,11 @@ import {
 
 export type ConfirmOutcome = SettleOutcome | 'pending' | 'closed' | 'mismatch' | 'unavailable' | 'disconnected'
 
+/** HitPay holds a completed payment for this row, whatever the order's status. */
+export function isSettled(o: ConfirmOutcome): boolean {
+  return o === 'paid' || o === 'paid_after_cancel' || o === 'recorded' || o === 'already'
+}
+
 export interface PaymentAlert {
   merchantId: string
   orderNumber: string

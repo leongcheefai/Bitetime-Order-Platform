@@ -152,11 +152,14 @@ export async function insertOrderPayment(
   }
 }
 
-/** Never touches a completed row: a payment that landed stays landed. */
+/**
+ * Closes a PENDING row only. A completed payment stays landed, and a row HitPay already reported
+ * as failed keeps that status rather than being relabelled expired by our own clock.
+ */
 export async function closeOrderPayment(id: string, merchantId: string, status: 'expired' | 'failed'): Promise<void> {
   await sql`
     update order_payments set status = ${status}
-    where id = ${id} and merchant_id = ${merchantId} and status <> 'completed'
+    where id = ${id} and merchant_id = ${merchantId} and status = 'pending'
   `
 }
 
@@ -188,12 +191,12 @@ export async function settleOrderPayment(
     if (!o) throw new Error(`order ${p.order_id} not found for merchant ${merchantId}`)
     if (p.status === 'completed') return { outcome: 'already' as const, orderNumber: o.order_number }
 
-    await tx`update order_payments set status = 'completed', paid_at = now() where id = ${p.id}`
+    await tx`update order_payments set status = 'completed', paid_at = now() where id = ${p.id} and merchant_id = ${merchantId}`
     const order = { id: p.order_id, merchantId }
     const detail = { gateway: p.gateway, request_id: p.gateway_request_id }
     const status = o.status ?? 'new'
     if (status === 'pending_payment') {
-      await tx`update orders set status = 'new' where id = ${p.order_id}`
+      await tx`update orders set status = 'new' where id = ${p.order_id} and merchant_id = ${merchantId}`
       await recordOrderEvents(tx, order, SYSTEM_ACTOR, [
         { kind: 'payment_confirmed', detail },
         { kind: 'status_changed', detail: { from: 'pending_payment', to: 'new' } },

@@ -3,7 +3,7 @@ import { QRCodeCanvas } from 'qrcode.react'
 import { useSession } from '../SessionContext'
 import { fetchHitpayStatus, requestHitpayQr, type HitpayQr } from '../store'
 import type { Result } from '../api'
-import { formatCountdown, isPaid, POLL_MS, secondsLeft } from '../hitpayQr'
+import { formatCountdown, isCancelled, isPaid, POLL_MS, secondsLeft } from '../hitpayQr'
 import { formatMoney } from '../currency'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -12,6 +12,7 @@ type View =
   | { kind: 'loading' }
   | { kind: 'live'; qrPayload: string; amount: string; currency: string; expiresAt: string }
   | { kind: 'paid' }
+  | { kind: 'cancelled' }
   | { kind: 'fallback' }
 
 /** The view the QR request's answer leads to. Expiry is not a view: the render derives it. */
@@ -60,11 +61,7 @@ export default function HitpayQrPanel({
   useEffect(() => {
     let cancelled = false
     requestHitpayQr(orderId).then(r => {
-      if (cancelled) return
-      const next = viewFrom(r)
-      setNow(Date.now())
-      setView(next)
-      if (next.kind === 'paid') onPaidRef.current()
+      if (!cancelled) show(viewFrom(r))
     })
     return () => { cancelled = true }
   }, [orderId])
@@ -88,7 +85,9 @@ export default function HitpayQrPanel({
       ticks += 1
       if (ticks % (POLL_MS / 1000) !== 0) return
       const r = await fetchHitpayStatus(orderId)
-      if (r.ok && isPaid(r.data)) { clearInterval(id); show({ kind: 'paid' }) }
+      if (!r.ok) return
+      if (isCancelled(r.data)) { clearInterval(id); show({ kind: 'cancelled' }) }
+      else if (isPaid(r.data)) { clearInterval(id); show({ kind: 'paid' }) }
     }, 1000)
     return () => clearInterval(id)
   }, [view, orderId])
@@ -135,6 +134,11 @@ export default function HitpayQrPanel({
           <p className="text-[14px] text-foreground mb-2">{t('This QR expired.', '此二维码已过期。')}</p>
           <Button type="button" size="sm" onClick={renew}>{t('Get a new QR', '获取新的二维码')}</Button>
         </>
+      )}
+      {view.kind === 'cancelled' && (
+        <p className="text-[14px] text-foreground">
+          {t('This order was cancelled. If you paid, the shop will refund you.', '此订单已取消。如您已付款，商家会为您退款。')}
+        </p>
       )}
       {view.kind === 'paid' && (
         <p className="text-[14px] font-medium text-foreground">{t('Payment received. Thank you!', '已收到付款，谢谢！')}</p>

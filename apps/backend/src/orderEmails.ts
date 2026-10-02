@@ -399,7 +399,7 @@ export async function emailOrderConfirmation(
   // is the shop-agnostic sentence, in the customer's language, through the note slot.
   const dynamicQr = Boolean(merchant?.hitpay_connected) && order.status === 'pending_payment'
   const payment: PaymentInstructionsInput = dynamicQr
-    ? { note: lang === 'zh' ? '请在订单页面使用 DuitNow 二维码付款。' : 'Pay with the DuitNow QR on your order page.' }
+    ? { note: pick(lang)('Pay with the DuitNow QR on your order page.', '请在订单页面使用 DuitNow 二维码付款。') }
     : {
         bank: merchant?.payment_bank ?? null,
         note: merchant?.payment_note ?? null,

@@ -122,6 +122,31 @@ describe('POST /api/orders/:id/hitpay-qr', () => {
     expect(await orderStatus(o.id)).toBe('new')
   })
 
+  it('makes no new QR when the expired one was paid with the wrong amount', async () => {
+    const { merchantId } = await connectedShop()
+    const o = await order(merchantId)
+    await postQr(o.id)
+    const [row] = await payment(o.id)
+    await svc().from('order_payments').update({ expires_at: new Date(Date.now() - 1000).toISOString() }).eq('id', row.id)
+    remoteStatus[row.gateway_request_id] = { status: 'completed', amount: '1.00' }
+    const res = await postQr(o.id)
+    expect(res.status).toBe(409)
+    expect(((await res.json()) as any).error).toBe('payment_needs_review')
+    expect(created).toBe(1)
+    expect((await payment(o.id)).map(r => r.status)).toEqual(['pending'])
+  })
+
+  it('keeps a failed QR failed when a new one is made', async () => {
+    const { merchantId } = await connectedShop()
+    const o = await order(merchantId)
+    await postQr(o.id)
+    const [row] = await payment(o.id)
+    await svc().from('order_payments').update({ expires_at: new Date(Date.now() - 1000).toISOString() }).eq('id', row.id)
+    remoteStatus[row.gateway_request_id] = { status: 'failed' }
+    expect(((await (await postQr(o.id)).json()) as any).status).toBe('live')
+    expect((await payment(o.id)).map(r => r.status)).toEqual(['failed', 'pending'])
+  })
+
   it('makes a new QR after the old one expired unpaid', async () => {
     const { merchantId } = await connectedShop()
     const o = await order(merchantId)

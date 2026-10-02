@@ -1,6 +1,6 @@
 // src/hitpayQr.test.ts
 import { describe, it, expect } from 'vitest'
-import { secondsLeft, formatCountdown, paysWithHitpay, isPaid, POLL_MS } from './hitpayQr'
+import { secondsLeft, formatCountdown, paysWithHitpay, isPaid, isCancelled, POLL_MS } from './hitpayQr'
 
 describe('hitpayQr', () => {
   it('counts down to zero and never below', () => {
@@ -25,6 +25,11 @@ describe('hitpayQr', () => {
     expect(isPaid({ payment: 'pending', orderStatus: 'new', expiresAt: null })).toBe(true)
     expect(isPaid({ payment: 'pending', orderStatus: 'pending_payment', expiresAt: null })).toBe(false)
     expect(isPaid({ payment: 'expired', orderStatus: 'pending_payment', expiresAt: null })).toBe(false)
+  })
+  it('never reads a cancelled order as paid', () => {
+    expect(isPaid({ payment: 'pending', orderStatus: 'cancelled', expiresAt: null })).toBe(false)
+    expect(isCancelled({ payment: 'pending', orderStatus: 'cancelled', expiresAt: null })).toBe(true)
+    expect(isCancelled({ payment: 'pending', orderStatus: 'pending_payment', expiresAt: null })).toBe(false)
   })
   it('polls every 3 seconds', () => {
     expect(POLL_MS).toBe(3000)

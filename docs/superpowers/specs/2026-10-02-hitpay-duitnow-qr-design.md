@@ -221,7 +221,7 @@ Returns `{ connected, keyLast4 }`. Never the key.
 ### Poll: `GET /api/orders/:id/hitpay-status`
 
 Runs `confirmHitpayPayment` for the open row of the order, then returns
-`{ status, orderStatus, expiresAt }`.
+`{ payment, orderStatus, expiresAt }`, where `payment` is the row status or `none`.
 
 ### Webhook: `POST /api/hitpay/webhook/:token`
 
@@ -246,7 +246,7 @@ The status code is for HitPay, not for a person. Only a failed database read or 
 |---|---|
 | `pending_payment` | Move to `new`. Mark the row `completed` with `paid_at`. Write `payment_confirmed` and a `status_changed` (both actor `system`), the same pair a payment proof writes today. |
 | `cancelled` | Keep the status. Mark the row `completed`. Write `payment_after_cancel`. |
-| Any other status (the merchant moved it already) | Mark the row `completed` only. |
+| Any other status (the merchant moved it already) | Mark the row `completed`. Write `payment_confirmed`, so the log shows that the money arrived. No alert. |
 | The row is already `completed` | Do nothing. |
 
 4. **After the commit**, and only when this call changed the row, send the merchant alert. A
@@ -255,7 +255,7 @@ The status code is for HitPay, not for a person. Only a failed database read or 
 
 | Case | Result |
 |---|---|
-| The amount, the currency or the reference does not agree | No change. `console.error` with the request ID. A person must look at it. |
+| The amount, the currency or the reference does not agree | No change. `console.error` with the request ID. A person must look at it. The QR route then answers `409 payment_needs_review` and makes no new QR. |
 | HitPay is down during the check | No change. The next poll or the next signal tries again. |
 
 ## Notifications
