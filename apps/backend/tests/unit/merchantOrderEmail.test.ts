@@ -142,3 +142,17 @@ describe('buildMerchantOrderEmail', () => {
     expect(text.split('\n').filter(l => l.startsWith('• ')).length).toBe(MAX_CART_LINES)
   })
 })
+
+describe('buildMerchantOrderEmail with a banner', () => {
+  it('prefixes the subject and puts the line at the top of both parts', () => {
+    const banner = { line: '✅ Paid by DuitNow (HitPay)', subjectPrefix: 'Paid' }
+    const mail = buildMerchantOrderEmail(PICKUP_ORDER, 'Sunny Bakes', 'https://x/merchant', banner)
+    expect(mail.subject.startsWith('Paid: New order BT-260629-0052')).toBe(true)
+    expect(mail.text.split('\n')[0]).toBe('✅ Paid by DuitNow (HitPay)')
+    expect(mail.html).toContain('✅ Paid by DuitNow (HitPay)')
+  })
+  it('does not change the mail when there is no banner', () => {
+    const mail = buildMerchantOrderEmail(PICKUP_ORDER, 'Sunny Bakes', 'https://x/merchant')
+    expect(mail.subject.startsWith('New order')).toBe(true)
+  })
+})

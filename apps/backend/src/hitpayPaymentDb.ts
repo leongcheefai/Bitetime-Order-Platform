@@ -208,3 +208,17 @@ export async function settleOrderPayment(
     return { outcome: 'recorded' as const, orderNumber: o.order_number }
   })
 }
+
+/**
+ * True when the merchant's "new order" alert must wait for the payment: the shop takes HitPay and
+ * this order is still unpaid. The alert then goes out from `confirmHitpayPayment`, after the
+ * commit, with the paid banner (spec 2026-10-02 → Notifications).
+ */
+export async function merchantAlertHeld(merchantId: string, orderNumber: string): Promise<boolean> {
+  const rows = await sql<{ held: boolean }[]>`
+    select (m.hitpay_connected and o.status = 'pending_payment') as held
+    from orders o join merchants m on m.id = o.merchant_id
+    where o.merchant_id = ${merchantId} and o.order_number = ${orderNumber}
+  `
+  return rows[0]?.held === true
+}

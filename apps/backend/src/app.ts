@@ -29,10 +29,13 @@ import { syncMerchantBilling, liveSubscriptionBesides } from './billingSync.js'
 import { isOurEvent } from './webhookOwnership.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
+import type { NotifyResult } from './orderNotice.js'
 import { createHitpay, HitpayKeyRejected, type Hitpay } from './hitpay.js'
-import { isLive, keyLast4, moneyString, newWebhookToken, QR_LIFETIME_MINUTES, readSignalRequestId } from './hitpayPayment.js'
 import {
-  clearHitpayConnection, closeOrderPayment, insertOrderPayment, latestOrderPayment, merchantByWebhookToken,
+  isLive, keyLast4, moneyString, newWebhookToken, PAID_AFTER_CANCEL_BANNER, PAID_BANNER, QR_LIFETIME_MINUTES, readSignalRequestId,
+} from './hitpayPayment.js'
+import {
+  clearHitpayConnection, closeOrderPayment, insertOrderPayment, latestOrderPayment, merchantAlertHeld, merchantByWebhookToken,
   orderPaymentByRequestId, payableOrder, readHitpayConnection, saveHitpayConnection, type OrderPaymentRow,
 } from './hitpayPaymentDb.js'
 import { confirmHitpayPayment, type PaymentAlert } from './hitpayConfirm.js'
@@ -976,10 +979,21 @@ app.delete('/api/merchants/:id/hitpay', requireMerchantOwns, async (c) => {
   return c.json({ connected: false, keyLast4: null })
 })
 
-// The merchant's alert after a HitPay payment. A seam so the payment suite can count alerts
-// without the notify fan-out; Task 6 fills the real body.
+// The merchant's alert after a HitPay payment: the same two merchant arms as the order fan-out,
+// with a banner. The email's one-shot claim (`merchant_emailed_at`) was never taken at placement —
+// the alert was held — so it is free here, and it is what makes a repeated confirmation send one
+// email. A seam, so the payment suite can count alerts without the notify fan-out. It reads
+// `notifyDeps` at call time, so a test that swaps those adapters is seen here too.
 export const hitpayAlertDeps: { alert: (a: PaymentAlert) => Promise<void> } = {
-  alert: async () => {},
+  alert: async (a) => {
+    const banner = a.outcome === 'paid' ? PAID_BANNER : PAID_AFTER_CANCEL_BANNER
+    const emailCfg = { frontendUrl: env.frontendUrl, emailFrom: env.emailFrom, qrBaseUrl: env.supabaseUrl }
+    const input = { merchantId: a.merchantId, orderNumber: a.orderNumber }
+    await Promise.all([
+      notifyOrderPlaced(admin, notifyDeps.telegram, input, banner),
+      emailMerchantOrder(admin, admin, notifyDeps.email, input, emailCfg, banner),
+    ])
+  },
 }
 
 const confirmDeps = () => ({
@@ -3895,10 +3909,15 @@ app.post('/api/notify/order', async (c) => {
   // Concurrent, not sequential: the three are independent best-effort sends and a slow Telegram
   // call must not delay either email. Each returns its own result and never throws, so
   // Promise.all cannot reject — no channel blocks or suppresses another.
+  // A HitPay shop's unpaid order: the merchant hears about it after the payment, not now
+  // (spec 2026-10-02). A failed lookup falls back to sending — a duplicate alert is cheaper than
+  // a lost one. The customer's receipt is not held.
+  const held = await merchantAlertHeld(merchantId, orderNumber).catch(() => false)
+  const skipped: NotifyResult = { ok: true, skipped: true }
   const [telegram, email, merchantEmail] = await Promise.all([
-    notifyOrderPlaced(admin, notifyDeps.telegram, { merchantId, orderNumber }),
+    held ? Promise.resolve(skipped) : notifyOrderPlaced(admin, notifyDeps.telegram, { merchantId, orderNumber }),
     emailOrderConfirmation(admin, admin, notifyDeps.email, { merchantId, orderNumber, lang }, emailCfg),
-    emailMerchantOrder(admin, admin, notifyDeps.email, { merchantId, orderNumber }, emailCfg),
+    held ? Promise.resolve(skipped) : emailMerchantOrder(admin, admin, notifyDeps.email, { merchantId, orderNumber }, emailCfg),
   ])
   // 404 only when the order genuinely does not exist — which every arm agrees on, since each
   // looks the same row up. Otherwise 200 with the combined result: any channel skipping or

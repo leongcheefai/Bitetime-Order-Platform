@@ -14,7 +14,7 @@ import type { EmailSend } from './email.js'
 import { fulfilSlotLabel } from './fulfilSlotLabel.js'
 import {
   formatAddress, formatKm, formatMoney, MODE_LABELS,
-  type NotifyOrderInput, type NotifyResult,
+  type AlertBanner, type NotifyOrderInput, type NotifyResult,
 } from './orderNotice.js'
 
 // ── Customer order-confirmation email ─────────────────────────────────────────
@@ -385,7 +385,7 @@ export async function emailOrderConfirmation(
 
   const { data: merchant } = await db
     .from('merchants')
-    .select('name, slug, payment_bank, payment_note, payment_qr')
+    .select('name, slug, payment_bank, payment_note, payment_qr, hitpay_connected')
     .eq('id', merchantId).maybeSingle()
   const shopName = merchant?.name ?? ''
   const slug = merchant?.slug ?? ''
@@ -394,11 +394,17 @@ export async function emailOrderConfirmation(
   // the bank line and the note still reach the customer, which is the same partial block the
   // storefront shows a shop that set only some of the three.
   const qr = merchant?.payment_qr as string | null | undefined
-  const payment: PaymentInstructionsInput = {
-    bank: merchant?.payment_bank ?? null,
-    note: merchant?.payment_note ?? null,
-    qrUrl: qr && cfg.qrBaseUrl ? paymentQrUrl(cfg.qrBaseUrl, qr) : null,
-  }
+  // A HitPay shop's unpaid order is paid with the dynamic QR on the order page, never with the
+  // static QR: a payment to that one gets no automatic confirmation (spec 2026-10-02). The line
+  // is the shop-agnostic sentence, in the customer's language, through the note slot.
+  const dynamicQr = Boolean(merchant?.hitpay_connected) && order.status === 'pending_payment'
+  const payment: PaymentInstructionsInput = dynamicQr
+    ? { note: lang === 'zh' ? '请在订单页面使用 DuitNow 二维码付款。' : 'Pay with the DuitNow QR on your order page.' }
+    : {
+        bank: merchant?.payment_bank ?? null,
+        note: merchant?.payment_note ?? null,
+        qrUrl: qr && cfg.qrBaseUrl ? paymentQrUrl(cfg.qrBaseUrl, qr) : null,
+      }
 
   const { subject, text, html } = buildOrderConfirmationEmail(order, shopName, slug, cfg.frontendUrl, lang, payment)
   try {
@@ -432,6 +438,7 @@ export function buildMerchantOrderEmail(
   order: any,
   shopName: string,
   dashboardUrl: string,
+  banner?: AlertBanner,
 ): OrderConfirmationEmail {
   const cur = order.currency ?? 'MYR'
   const items = Array.isArray(order.items) ? order.items : []
@@ -445,7 +452,7 @@ export function buildMerchantOrderEmail(
   const total = formatMoney(order.total ?? 0, cur)
 
   // The order and its money, so a merchant can triage the inbox without opening anything.
-  const subject = `New order ${order.order_number} — ${total}`
+  const subject = `${banner ? `${banner.subjectPrefix}: ` : ''}New order ${order.order_number} — ${total}`
 
   // Every optional row is OMITTED, never blanked — `fulfil_date` is null for every order placed
   // before #91 and `delivery_distance_km` for every one before #101, and a label with nothing
@@ -466,6 +473,7 @@ export function buildMerchantOrderEmail(
 
   // ── Plain-text part ──
   const textLines: string[] = []
+  if (banner) { textLines.push(banner.line); textLines.push('') }
   textLines.push(`New order — ${shopName}`)
   textLines.push('')
   for (const [label, value] of rows) textLines.push(`${label}: ${value}`)
@@ -482,7 +490,8 @@ export function buildMerchantOrderEmail(
   const text = textLines.join('\n')
 
   // ── HTML part ── the receipt's shell and table, with the shop's labels.
-  const html = emailShell(`  <h1 style="font-size:20px;margin:0 0 4px;">New order — ${esc(shopName)}</h1>
+  const html = emailShell(`  ${banner ? `<p style="font-size:15px;font-weight:bold;margin:0 0 12px;">${esc(banner.line)}</p>` : ''}
+  <h1 style="font-size:20px;margin:0 0 4px;">New order — ${esc(shopName)}</h1>
   <p style="font-size:18px;margin:12px 0;"><strong>${esc(String(order.order_number))}</strong></p>
   ${rows.map(([label, value]) => detailHtml(label, value)).join('')}
   ${itemsTableHtml(
@@ -512,6 +521,7 @@ export async function emailMerchantOrder(
   send: EmailSend,
   input: NotifyOrderInput,
   cfg: EmailOrderConfig,
+  banner?: AlertBanner,
 ): Promise<NotifyResult> {
   const { merchantId, orderNumber } = input
   if (!merchantId || !orderNumber) return { ok: false, error: 'missing merchantId or orderNumber' }
@@ -537,7 +547,7 @@ export async function emailMerchantOrder(
   if (!claim.claimed) return { ok: true, skipped: true } // already emailed
 
   const { subject, text, html } = buildMerchantOrderEmail(
-    order, merchant.name ?? '', `${cfg.frontendUrl}/merchant`,
+    order, merchant.name ?? '', `${cfg.frontendUrl}/merchant`, banner,
   )
   try {
     // The PLATFORM's own address, stated rather than left to the adapter's default: the shop is
