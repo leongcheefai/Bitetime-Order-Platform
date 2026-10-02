@@ -16,7 +16,8 @@
     "db:push": "supabase db push",
     "db:seed:superadmin": "./scripts/seed-superadmin.sh",
     "screenshot:sweep": "node --experimental-strip-types scripts/captureSampleShopScreenshots.ts",
-    "release:version": "node --import jiti/register scripts/nextVersion.ts"
+    "release:version": "node --import jiti/register scripts/nextVersion.ts",
+    "telegram:webhook": "node --import jiti/register --env-file=.env scripts/telegramWebhook.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
