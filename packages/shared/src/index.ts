@@ -17,6 +17,10 @@ export type {
   FeedbackCategory, FeedbackStatus, FeedbackDraft, FeedbackValidation,
   FeedbackImageValidation, FeedbackImagesValidation, FeedbackImageError,
 } from './feedback.js'
+export { SUPPORT_MAX_LENGTH, validateSupportMessage } from './support.js'
+export type {
+  SupportSender, SupportMessage, SupportFeed, SupportSendResult, SupportMessageValidation,
+} from './support.js'
 export {
   validateTrialFeedback,
   TRIAL_FEEDBACK_RATING_MIN, TRIAL_FEEDBACK_RATING_MAX, TRIAL_FEEDBACK_COMMENT_MAX_LENGTH,
