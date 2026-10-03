@@ -29,6 +29,17 @@ import { syncMerchantBilling, liveSubscriptionBesides } from './billingSync.js'
 import { isOurEvent } from './webhookOwnership.js'
 import { resendSend } from './email.js'
 import { notifyOrderPlaced, telegramSend } from './notify.js'
+import type { NotifyResult } from './orderNotice.js'
+import { createHitpay, HitpayKeyRejected, type Hitpay } from './hitpay.js'
+import {
+  GATEWAY_FAILED_BANNER, isLive, keyLast4, moneyString, newWebhookToken, PAID_AFTER_CANCEL_BANNER, PAID_BANNER, QR_LIFETIME_MINUTES,
+  readSignalRequestId,
+} from './hitpayPayment.js'
+import {
+  claimFallbackAlert, clearHitpayConnection, closeOrderPayment, insertOrderPayment, latestOrderPayment, merchantAlertHeld, merchantByWebhookToken,
+  orderPaymentByRequestId, payableOrder, readHitpayConnection, saveHitpayConnection, type OrderPaymentRow, type PayableOrder,
+} from './hitpayPaymentDb.js'
+import { confirmHitpayPayment, isSettled, type PaymentAlert } from './hitpayConfirm.js'
 import { notifyMerchantSignup } from './platformNotify.js'
 import { createSupportTelegram, type SupportConfig, type SupportTelegram } from './supportTelegram.js'
 import {
@@ -59,7 +70,7 @@ import { applyProductCopy } from './productCopyDb.js'
 import { parseOrderList, searchTerm } from './orderList.js'
 import { resolveRoutedDistance } from './routedDistance.js'
 import { liveDistanceDeps } from './distanceCache.js'
-import { invoiceLookupIpWindow, reviewSubmitIpWindow, quoteIpWindow, quoteMerchantWindow, placesGlobalWindow, menuImportMerchantWindow, assistantMerchantWindow, MENU_IMPORT_LIFETIME_LIMIT, MENU_IMPORT_MONTHLY_LIMIT, ASSISTANT_MONTHLY_LIMIT, MERCHANT_DEVICE_LIMIT } from './quotaWindows.js'
+import { invoiceLookupIpWindow, reviewSubmitIpWindow, hitpayQrIpWindow, hitpayStatusIpWindow, quoteIpWindow, quoteMerchantWindow, placesGlobalWindow, menuImportMerchantWindow, assistantMerchantWindow, MENU_IMPORT_LIFETIME_LIMIT, MENU_IMPORT_MONTHLY_LIMIT, ASSISTANT_MONTHLY_LIMIT, MERCHANT_DEVICE_LIMIT } from './quotaWindows.js'
 import { chooseEvictions, sessionIdFromToken, lastSeen } from './deviceLimit.js'
 import { listSessions, deleteSessions } from './deviceLimitDb.js'
 import { deviceIdentity } from './deviceLabel.js'
@@ -883,6 +894,252 @@ app.put('/api/merchants/:id/secret', requireMerchantOwns, async (c) => {
   const { error } = await admin.from('merchant_secrets').upsert(row)
   if (error) return c.json({ error: 'Upsert failed' }, 500)
   return c.json({ ok: true })
+})
+
+// ── HitPay: a shop's OWN account (spec 2026-10-02-hitpay-duitnow-qr-design.md) ─────────────────
+// The merchant pastes one API key. TinyOrder registers its own webhook on the merchant's account
+// with that key — which is also the key test — and stores the key server-side only. No route
+// ever returns it: the browser gets `keyLast4`.
+//
+// Same mutable seam as supportDeps: production uses the real adapter and env, an API test swaps
+// in a fake and turns the feature on without env vars.
+export const hitpayDeps: { hitpay: Hitpay; config: { apiBase: string; publicBackendUrl: string } } = {
+  hitpay: createHitpay(),
+  config: { apiBase: env.hitpayApiBase, publicBackendUrl: env.backendPublicUrl },
+}
+
+const hitpayConfigured = () => Boolean(hitpayDeps.config.apiBase && hitpayDeps.config.publicBackendUrl)
+
+app.get('/api/merchants/:id/hitpay', requireMerchantOwns, async (c) => {
+  const m = c.get('merchant')
+  try {
+    const conn = await readHitpayConnection(m.id)
+    return c.json({ connected: Boolean(conn), keyLast4: conn ? keyLast4(conn.apiKey) : null })
+  } catch (e: any) {
+    console.error('HitPay status read failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+})
+
+// Connect and disconnect are the OWNER's: the key reaches the shop's own money. A superadmin passes
+// requireMerchantOwns ("view as shop"), so the routes check the owner themselves — the same rule
+// the support chat keeps. A superadmin may still read the status.
+const isShopOwner = (c: { get: (k: 'merchant' | 'user') => any }) => c.get('merchant').owner_id === c.get('user').id
+
+app.put('/api/merchants/:id/hitpay', requireMerchantOwns, async (c) => {
+  if (!isShopOwner(c)) return c.json({ error: 'owner_only' }, 403)
+  if (!hitpayConfigured()) return c.json({ error: 'hitpay_not_configured' }, 503)
+  const m = c.get('merchant')
+  // DuitNow settles in MYR only. `currency` cannot change after signup (writes.ts), so this check
+  // holds for as long as the connection does.
+  if ((m.currency ?? 'MYR') !== 'MYR') return c.json({ error: 'currency_not_supported' }, 400)
+  const b = await c.req.json().catch(() => ({}) as any)
+  const apiKey = typeof b?.apiKey === 'string' ? b.apiKey.trim() : ''
+  if (!apiKey || apiKey.length > 255) return c.json({ error: 'invalid_key' }, 400)
+
+  const { apiBase, publicBackendUrl } = hitpayDeps.config
+  const token = newWebhookToken()
+  const url = `${publicBackendUrl.replace(/\/$/, '')}/api/hitpay/webhook/${token}`
+  let previous: Awaited<ReturnType<typeof readHitpayConnection>>
+  let webhook: { id: string }
+  try {
+    previous = await readHitpayConnection(m.id)
+  } catch (e: any) {
+    console.error('HitPay connect lookup failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+  try {
+    webhook = await hitpayDeps.hitpay.registerWebhook(apiBase, apiKey, url)
+  } catch (e) {
+    if (e instanceof HitpayKeyRejected) return c.json({ error: 'invalid_key' }, 400)
+    console.error('HitPay connect failed:', e instanceof Error ? e.message : String(e))
+    return c.json({ error: 'gateway_unavailable' }, 502)
+  }
+  try {
+    await saveHitpayConnection(m.id, { apiKey, webhookId: webhook.id, token })
+  } catch (e: any) {
+    console.error('HitPay connect store failed:', e?.message ?? e)
+    return c.json({ error: 'store_failed' }, 500)
+  }
+  // Best effort, after the new one is stored: a webhook left behind on the merchant's account
+  // only points at a token that no longer names a shop.
+  if (previous) {
+    hitpayDeps.hitpay.removeWebhook(apiBase, previous.apiKey, previous.webhookId)
+      .catch(e => console.error('HitPay old webhook removal failed:', e?.message ?? e))
+  }
+  return c.json({ connected: true, keyLast4: keyLast4(apiKey) })
+})
+
+app.delete('/api/merchants/:id/hitpay', requireMerchantOwns, async (c) => {
+  if (!isShopOwner(c)) return c.json({ error: 'owner_only' }, 403)
+  const m = c.get('merchant')
+  try {
+    const conn = await readHitpayConnection(m.id)
+    if (conn && hitpayDeps.config.apiBase) {
+      await hitpayDeps.hitpay.removeWebhook(hitpayDeps.config.apiBase, conn.apiKey, conn.webhookId)
+        .catch(e => console.error('HitPay webhook removal failed:', e?.message ?? e))
+    }
+    await clearHitpayConnection(m.id)
+  } catch (e: any) {
+    console.error('HitPay disconnect failed:', e?.message ?? e)
+    return c.json({ error: 'store_failed' }, 500)
+  }
+  return c.json({ connected: false, keyLast4: null })
+})
+
+// The merchant's alert after a HitPay payment: the same two merchant arms as the order fan-out,
+// with a banner. The email's one-shot claim (`merchant_emailed_at`) was never taken at placement —
+// the alert was held — so it is free here, and it is what makes a repeated confirmation send one
+// email. A seam, so the payment suite can count alerts without the notify fan-out. It reads
+// `notifyDeps` at call time, so a test that swaps those adapters is seen here too.
+export const hitpayAlertDeps: { alert: (a: PaymentAlert) => Promise<void> } = {
+  alert: async (a) => {
+    const banner = { paid: PAID_BANNER, paid_after_cancel: PAID_AFTER_CANCEL_BANNER, gateway_failed: GATEWAY_FAILED_BANNER }[a.outcome]
+    const emailCfg = { frontendUrl: env.frontendUrl, emailFrom: env.emailFrom, qrBaseUrl: env.supabaseUrl }
+    const input = { merchantId: a.merchantId, orderNumber: a.orderNumber }
+    const [telegram, email] = await Promise.all([
+      notifyOrderPlaced(admin, notifyDeps.telegram, input, banner),
+      emailMerchantOrder(admin, admin, notifyDeps.email, input, emailCfg, banner),
+    ])
+    // The arms return their failures rather than throw. Nobody reads this result, so a failed
+    // arm is logged here or it is invisible.
+    if (!telegram.ok) console.error(`HitPay paid alert: Telegram failed for ${a.orderNumber}:`, telegram.error)
+    if (!email.ok) console.error(`HitPay paid alert: email failed for ${a.orderNumber}:`, email.error)
+  },
+}
+
+const confirmDeps = () => ({
+  hitpay: hitpayDeps.hitpay,
+  apiBase: hitpayDeps.config.apiBase,
+  alert: (a: PaymentAlert) => hitpayAlertDeps.alert(a),
+})
+
+// Releases a HitPay order's held merchant alert, once (the claim is a stamp on the order), when the
+// customer cannot get a QR. Never throws: a failed alert must not turn the customer's 502 into a
+// 500 — the backup payment info is still the right answer for them.
+async function releaseHeldAlert(order: PayableOrder): Promise<void> {
+  try {
+    const orderNumber = await claimFallbackAlert(order.id, order.merchantId)
+    if (orderNumber) await hitpayAlertDeps.alert({ merchantId: order.merchantId, orderNumber, outcome: 'gateway_failed' })
+  } catch (e: any) {
+    console.error('HitPay held alert release failed:', e?.message ?? e)
+  }
+}
+
+const qrBody = (row: OrderPaymentRow) => ({
+  status: 'live' as const,
+  qrPayload: row.qrPayload,
+  amount: moneyString(row.amount),
+  currency: row.currency,
+  expiresAt: row.expiresAt.toISOString(),
+})
+
+// The customer's QR. Unauthenticated and addressed by the order UUID, exactly like the
+// payment-proof door: a guest has no token, and a UUID is not guessable.
+app.post('/api/orders/:orderId/hitpay-qr', async (c) => {
+  if (!hitpayQrIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  try {
+    const order = await payableOrder(c.req.param('orderId'))
+    if (!order) return c.json({ error: 'not_found' }, 404)
+    if (order.status !== 'pending_payment') return c.json({ error: 'not_payable' }, 409)
+    // From here the order is unpaid and its customer is on the payment screen. Every answer that
+    // gives them no QR sends them to the backup info — so the merchant's held alert goes out now,
+    // once, or nobody hears about this order until it is paid some other way.
+    const noQr = async (status: 409 | 502 | 503, error: string) => {
+      await releaseHeldAlert(order)
+      return c.json({ error }, status)
+    }
+    if (!hitpayDeps.config.apiBase) return noQr(503, 'hitpay_not_configured')
+    if (!order.hitpayConnected) return noQr(409, 'not_payable')
+    const conn = await readHitpayConnection(order.merchantId)
+    if (!conn) return noQr(409, 'not_payable')
+
+    const now = new Date()
+    const latest = await latestOrderPayment(order.id, order.merchantId)
+    if (latest && isLive(latest, now)) return c.json(qrBody(latest))
+    if (latest && latest.status !== 'completed') {
+      // The old QR's time ran out on OUR clock. Ask HitPay before making a second one: a customer
+      // who paid at 14:59 must not be handed a QR that can take a second payment.
+      const outcome = await confirmHitpayPayment(confirmDeps(), latest)
+      if (isSettled(outcome)) return c.json({ status: 'completed' as const })
+      if (outcome === 'unavailable') return noQr(502, 'gateway_unavailable')
+      // HitPay holds a completed payment that does not match this order. A new QR would invite a
+      // second payment and bury the first; the row stays as it is for a person to look at.
+      if (outcome === 'mismatch') return c.json({ error: 'payment_needs_review' }, 409)
+      await closeOrderPayment(latest.id, order.merchantId, 'expired')
+    }
+
+    let created: { id: string; qrPayload: string }
+    try {
+      created = await hitpayDeps.hitpay.createQr(hitpayDeps.config.apiBase, conn.apiKey, {
+        amount: moneyString(order.total),
+        currency: order.currency.toLowerCase(),
+        reference: order.id,
+        expiresAfterMinutes: QR_LIFETIME_MINUTES,
+      })
+    } catch (e) {
+      console.error('HitPay QR create failed:', e instanceof Error ? e.message : String(e))
+      return noQr(502, 'gateway_unavailable')
+    }
+    const inserted = await insertOrderPayment({
+      orderId: order.id, merchantId: order.merchantId, gateway: 'hitpay', gatewayRequestId: created.id,
+      qrPayload: created.qrPayload, amount: moneyString(order.total), currency: order.currency,
+      expiresAt: new Date(now.getTime() + QR_LIFETIME_MINUTES * 60_000),
+    })
+    if (inserted === 'conflict') {
+      // A concurrent request won the order's one pending row. Hand back ITS QR; the request we
+      // just made at HitPay expires unseen, and allow_repeated_payments=false keeps it harmless.
+      const winner = await latestOrderPayment(order.id, order.merchantId)
+      return winner && winner.status === 'pending' ? c.json(qrBody(winner)) : noQr(502, 'gateway_unavailable')
+    }
+    return c.json(qrBody(inserted))
+  } catch (e: any) {
+    console.error('HitPay QR route failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+})
+
+// The browser's poll while the QR is on screen. Each call runs the same confirmation as the
+// webhook, so a payment confirms even when HitPay's signal is late or lost.
+app.get('/api/orders/:orderId/hitpay-status', async (c) => {
+  if (!hitpayStatusIpWindow.allow(ipOf(c))) return c.json({ error: 'rate_limited' }, 429)
+  try {
+    const order = await payableOrder(c.req.param('orderId'))
+    if (!order) return c.json({ error: 'not_found' }, 404)
+    let row = await latestOrderPayment(order.id, order.merchantId)
+    if (!row) return c.json({ payment: 'none', orderStatus: order.status, expiresAt: null })
+    if (row.status !== 'completed' && hitpayDeps.config.apiBase) {
+      await confirmHitpayPayment(confirmDeps(), row)
+      row = (await latestOrderPayment(order.id, order.merchantId)) ?? row
+    }
+    const fresh = (await payableOrder(order.id)) ?? order
+    return c.json({ payment: row.status, orderStatus: fresh.status, expiresAt: row.expiresAt.toISOString() })
+  } catch (e: any) {
+    console.error('HitPay status route failed:', e?.message ?? e)
+    return c.json({ error: 'lookup_failed' }, 500)
+  }
+})
+
+// HitPay's signal. The status code is a conversation with HitPay, not with a person: any non-2xx
+// makes HitPay send it again. So an ignored signal gets 200, and only a database failure gets
+// 500. The body is NOT trusted — it carries no signature we can check — so the only thing read
+// from it is which request to ask HitPay about, and the request must belong to the shop the
+// URL token names.
+app.post('/api/hitpay/webhook/:token', async (c) => {
+  const body = await c.req.json().catch(() => null)
+  try {
+    const merchantId = await merchantByWebhookToken(c.req.param('token'))
+    if (!merchantId) return c.json({ ok: true })
+    const requestId = readSignalRequestId(body)
+    if (!requestId) return c.json({ ok: true })
+    const row = await orderPaymentByRequestId(requestId, merchantId)
+    if (!row || !hitpayDeps.config.apiBase) return c.json({ ok: true })
+    await confirmHitpayPayment(confirmDeps(), row)
+    return c.json({ ok: true })
+  } catch (e: any) {
+    console.error('HitPay webhook failed:', e?.message ?? e)
+    return c.json({ error: 'store_failed' }, 500)
+  }
 })
 
 // ── User-scoped reads ─────────────────────────────────────────────────────────
@@ -3685,10 +3942,15 @@ app.post('/api/notify/order', async (c) => {
   // Concurrent, not sequential: the three are independent best-effort sends and a slow Telegram
   // call must not delay either email. Each returns its own result and never throws, so
   // Promise.all cannot reject — no channel blocks or suppresses another.
+  // A HitPay shop's unpaid order: the merchant hears about it after the payment, not now
+  // (spec 2026-10-02). A failed lookup falls back to sending — a duplicate alert is cheaper than
+  // a lost one. The customer's receipt is not held.
+  const held = await merchantAlertHeld(merchantId, orderNumber).catch(() => false)
+  const skipped: NotifyResult = { ok: true, skipped: true }
   const [telegram, email, merchantEmail] = await Promise.all([
-    notifyOrderPlaced(admin, notifyDeps.telegram, { merchantId, orderNumber }),
+    held ? Promise.resolve(skipped) : notifyOrderPlaced(admin, notifyDeps.telegram, { merchantId, orderNumber }),
     emailOrderConfirmation(admin, admin, notifyDeps.email, { merchantId, orderNumber, lang }, emailCfg),
-    emailMerchantOrder(admin, admin, notifyDeps.email, { merchantId, orderNumber }, emailCfg),
+    held ? Promise.resolve(skipped) : emailMerchantOrder(admin, admin, notifyDeps.email, { merchantId, orderNumber }, emailCfg),
   ])
   // 404 only when the order genuinely does not exist — which every arm agrees on, since each
   // looks the same row up. Otherwise 200 with the combined result: any channel skipping or

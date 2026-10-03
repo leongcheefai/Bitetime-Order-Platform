@@ -5,7 +5,7 @@
 // forge its content. Deps (db, send) are injected for testing.
 //
 // The two email arms live in `orderEmails.ts`; what all three share is `orderNotice.ts`.
-import { formatAddress, formatKm, formatMoney, MODE_LABELS, type NotifyOrderInput, type NotifyResult } from './orderNotice.js'
+import { formatAddress, formatKm, formatMoney, MODE_LABELS, type AlertBanner, type NotifyOrderInput, type NotifyResult } from './orderNotice.js'
 import { fulfilSlotLabel } from './fulfilSlotLabel.js'
 
 /**
@@ -68,7 +68,7 @@ function fitToTelegram(head: string, itemLines: string[], tail: string, orderNum
 //
 // The length cap lives HERE and not at the call site so no caller can forget it: what this
 // function returns is always something `sendMessage` will accept.
-export function buildOrderMessage(order: any, merchantName?: string): string {
+export function buildOrderMessage(order: any, merchantName?: string, banner?: AlertBanner): string {
   const cur = order.currency ?? 'MYR'
   const items = Array.isArray(order.items) ? order.items : []
   // `(Promo)` is plain text, not a badge — Telegram's Markdown here is already `*bold*` labels
@@ -88,7 +88,10 @@ export function buildOrderMessage(order: any, merchantName?: string): string {
       // another way an unclosed one turns the whole send into a 400.
       return `${head}\n    ↳ ${picks.map(s => `${s.optionName} ×${s.qty}`).join(', ')}`
     })
-  let msg = `🛎️ *New order${merchantName ? ` — ${merchantName}` : ''}*\n\n`
+  // A banner (a HitPay payment) goes first, as plain text: no `*` markers, because an unclosed
+  // one turns the whole Markdown send into a 400.
+  let msg = banner ? `${banner.line}\n\n` : ''
+  msg += `🛎️ *New order${merchantName ? ` — ${merchantName}` : ''}*\n\n`
   msg += `*Order No.:* ${order.order_number}\n`
   msg += `*Name:* ${order.customer_name ?? ''}\n`
   if (order.customer_wa) msg += `*WhatsApp:* ${order.customer_wa}\n`
@@ -128,7 +131,12 @@ export const telegramSend: TelegramSend = async (token, chatId, text) => {
 
 // Verify the order exists for the merchant, read that merchant's secret, send.
 // Returns skipped:true (still ok) when the merchant has no Telegram configured.
-export async function notifyOrderPlaced(db: any, send: TelegramSend, input: NotifyOrderInput): Promise<NotifyResult> {
+export async function notifyOrderPlaced(
+  db: any,
+  send: TelegramSend,
+  input: NotifyOrderInput,
+  banner?: AlertBanner,
+): Promise<NotifyResult> {
   const { merchantId, orderNumber } = input
   if (!merchantId || !orderNumber) return { ok: false, error: 'missing merchantId or orderNumber' }
 
@@ -150,7 +158,7 @@ export async function notifyOrderPlaced(db: any, send: TelegramSend, input: Noti
   // no such shop, and the only question left is the one two lines up — has this merchant set
   // Telegram up at all?
   try {
-    await send(secret.tg_token, secret.tg_chat_id, buildOrderMessage(order, merchant?.name))
+    await send(secret.tg_token, secret.tg_chat_id, buildOrderMessage(order, merchant?.name, banner))
     return { ok: true }
   } catch (e: any) {
     return { ok: false, error: e?.message ?? String(e) }

@@ -42,6 +42,8 @@ import AddressAutocomplete from './AddressAutocomplete'
 import MoneyLine from './MoneyLine'
 import PaymentProofUpload from './PaymentProofUpload'
 import PaymentInstructions from './PaymentInstructions'
+import HitpayQrPanel from './HitpayQrPanel'
+import { paysWithHitpay } from '../hitpayQr'
 import OrderReviewCard from './OrderReviewCard'
 import { checkoutStep, readGuestChoice, rememberGuestChoice } from '../checkoutGate'
 import { cn } from '@/lib/utils'
@@ -80,6 +82,9 @@ interface ReceiptLine {
 
 interface SuccessState {
   orderId: string
+  /** Fixed at the time of the order (spec 2026-10-02), so the QR panel stays mounted after the
+   *  payment and shows "Payment received" instead of the static instructions coming back. */
+  payWithHitpay: boolean
   orderNumber: string
   items: ReceiptLine[]
   subtotal: number
@@ -901,6 +906,7 @@ export default function Storefront() {
         fulfilDate: chosenDate,
         fulfilSlot: chosenSlot,
         status: result.data.status,
+        payWithHitpay: paysWithHitpay(merchant, result.data.status),
       })
       toast.success(t('Order placed!', '订单已提交！'))
       // The sale, on the shop's own pixel (#220).
@@ -1042,9 +1048,22 @@ export default function Storefront() {
                 history, because a customer who left this page to open their banking app cannot
                 come back to it. The upload is the block's own last line: same guard, so a shop
                 with no payment info shows neither. */}
-            <PaymentInstructions merchant={merchant} className="max-w-[360px] mx-auto mb-4">
-              <PaymentProofUpload orderId={success.orderId} />
-            </PaymentInstructions>
+            {success.payWithHitpay ? (
+              <HitpayQrPanel
+                orderId={success.orderId}
+                className="max-w-[360px] mx-auto mb-4"
+                onPaid={() => setSuccess(s => (s ? { ...s, status: 'new' } : s))}
+                fallback={
+                  <PaymentInstructions merchant={merchant} className="max-w-[360px] mx-auto mb-4">
+                    <PaymentProofUpload orderId={success.orderId} />
+                  </PaymentInstructions>
+                }
+              />
+            ) : (
+              <PaymentInstructions merchant={merchant} className="max-w-[360px] mx-auto mb-4">
+                <PaymentProofUpload orderId={success.orderId} />
+              </PaymentInstructions>
+            )}
 
             {/* The rating, asked at the one moment this customer is certainly still here. A guest
                 order is orphaned the moment this tab closes, so any later screen would reach the

@@ -83,3 +83,12 @@ export function formatKm(km: unknown): string | null {
   const n = Number(km)
   return Number.isFinite(n) ? `${n.toFixed(1)} km` : null
 }
+
+/**
+ * A line put at the top of the merchant's alert, and the word put before its email subject. Used
+ * when the alert is sent after a HitPay payment rather than at the time of the order.
+ */
+export interface AlertBanner {
+  line: string
+  subjectPrefix: string
+}

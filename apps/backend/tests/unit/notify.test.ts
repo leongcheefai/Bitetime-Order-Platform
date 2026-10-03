@@ -292,3 +292,15 @@ describe('menu options on the ticket (#145)', () => {
     expect(subLine).not.toContain('*')
   })
 })
+
+describe('buildOrderMessage with a banner', () => {
+  it('puts the banner line first and keeps the order', () => {
+    const msg = buildOrderMessage(
+      { order_number: 'BT-261002-0050', customer_name: 'Sam', items: [], total: 10, currency: 'MYR' },
+      'Sunny Bakes',
+      { line: '✅ Paid by DuitNow (HitPay)', subjectPrefix: 'Paid' },
+    )
+    expect(msg.startsWith('✅ Paid by DuitNow (HitPay)\n')).toBe(true)
+    expect(msg).toContain('BT-261002-0050')
+  })
+})

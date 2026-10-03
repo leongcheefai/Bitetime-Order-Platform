@@ -157,6 +157,13 @@ export const invoiceLookupIpWindow = createIpDoorWindow(10, 60)
 // and stops protecting anything past one backend instance (#101, Out of Scope).
 export const reviewSubmitIpWindow = createIpDoorWindow(10, 60)
 
+// The customer's HitPay QR door (spec 2026-10-02). Addressed by an order UUID, unauthenticated
+// like the payment-proof door. A QR costs a HitPay call, so it gets the guest-door bound; the
+// status poll runs every 3 s for up to 15 minutes, so its bound is set above that (20/minute,
+// 300 per QR) with room for a second open tab.
+export const hitpayQrIpWindow = createIpDoorWindow(10, 60)
+export const hitpayStatusIpWindow = createIpDoorWindow(45, 1200)
+
 // How many devices one MERCHANT account may hold at once. A device is one GoTrue session.
 //
 // It sits here with the other platform figures rather than in deviceLimit.ts, so the numbers a

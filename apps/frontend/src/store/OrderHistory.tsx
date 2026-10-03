@@ -19,6 +19,8 @@ import MoneyLine from './MoneyLine'
 import OrderTimeline from './OrderTimeline'
 import PaymentProofUpload from './PaymentProofUpload'
 import PaymentInstructions from './PaymentInstructions'
+import HitpayQrPanel from './HitpayQrPanel'
+import { paysWithHitpay } from '../hitpayQr'
 import OrderReviewCard from './OrderReviewCard'
 import { canUploadPaymentProof } from '../paymentProof'
 import LanguageSelect from '../components/LanguageSelect'
@@ -279,6 +281,7 @@ export default function OrderHistory() {
                         t={t}
                         merchant={merchant}
                         onUploaded={saved => patchLoadedOrder(o.id!, saved)}
+                        onPaid={() => patchLoadedOrder(o.id!, { status: 'new' })}
                       />
                       <Tracking order={o} t={t} />
                       {/* The same card the order-placed screen shows, and the only way a
@@ -367,11 +370,13 @@ function PaymentProofSection({
   t,
   merchant,
   onUploaded,
+  onPaid,
 }: {
   order: Order
   t: Translate
   merchant: Merchant
   onUploaded: (saved: PaymentProofSaved) => void
+  onPaid: () => void
 }) {
   const [justUploaded, setJustUploaded] = useState(false)
   const [url, setUrl] = useState<string | null>(null)
@@ -400,6 +405,34 @@ function PaymentProofSection({
   }, [order.id, source])
 
   if (!hasProof) {
+    // A HitPay shop's order is paid with its dynamic QR while unpaid, and asks for nothing after:
+    // the backend confirmed the money, so a proof upload would be a question with no purpose.
+    if (merchant.hitpay_connected) {
+      if (!order.id || !paysWithHitpay(merchant, order.status)) return null
+      return (
+        <div className="mt-3">
+          <HitpayQrPanel
+            orderId={order.id}
+            onPaid={onPaid}
+            fallback={
+              <>
+                <PaymentInstructions merchant={merchant} className="mb-2.5" />
+                <div className="text-[11px] font-medium text-primary uppercase tracking-[0.09em] mb-1.5">
+                  {t('Payment proof', '付款凭证')}
+                </div>
+                <PaymentProofUpload
+                  orderId={order.id}
+                  onUploaded={saved => {
+                    setJustUploaded(true)
+                    onUploaded(saved)
+                  }}
+                />
+              </>
+            }
+          />
+        </div>
+      )
+    }
     if (!order.id || !canUploadPaymentProof(order.status)) return null
     return (
       <div className="mt-3">
@@ -458,6 +491,8 @@ function PaymentProofSection({
  * order read as a request to pay again.
  */
 function Instructions({ merchant, status }: { merchant: Merchant; status?: string | null }) {
+  // A HitPay shop's static info is a fallback for when HitPay fails, not a second way to pay.
+  if (merchant.hitpay_connected) return null
   if (!canUploadPaymentProof(status)) return null
   return <PaymentInstructions merchant={merchant} className="mb-2.5" />
 }
