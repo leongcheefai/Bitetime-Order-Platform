@@ -93,6 +93,17 @@ describe('HitPay merchant alerts', () => {
     expect(emails.some(e => e.subject.startsWith('Refund needed: '))).toBe(true)
   })
 
+  it('releases the held alert, with a warning, when HitPay cannot make a QR', async () => {
+    hitpayDeps.hitpay = { ...fakeHitpay, async createQr() { throw new Error('down') } }
+    const s = await connectedShopWithOrder()
+    await notify(s.merchantId, s.orderNumber)
+    expect(telegrams).toEqual([])
+    expect((await app.request(`/api/orders/${s.orderId}/hitpay-qr`, { method: 'POST' })).status).toBe(502)
+    expect(telegrams).toHaveLength(1)
+    expect(telegrams[0]).toContain('HitPay could not make a QR')
+    expect(emails.filter(e => e.subject.startsWith('Unpaid: '))).toHaveLength(1)
+  })
+
   it('does not hold the alert for a shop that is not connected', async () => {
     const s = await connectedShopWithOrder('new')
     await svc().from('merchants').update({ hitpay_connected: false }).eq('id', s.merchantId)

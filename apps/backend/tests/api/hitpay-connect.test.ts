@@ -133,6 +133,23 @@ describe('HitPay connection', () => {
     expect((await call('DELETE', `/api/merchants/${merchantId}/hitpay`, token)).status).toBe(200)
   })
 
+  it('refuses a superadmin a change, and still lets them read the status', async () => {
+    const { merchantId } = await ownerShop()
+    const sup = await makeUser('hitpay-connect-super@example.com', 'password123')
+    const { data } = await sup.auth.getSession()
+    const supId = data.session!.user.id
+    await serviceClient().from('profiles').delete().eq('user_id', supId)
+    await serviceClient().from('profiles').insert({ user_id: supId, name: 'Super', app_role: 'superadmin' })
+    const token = data.session!.access_token
+
+    const put = await call('PUT', `/api/merchants/${merchantId}/hitpay`, token, { apiKey: 'k' })
+    expect(put.status).toBe(403)
+    expect(((await put.json()) as any).error).toBe('owner_only')
+    expect((await call('DELETE', `/api/merchants/${merchantId}/hitpay`, token)).status).toBe(403)
+    expect((await call('GET', `/api/merchants/${merchantId}/hitpay`, token)).status).toBe(200)
+    expect(calls).toEqual([])
+  })
+
   it("refuses another merchant's shop", async () => {
     const a = await ownerShop()
     const b = await ownerShop()

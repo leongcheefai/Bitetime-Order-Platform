@@ -169,7 +169,10 @@ info also gets `pending_payment` orders.
 `POST /api/orders/:id/hitpay-qr` and `GET /api/orders/:id/hitpay-status` use the order UUID and
 need no sign-in. This is the same model as `POST /api/orders/:orderId/payment-proof`: a guest has
 no token, and a UUID is not possible to guess. An IP sliding window limits both routes. The
-connect and disconnect routes use `requireMerchantOwns`.
+connect and disconnect routes use `requireMerchantOwns`, and they also refuse anyone who is not
+the shop owner with `403 owner_only` (decided 2026-10-03). A superadmin passes
+`requireMerchantOwns` with "view as shop", and the key reaches the shop's own money. A superadmin
+can still read the status.
 
 ### Connect: `PUT /api/merchants/:id/hitpay`
 
@@ -267,6 +270,12 @@ The status code is for HitPay, not for a person. Only a failed database read or 
   "Paid by DuitNow (HitPay)". The email uses the `merchant_emailed_at` claim, so it goes out once.
   A `payment_after_cancel` sends a different message: "A customer paid a cancelled order. Refund
   them."
+- **Merchant, when the customer cannot get a QR** (decided 2026-10-03): the QR route releases the
+  held alert for an unpaid order when it answers `502`, `503`, or `409 not_payable` because the
+  shop disconnected HitPay. The alert carries the warning "HitPay could not make a QR for this
+  order", because the customer now sees the backup payment info. The stamp
+  `orders.hitpay_fallback_alerted_at` makes it go out once. An order that is no longer
+  `pending_payment` releases nothing.
 - **Customer receipt:** for a HitPay order, the receipt says "Pay with the QR on your order page"
   and gives the link. It does not show the static QR: a payment to that QR gets no automatic
   confirmation.

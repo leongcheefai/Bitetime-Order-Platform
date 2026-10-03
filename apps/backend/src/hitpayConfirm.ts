@@ -22,7 +22,8 @@ export function isSettled(o: ConfirmOutcome): boolean {
 export interface PaymentAlert {
   merchantId: string
   orderNumber: string
-  outcome: 'paid' | 'paid_after_cancel'
+  /** `gateway_failed`: the customer could not get a QR, so the held alert goes out unpaid. */
+  outcome: 'paid' | 'paid_after_cancel' | 'gateway_failed'
 }
 
 export interface ConfirmDeps {

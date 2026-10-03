@@ -276,3 +276,35 @@ describe('confirmation', () => {
     expect(await orderStatus(o.id)).toBe('new')
   })
 })
+
+describe('the held alert when the customer cannot get a QR', () => {
+  it('sends the held alert once when HitPay is down', async () => {
+    hitpayDeps.hitpay = { ...fakeHitpay(), async createQr() { throw new Error('down') } }
+    const { merchantId } = await connectedShop()
+    const o = await order(merchantId)
+    expect((await postQr(o.id)).status).toBe(502)
+    expect((await postQr(o.id)).status).toBe(502)
+    expect(alerts).toEqual([{ merchantId, orderNumber: o.order_number, outcome: 'gateway_failed' }])
+  })
+
+  it('sends the held alert when the shop disconnected HitPay after the order', async () => {
+    const { merchantId } = await connectedShop()
+    const o = await order(merchantId)
+    await svc().from('merchants').update({ hitpay_connected: false }).eq('id', merchantId)
+    expect((await postQr(o.id)).status).toBe(409)
+    expect(alerts).toEqual([{ merchantId, orderNumber: o.order_number, outcome: 'gateway_failed' }])
+  })
+
+  it('sends no alert for an order that is no longer pending_payment', async () => {
+    const { merchantId } = await connectedShop()
+    expect((await postQr((await order(merchantId, 'new')).id)).status).toBe(409)
+    expect((await postQr((await order(merchantId, 'cancelled')).id)).status).toBe(409)
+    expect(alerts).toEqual([])
+  })
+
+  it('sends no alert when the QR works', async () => {
+    const { merchantId } = await connectedShop()
+    expect((await postQr((await order(merchantId)).id)).status).toBe(200)
+    expect(alerts).toEqual([])
+  })
+})

@@ -18,6 +18,12 @@ create unique index if not exists merchant_secrets_hitpay_webhook_token_key
 alter table public.merchants
   add column if not exists hitpay_connected boolean not null default false;
 
+-- 2b. The one-time stamp for the merchant alert that a HitPay order HOLDS until payment. When the
+--     customer cannot get a QR (HitPay down, no platform config, the shop disconnected), the
+--     backend releases the held alert once, with a warning, and this stamp is what makes it once.
+alter table public.orders
+  add column if not exists hitpay_fallback_alerted_at timestamptz;
+
 -- 3. One row for each HitPay payment request. Many rows for one order over time (a QR expires and
 --    the customer asks for a new one); at most ONE pending row, which the partial index enforces
 --    against two concurrent requests.

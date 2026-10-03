@@ -14,11 +14,14 @@ const HITPAY_KEYS_URL = 'https://dashboard.hit-pay.com/'
  * own action with its own answer from HitPay, not a field that waits for "Save payment".
  */
 export default function HitpayCard({ className }: { className?: string }) {
-  const { t, merchant, refreshMerchant } = useSession()
+  const { t, merchant, account, refreshMerchant } = useSession()
   const [conn, setConn] = useState<HitpayConnection | null>(null)
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState(false)
   const myr = (merchant?.currency ?? 'MYR') === 'MYR'
+  // The key reaches the shop's own money, so only its owner connects or disconnects it. A
+  // superadmin "viewing as shop" sees the status only; the backend refuses them with 403 anyway.
+  const owner = Boolean(merchant && account && merchant.owner_id === account.id)
 
   useEffect(() => {
     if (!merchant?.id) return
@@ -64,6 +67,12 @@ export default function HitpayCard({ className }: { className?: string }) {
       </p>
       {!myr ? (
         <p className="text-[13px] text-muted-foreground">{ERRORS.currency_not_supported}</p>
+      ) : !owner ? (
+        <p className="text-[14px] text-foreground">
+          {conn?.connected
+            ? t(`Connected · key ending ${conn.keyLast4}. Only the shop owner can change this.`, `已连接 · 密钥尾号 ${conn.keyLast4}。只有店主可以更改。`)
+            : t('Not connected. Only the shop owner can connect HitPay.', '未连接。只有店主可以连接 HitPay。')}
+        </p>
       ) : conn?.connected ? (
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[14px] text-foreground">

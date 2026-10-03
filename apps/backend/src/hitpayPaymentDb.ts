@@ -225,3 +225,18 @@ export async function merchantAlertHeld(merchantId: string, orderNumber: string)
   `
   return rows[0]?.held === true
 }
+
+/**
+ * Claims the one-time release of a held alert (spec 2026-10-02 → Notifications). Only the caller
+ * that sets the stamp gets the order number back; a repeat, or an order that is no longer unpaid,
+ * gets null and must send nothing.
+ */
+export async function claimFallbackAlert(orderId: string, merchantId: string): Promise<string | null> {
+  const rows = await sql<{ order_number: string }[]>`
+    update orders set hitpay_fallback_alerted_at = now()
+    where id = ${orderId} and merchant_id = ${merchantId}
+      and status = 'pending_payment' and hitpay_fallback_alerted_at is null
+    returning order_number
+  `
+  return rows[0]?.order_number ?? null
+}

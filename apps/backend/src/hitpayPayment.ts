@@ -86,3 +86,8 @@ export const PAID_AFTER_CANCEL_BANNER: AlertBanner = {
   line: '⚠️ The customer paid after you cancelled this order. Refund them in your HitPay dashboard.',
   subjectPrefix: 'Refund needed',
 }
+
+export const GATEWAY_FAILED_BANNER: AlertBanner = {
+  line: '⚠️ HitPay could not make a QR for this order. The customer sees your backup payment info. Check that the money arrived before you prepare the order.',
+  subjectPrefix: 'Unpaid',
+}
